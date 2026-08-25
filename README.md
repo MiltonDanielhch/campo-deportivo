@@ -19,14 +19,14 @@ Canchas **nunca** habla con bancos ni pasarelas de pago.
 
 ## Stack tecnológico
 
-| Capa | Tecnología | Versión |
-|---|---|---|
-| Backend | Laravel (PHP) | 8.4 de PHP · Laravel última estable |
-| Web admin | React + Vite + TypeScript | Node 22 |
-| Móvil | Flutter (Android/iOS) | 3.x |
-| Base de datos | PostgreSQL | 16 |
-| Caché / Colas | Redis | 7 |
-| Infraestructura | Docker + Nginx | — |
+| Capa            | Tecnología                | Versión                             |
+| --------------- | ------------------------- | ----------------------------------- |
+| Backend         | Laravel (PHP)             | 8.4 de PHP · Laravel última estable |
+| Web admin       | React + Vite + TypeScript | Node 22                             |
+| Móvil           | Flutter (Android/iOS)     | 3.x                                 |
+| Base de datos   | PostgreSQL                | 16                                  |
+| Caché / Colas   | Redis                     | 7                                   |
+| Infraestructura | Docker + Nginx            | —                                   |
 
 > **Regla de las 3 fuentes:** las versiones de PHP, Node y PostgreSQL deben
 > coincidir exactamente en: (1) `infrastructure/docker/php/Dockerfile`,
@@ -35,12 +35,12 @@ Canchas **nunca** habla con bancos ni pasarelas de pago.
 
 ## Toolchain local
 
-| Herramienta | Versión | Windows | Linux/Mac |
-|---|---|---|---|
-| PHP | 8.4 | Laravel Herd (`herd use 8.4`) | mise o apt |
-| Node | 22 | nvm-windows (`nvm use 22`) | mise o nvm |
-| Composer | 2.x | Incluido en Herd | getcomposer.org |
-| GUI PostgreSQL | — | Beekeeper Studio | Beekeeper Studio |
+| Herramienta    | Versión | Windows                       | Linux/Mac        |
+| -------------- | ------- | ----------------------------- | ---------------- |
+| PHP            | 8.4     | Laravel Herd (`herd use 8.4`) | mise o apt       |
+| Node           | 22      | nvm-windows (`nvm use 22`)    | mise o nvm       |
+| Composer       | 2.x     | Incluido en Herd              | getcomposer.org  |
+| GUI PostgreSQL | —       | Beekeeper Studio              | Beekeeper Studio |
 
 ## Estructura
 

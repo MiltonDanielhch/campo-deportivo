@@ -1,12 +1,15 @@
 # ADR-003: Hub & Spoke — delegación de cobro al Core de Recaudaciones
 
 ## Estado
+
 Aceptado
 
 ## Contexto
+
 El GAD Beni está construyendo varios sistemas; Canchas es uno de varios
 satélites posibles a futuro. Si cada satélite reimplementa su propia
 integración bancaria, conciliación y facturación:
+
 - El costo de mantenimiento se multiplica por cada sistema nuevo.
 - El riesgo de seguridad (credenciales bancarias, tarjetas, webhooks)
   queda innecesariamente distribuido.
@@ -20,6 +23,7 @@ manuales, concilia y factura. **Es el único sistema del ecosistema que
 habla con bancos.**
 
 ## Decisión
+
 Canchas nunca se integra directamente con una pasarela de pago. Delega la
 generación y confirmación del cobro al Core de Recaudaciones mediante una
 API HTTP autenticada (token machine-to-machine `RECAUDACIONES_API_TOKEN`,
@@ -31,6 +35,7 @@ funcionarios y reservas. El único acoplamiento entre ambos es el contrato
 de la API HTTP.
 
 ## Alternativas consideradas
+
 - **Cada satélite con su propia pasarela** (arquitectura anterior):
   rechazada por el contexto anterior; exigía además patrón Strategy y
   Circuit Breaker por banco en cada sistema.
@@ -39,16 +44,18 @@ de la API HTTP.
   de esquemas, equipos y responsabilidades.
 
 ## Consecuencias positivas
-+ El backend de Canchas se simplifica radicalmente: sin patrón Strategy,
+
+- El backend de Canchas se simplifica radicalmente: sin patrón Strategy,
   sin Circuit Breaker de pasarelas, sin datos bancarios ni de tarjetas.
-+ La lógica de conciliación y facturación vive en un solo lugar del
+- La lógica de conciliación y facturación vive en un solo lugar del
   ecosistema.
-+ Seguridad: las credenciales bancarias quedan concentradas en un único
+- Seguridad: las credenciales bancarias quedan concentradas en un único
   sistema auditable.
-+ Futuros satélites del GAD Beni podrán conectarse al mismo Core sin
+- Futuros satélites del GAD Beni podrán conectarse al mismo Core sin
   reinventar el cobro.
 
 ## Consecuencias negativas / riesgos
+
 - Canchas depende de la disponibilidad del Core para generar cobros nuevos
   (puede seguir mostrando disponibilidad y horarios sin él).
 - Acoplamiento al contrato de API que exponga el Core: debe versionarse
@@ -58,6 +65,7 @@ de la API HTTP.
   los módulos de lógica de negocio.
 
 ## Nota
+
 Los Documentos 1, 2 y 3 de la arquitectura anterior (que incluían
 `ordenes_pago`, pasarelas, Circuit Breaker y contingencia) se conservan
 como referencia de las reglas de negocio de reservas y horarios, pero sus

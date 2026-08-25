@@ -1,6 +1,7 @@
 # 📁 ROADMAP_MODULO_0_SETUP.md
+
 **Proyecto:** Sistema de Administración del Alquiler de Campos Deportivos — GAD Beni
-**Arquitectura:** Módulo Satélite (*Spoke*) del ecosistema GAD Beni — patrón Hub & Spoke
+**Arquitectura:** Módulo Satélite (_Spoke_) del ecosistema GAD Beni — patrón Hub & Spoke
 **Versión:** 2.0.0 · **Formato:** Guía Arquitectónica Explicativa
 **Tiempo estimado:** 4–6 horas · **Bloquea:** Todos los módulos posteriores (1→8)
 
@@ -59,7 +60,7 @@ Módulo 0
 
 ## ¿Qué es un Monorepo y por qué lo usamos?
 
-Un **Monorepo** significa que las tres aplicaciones del *satélite* de Canchas
+Un **Monorepo** significa que las tres aplicaciones del _satélite_ de Canchas
 — backend (Laravel), panel web (React + Vite + TS) y app móvil (Flutter) —
 viven dentro de un único repositorio Git. Importante: este monorepo cubre
 **solo el satélite de Canchas**, no el ecosistema GAD Beni completo. El Core
@@ -385,7 +386,7 @@ posterior, sobre el Redis que se deja listo en la Fase 0.5.
     → backend/pint.json con el preset "laravel". Ejecutar
       ./vendor/bin/pint --test, debe pasar en verde.
 
-[ ] Verificar que el servidor local levanta sin errores
+[x] Verificar que el servidor local levanta sin errores
     → php artisan serve, y confirmar
       http://localhost:8000/api/v1/health responde correctamente.
 ```
@@ -407,6 +408,7 @@ quien tiene la visibilidad financiera completa del ecosistema.
 
 **`pages/`**
 Organizadas por dominio, únicamente sobre lo que Canchas sigue gestionando:
+
 - `campos/` — CRUD de campos deportivos, tipos y horarios de atención.
 - `tarifas/` — versionado de precios por hora.
 - `usuarios/` — funcionarios, roles, asignación de control.
@@ -431,24 +433,24 @@ sesión/rol del usuario autenticado.
 ## Tareas de la Fase 0.3
 
 ```
-[ ] Crear el proyecto con Vite dentro de web-admin/
+[x] Crear el proyecto con Vite dentro de web-admin/
     → npm create vite@latest . -- --template react-ts
     → Verificar: npm run dev levanta sin errores.
 
-[ ] Configurar el archivo web-admin/.env inicial
+[x] Configurar el archivo web-admin/.env inicial
     → VITE_API_BASE_URL=http://localhost:8000/api/v1 (el backend de
       Canchas — este panel nunca apunta directamente a la URL del Core
       de Recaudaciones).
     → Crear también .env.example.
 
-[ ] Instalar las dependencias base
+[x] Instalar las dependencias base
     → react-router-dom, axios (o fetch nativo), ESLint + Prettier.
 
-[ ] Crear la estructura de carpetas descrita arriba
+[x] Crear la estructura de carpetas descrita arriba
     → pages/ (con las 5 subcarpetas listadas — sin contingencia/),
       components/, services/, types/, hooks/, context/.
 
-[ ] Crear el cliente HTTP base
+[x] Crear el cliente HTTP base
     → services/apiClient.ts — URL base, headers de autenticación
       (token de Sanctum), manejo uniforme de errores.
 
