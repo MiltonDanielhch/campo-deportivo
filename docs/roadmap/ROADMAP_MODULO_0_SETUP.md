@@ -222,7 +222,7 @@ cobro — es sobre la integridad del calendario de reservas, no sobre dinero.
       acoplamiento al contrato de API que el Core exponga, que debe
       versionarse con cuidado desde ambos lados.
 
-[ ] Realizar el primer commit
+[x] Realizar el primer commit
     → En este punto el repositorio solo debe tener archivos de texto:
       .gitignore, .editorconfig, README.md, los .gitkeep, los tres ADR
       y los documentos de arquitectura. Sin código de Laravel, React ni
@@ -290,7 +290,7 @@ posterior, sobre el Redis que se deja listo en la Fase 0.5.
 ## Tareas de la Fase 0.2
 
 ```
-[ ] Activar el entorno local (estrategia de dos capas)
+[x] Activar el entorno local (estrategia de dos capas)
     → Docker = runtime autoritativo (Fase 0.5): PostgreSQL + Redis +
       PHP-FPM 8.4 idénticos a producción.
     → Tu máquina = CLI local rápido: PHP 8.4 de Herd y Node 22 de
@@ -299,13 +299,13 @@ posterior, sobre el Redis que se deja listo en la Fase 0.5.
     → Verificar antes de crear el proyecto Laravel:
       `php -v` → 8.4.x · `node -v` → 22.x · `composer --version` → 2.x
 
-[ ] Crear el proyecto Laravel dentro de backend/
+[x] Crear el proyecto Laravel dentro de backend/
     → Usar Composer apuntando a la última versión estable, creando el
       proyecto directamente dentro de backend/ (terminando el comando
       con un punto).
     → Verificar: php artisan --version.
 
-[ ] Configurar el archivo backend/.env inicial
+[x] Configurar el archivo backend/.env inicial
     → APP_NAME: "Backend Canchas Deportivas - GAD Beni"
     → APP_TIMEZONE: America/La_Paz — sigue siendo crítico: aunque el
       dinero ya no lo gestiona este sistema, el momento exacto en que
@@ -327,23 +327,23 @@ posterior, sobre el Redis que se deja listo en la Fase 0.5.
       llamar a su API. Nunca se escribe en el código, solo en .env —
       mismo criterio de secretos que cualquier otra credencial sensible.
 
-[ ] Generar la Application Key
+[x] Generar la Application Key
     → php artisan key:generate.
 
-[ ] Instalar los paquetes de producción
+[x] Instalar los paquetes de producción
     → laravel/sanctum: sigue siendo necesario — es la autenticación del
       panel web administrativo de Canchas (funcionarios), que no tiene
       relación con el Core de Recaudaciones.
     → predis/predis: sigue siendo necesario para Redis (colas, caché).
 
-[ ] Instalar los paquetes de desarrollo
+[x] Instalar los paquetes de desarrollo
     → laravel/pint y PHPUnit (incluido por defecto con Laravel).
 
-[ ] Publicar la configuración de la API nativa de Laravel
+[x] Publicar la configuración de la API nativa de Laravel
     → php artisan install:api — publica config/sanctum.php, crea
       routes/api.php, genera la migración de personal_access_tokens.
 
-[ ] Crear la estructura de directorios desacoplada dentro de backend/app/
+[x] Crear la estructura de directorios desacoplada dentro de backend/app/
     → Http/Controllers/Api/V1/, Services/, Integrations/Recaudaciones/,
       DTOs/, Enums/, Exceptions/, Jobs/.
     → NO se crea Integrations/Pasarelas/ ni ningún archivo relacionado
@@ -351,7 +351,7 @@ posterior, sobre el Redis que se deja listo en la Fase 0.5.
       backend.
     → Crear también tests/Feature/Api/V1/.
 
-[ ] Crear RecaudacionesApiClient
+[x] Crear RecaudacionesApiClient
     → app/Integrations/Recaudaciones/RecaudacionesApiClient.php — un
       cliente HTTP (usando el facade Http de Laravel, que internamente
       usa Guzzle) configurado con RECAUDACIONES_API_URL y
@@ -370,18 +370,18 @@ posterior, sobre el Redis que se deja listo en la Fase 0.5.
       externa, y su disponibilidad es responsabilidad del Core, no de
       Canchas.
 
-[ ] Crear el HealthController y registrar su ruta
+[x] Crear el HealthController y registrar su ruta
     → app/Http/Controllers/Api/V1/HealthController.php
     → GET /api/v1/health, sin autenticación. Responde status
       ("operational"), nombre del servicio, versión, y timestamp ISO
       8601 en hora boliviana.
     → Registrar en routes/api.php bajo el prefijo /v1/.
 
-[ ] Crear el primer test de PHPUnit
+[x] Crear el primer test de PHPUnit
     → tests/Feature/Api/V1/HealthTest.php — GET /api/v1/health
       devuelve 200 y status "operational".
 
-[ ] Configurar Pint con las reglas del proyecto
+[x] Configurar Pint con las reglas del proyecto
     → backend/pint.json con el preset "laravel". Ejecutar
       ./vendor/bin/pint --test, debe pasar en verde.
 
