@@ -117,11 +117,11 @@ cobro — es sobre la integridad del calendario de reservas, no sobre dinero.
 ## Tareas de la Fase 0.1
 
 ```
-[ ] Crear el directorio raíz: campos-deportivos-gad-beni/
+[x] Crear el directorio raíz: campos-deportivos-gad-beni/
     → Es el contenedor del satélite de Canchas. Nada sale de esta
       carpeta. El Core de Recaudaciones NO vive aquí.
 
-[ ] Inicializar Git SOLO en la raíz
+[x] Inicializar Git SOLO en la raíz
     → Entrar al directorio y ejecutar git init, luego renombrar la rama
       principal a 'main' (convención moderna estándar).
     → ADVERTENCIA CRÍTICA: nunca ejecutar git init dentro de backend/,
@@ -129,37 +129,34 @@ cobro — es sobre la integridad del calendario de reservas, no sobre dinero.
       su propio .git al instalar el proyecto. Si eso ocurre, eliminar ese
       .git interno inmediatamente antes de hacer cualquier commit.
 
-[ ] Crear el árbol de directorios completo
+[x] Crear el árbol de directorios completo
     → Todos los directorios del diagrama de arriba, incluyendo los
       subdirectorios de infrastructure/, docs/ y .github/workflows/.
     → Los directorios vacíos no se trackean en Git. Para que existan en
       el repositorio, crear un archivo .gitkeep vacío dentro de cada
       carpeta que no tenga archivos todavía.
 
-[ ] Copiar los Documentos 1, 2 y 3 a docs/architecture/
+[x] Copiar los Documentos 1, 2 y 3 a docs/architecture/
     → doc-1-analisis-modulos-bd.md, doc-2-diccionario-datos.md,
       doc-3-historias-usuario.md. Se versionan igual, marcados como
       pendientes de actualizar a la arquitectura Hub & Spoke — no se
       descartan, siguen siendo la referencia de las reglas de negocio de
       reservas y horarios.
 
-[ ] Configurar y commitear `mise.toml` en la raíz del monorepo
-    → Ejecutar `mise use php=8.4 node=22` en la raíz del proyecto.
-    → Esto crea `mise.toml`. Commitear este archivo para que todo
-      el equipo herede exactamente las mismas versiones de PHP y
-      Node al entrar al directorio (cero fricción entre el repo de
-      Canchas y el repo del Core de Recaudaciones si ambos lo usan).
-    → **Nota sobre extensiones de PHP:** el plugin de PHP de `mise`
-      compila desde el código fuente. Antes de ejecutar `mise install`,
-      asegurar que el sistema tenga las librerías de compilación
-      (ej. en Ubuntu/WSL: `sudo apt install build-essential libpq-dev libzip-dev`)
-      y exportar la variable de entorno para incluir `pdo_pgsql`
-      (crítico para PostgreSQL) y `zip` (requerido por Composer):
-      `export PHP_BUILD_CONFIGURE_OPTS="--with-pdo-pgsql --with-zip"`
-    → Añadir `.local/` al `.gitignore` unificado (es la carpeta donde
-      `mise` descarga los binarios locales, no debe subirse al repo).
+[x] Definir el toolchain local por plataforma y documentarlo en el README
+    → Windows (caso actual): PHP 8.4 vía Laravel Herd (`herd use 8.4`
+      por proyecto) y Node 22 vía nvm-windows (`nvm install 22` +
+      `nvm use 22`). Verificar con `php -v`, `node -v` y
+      `composer --version`.
+    → Linux/Mac/WSL: quien quiera puede usar mise (`mise use php@8.4
+      node@22`) o instaladores nativos. El repo no impone herramienta,
+      solo versiones.
+    → NO se commitea mise.toml: las fuentes de verdad de versiones son
+      Docker (runtime autoritativo) + CI + README.
+    → Añadir al .gitignore: `.local/` y `.mise/` (por si algún dev usa
+      mise localmente, sus binarios nunca se suben).
 
-[ ] Crear el archivo .editorconfig en la raíz
+[x] Crear el archivo .editorconfig en la raíz
     → Reglas clave: 4 espacios de indentación para la mayoría de
       archivos, UTF-8, fin de línea LF, línea en blanco al final.
       2 espacios para .dart, .ts, .tsx, .yml y .json.
@@ -192,17 +189,17 @@ cobro — es sobre la integridad del calendario de reservas, no sobre dinero.
       los 3 comandos exactos para arrancar el entorno de desarrollo
       (se completan en la Fase 0.5).
 
-[ ] Crear el primer Architecture Decision Record (ADR)
+[x] Crear el primer Architecture Decision Record (ADR)
     → docs/adr/ADR-001-monorepo-estructura.md — por qué Monorepo sobre
       Polyrepo para las tres apps propias del satélite (backend, web,
       mobile), aclarando que esto no incluye al Core de Recaudaciones.
 
-[ ] Crear el segundo ADR sobre la elección de PostgreSQL
+[x] Crear el segundo ADR sobre la elección de PostgreSQL
     → docs/adr/ADR-002-postgresql-sobre-mysql.md — se detalla en la
       Fase 0.5, con la justificación actualizada a la arquitectura
       Hub & Spoke.
 
-[ ] Crear el tercer ADR sobre la arquitectura Hub & Spoke
+[x] Crear el tercer ADR sobre la arquitectura Hub & Spoke
     → docs/adr/ADR-003-hub-and-spoke-delegacion-de-cobro.md
     → Contexto: el GAD Beni está construyendo varios sistemas
       (Canchas es uno de varios satélites posibles a futuro), y cada
@@ -293,18 +290,14 @@ posterior, sobre el Redis que se deja listo en la Fase 0.5.
 ## Tareas de la Fase 0.2
 
 ```
-[ ] Activar el entorno local con `mise` (Estrategia de dos capas)
-    → Al hacer `cd` al monorepo, `mise` activará PHP 8.4 y Node 22
-      automáticamente en tu terminal (siempre que tengas
-      `eval "$(mise activate bash)"` o `zshrc` en tu perfil).
-    → Verificar con `php -v` (debe ser 8.4.x) antes de usar Composer.
-    → **Estrategia de dos capas:** Docker es tu *runtime autoritativo*
-      (para levantar la app completa con Nginx/Redis/PostgreSQL de
-      forma aislada), pero `mise` es tu *CLI local*. Usarás `mise`
-      para correr comandos rápidos como `composer install`,
-      `php artisan`, `./vendor/bin/pint` o `phpunit` sin tener que
-      levantar contenedores ni ejecutar `docker compose exec` para
-      cada pequeña tarea de desarrollo.
+[ ] Activar el entorno local (estrategia de dos capas)
+    → Docker = runtime autoritativo (Fase 0.5): PostgreSQL + Redis +
+      PHP-FPM 8.4 idénticos a producción.
+    → Tu máquina = CLI local rápido: PHP 8.4 de Herd y Node 22 de
+      nvm-windows, para correr `composer`, `php artisan`, `pint` y
+      `npm` sin levantar contenedores.
+    → Verificar antes de crear el proyecto Laravel:
+      `php -v` → 8.4.x · `node -v` → 22.x · `composer --version` → 2.x
 
 [ ] Crear el proyecto Laravel dentro de backend/
     → Usar Composer apuntando a la última versión estable, creando el
@@ -589,13 +582,12 @@ aquí).
       `unzip`) y compilar las extensiones `pdo_pgsql`, `zip`, `bcmath`
       e `intl`.
     → Copiar el binario oficial de Composer 2.
-    → **Regla de oro de versionado:** La versión de PHP debe aparecer
-      de forma idéntica en exactamente 3 lugares del repositorio. Si
-      mañana actualizas a PHP 8.5, debes cambiarla en los tres sitios
-      en el mismo commit:
-      1. `mise.toml` (raíz, para desarrollo local).
-      2. `infrastructure/docker/php/Dockerfile` (runtime autoritativo).
-      3. `.github/workflows/backend-ci.yml` (entorno de pruebas CI).
+    → **Regla de oro de versionado:** la versión de PHP debe aparecer
+      idéntica en exactamente 3 lugares del repositorio. Si mañana
+      actualizas a PHP 8.5, cambias los tres en el mismo commit:
+      1. `infrastructure/docker/php/Dockerfile` (runtime autoritativo).
+      2. `.github/workflows/backend-ci.yml` (CI).
+      3. `README.md` (tabla de toolchain local para devs).
 
 [ ] Actualizar backend/.env para apuntar a los servicios de Docker
     → DB_HOST=db, REDIS_HOST=redis.

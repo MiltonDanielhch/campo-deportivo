@@ -6,6 +6,12 @@
 
 *Versión 2 — revisada. Incorpora reservas multi-franja, consulta pública de estado, reubicación del failover automático de pasarela dentro de la Épica D, mapa global para Admin/Gerencia y una nueva Épica G de seguridad y publicación. Algunas historias fueron renumeradas respecto a la versión anterior.*
 
+> ⚠️ **ESTADO:** Este documento fue escrito para la arquitectura anterior
+> donde Canchas manejaba sus propias pasarelas de pago. Las secciones
+> relativas a `ordenes_pago`, pasarelas, Circuit Breaker y contingencia
+> quedan **desactualizadas**. Se usará como referencia de reglas de negocio
+> de reservas y horarios, pero será revisado módulo por módulo para
+> adaptarlo a la arquitectura Hub & Spoke.
 ---
 
 ## Definición de Criterios

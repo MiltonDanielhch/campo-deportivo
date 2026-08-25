@@ -6,6 +6,12 @@
 
 *Versión 2 — revisada. Incorpora correcciones sobre identificación de solicitantes, reservas multi-franja, máquina de estados y parámetros operativos.*
 
+> ⚠️ **ESTADO:** Este documento fue escrito para la arquitectura anterior
+> donde Canchas manejaba sus propias pasarelas de pago. Las secciones
+> relativas a `ordenes_pago`, pasarelas, Circuit Breaker y contingencia
+> quedan **desactualizadas**. Se usará como referencia de reglas de negocio
+> de reservas y horarios, pero será revisado módulo por módulo para
+> adaptarlo a la arquitectura Hub & Spoke.
 ---
 
 ## 1. Decisiones de arquitectura confirmadas

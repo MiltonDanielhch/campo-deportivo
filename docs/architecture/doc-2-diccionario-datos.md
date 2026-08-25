@@ -6,6 +6,12 @@
 
 *Versión 2 — revisada. Incorpora soporte para reservas multi-franja (campeonatos), restricciones de integridad a nivel de base de datos, tabla de proveedores de pasarela, log de intentos, parámetros configurables y estándar de zona horaria.*
 
+> ⚠️ **ESTADO:** Este documento fue escrito para la arquitectura anterior
+> donde Canchas manejaba sus propias pasarelas de pago. Las secciones
+> relativas a `ordenes_pago`, pasarelas, Circuit Breaker y contingencia
+> quedan **desactualizadas**. Se usará como referencia de reglas de negocio
+> de reservas y horarios, pero será revisado módulo por módulo para
+> adaptarlo a la arquitectura Hub & Spoke.
 ---
 
 ## Convenciones generales del modelo

@@ -1,0 +1,69 @@
+# ==========================================================
+# SEGURIDAD CRÍTICA — certificados y llaves privadas
+# Sigue siendo crítico: Canchas los usa para autenticarse
+# contra el Core de Recaudaciones, aunque ya no hable con bancos.
+# ==========================================================
+*.pem
+*.key
+*.cert
+*.p12
+*.jks
+
+# ==========================================================
+# BACKEND (Laravel)
+# Se ignora .env pero NO .env.example (ese sí se versiona)
+# ==========================================================
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/vendor/
+backend/bootstrap/cache/*
+!backend/bootstrap/cache/.gitignore
+backend/storage/logs/*
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/storage/framework/testing/*
+backend/public/hot
+backend/public/storage
+backend/.phpunit.result.cache
+
+# ==========================================================
+# WEB ADMINISTRATIVA (React + Vite)
+# ==========================================================
+web-admin/.env
+web-admin/.env.*
+!web-admin/.env.example
+web-admin/node_modules/
+web-admin/dist/
+web-admin/.vite/
+
+# ==========================================================
+# MOBILE (Flutter)
+# ==========================================================
+mobile/.env
+mobile/.env.*
+!mobile/.env.example
+mobile/build/
+mobile/.dart_tool/
+mobile/.packages
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+
+# ==========================================================
+# IDEs Y ENTORNO LOCAL
+# ==========================================================
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+.local/
+.mise/
+
+AUDITORIA_MASTER.md
