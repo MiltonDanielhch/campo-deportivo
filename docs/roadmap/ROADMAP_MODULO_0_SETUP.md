@@ -454,18 +454,18 @@ sesión/rol del usuario autenticado.
     → services/apiClient.ts — URL base, headers de autenticación
       (token de Sanctum), manejo uniforme de errores.
 
-[ ] Crear una pantalla de verificación de conectividad
+[x] Crear una pantalla de verificación de conectividad
     → Llama a GET /api/v1/health del backend de Canchas y muestra el
       resultado — prueba de humo de que el frontend y el backend de
       Canchas se comunican (no involucra al Core en absoluto).
 
-[ ] Configurar CORS en el backend de Canchas
+[x] Configurar CORS en el backend de Canchas
     → backend/config/cors.php — agregar http://localhost:5173.
 
-[ ] Verificar el build de producción
+[x] Verificar el build de producción
     → npm run build sin errores de TypeScript ni de lint.
 
-[ ] Primer commit del panel web
+[x] Primer commit del panel web
     → Mensaje: "chore: scaffolding inicial del panel web administrativo de Canchas"
 ```
 

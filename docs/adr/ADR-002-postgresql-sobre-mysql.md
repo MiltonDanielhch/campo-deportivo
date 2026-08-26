@@ -19,7 +19,7 @@ garantizar que el calendario de reservas nunca se pisa a sí mismo.
 
 ## Decisión
 
-PostgreSQL 16 como motor de base de datos del satélite de Canchas, usando:
+PostgreSQL 18 como motor de base de datos del satélite de Canchas, usando:
 
 - Tipo `tstzrange` (rango de timestamps con zona horaria) para representar
   la franja horaria de cada reserva.
