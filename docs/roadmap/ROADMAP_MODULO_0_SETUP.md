@@ -499,30 +499,30 @@ Mismo criterio que en cualquier módulo anterior — el cliente HTTP de
 ## Tareas de la Fase 0.4
 
 ```
-[ ] Crear el proyecto Flutter dentro de mobile/
+[x] Crear el proyecto Flutter dentro de mobile/
     → flutter create . con el org de la organización y las plataformas
       objetivo (android, ios).
     → Verificar: flutter doctor sin errores bloqueantes.
 
-[ ] Configurar la gestión de variables de entorno
+[x] Configurar la gestión de variables de entorno
     → flutter_dotenv (o --dart-define) con API_BASE_URL apuntando al
       backend de Canchas (http://10.0.2.2:8000/api/v1 en el emulador
       Android) — nunca una URL del Core de Recaudaciones.
 
-[ ] Instalar las dependencias base
+[x] Instalar las dependencias base
     → http o dio para consumir la API del backend de Canchas.
 
-[ ] Crear la estructura de carpetas descrita arriba
+[x] Crear la estructura de carpetas descrita arriba
     → screens/, widgets/, services/, models/.
 
-[ ] Crear una pantalla de verificación de conectividad
+[x] Crear una pantalla de verificación de conectividad
     → Llama a GET /api/v1/health del backend de Canchas.
 
-[ ] Verificar que la app corre en un emulador o dispositivo
+[x] Verificar que la app corre en un emulador o dispositivo
     → flutter run, confirmar que la pantalla de verificación muestra
       "operational".
 
-[ ] Primer commit de la app móvil
+[x] Primer commit de la app móvil
     → Mensaje: "chore: scaffolding inicial de la app móvil de Canchas"
 ```
 
@@ -564,7 +564,7 @@ aquí).
 ## Tareas de la Fase 0.5
 
 ```
-[ ] Crear infrastructure/docker-compose.yml con los siguientes servicios:
+[N/A] Crear infrastructure/docker-compose.yml con los siguientes servicios:
     → db: imagen postgres:16, con variables de entorno para usuario,
       contraseña y nombre de base de datos coincidentes con
       backend/.env, volumen nombrado para persistencia, healthcheck con
@@ -574,10 +574,10 @@ aquí).
       backend/ como volumen, dependiente de db y redis "healthy".
     → nginx: proxy inverso hacia el contenedor de PHP.
 
-[ ] Crear infrastructure/docker/nginx/default.conf
+[N/A] Crear infrastructure/docker/nginx/default.conf
     → Proxy inverso hacia php-fpm, sirviendo desde backend/public/.
 
-[ ] Crear infrastructure/docker/php/Dockerfile (Runtime Autoritativo)
+[N/A] Crear infrastructure/docker/php/Dockerfile (Runtime Autoritativo)
     → Imagen base: `php:8.4-fpm` (debe coincidir EXACTAMENTE con
       lo declarado en `mise.toml`).
     → Instalar dependencias del sistema (`libpq-dev`, `libzip-dev`,
@@ -591,12 +591,12 @@ aquí).
       2. `.github/workflows/backend-ci.yml` (CI).
       3. `README.md` (tabla de toolchain local para devs).
 
-[ ] Actualizar backend/.env para apuntar a los servicios de Docker
-    → DB_HOST=db, REDIS_HOST=redis.
+[x] Actualizar backend/.env para apuntar a los servicios locales
+    → DB_HOST=localhost, REDIS_HOST=127.0.0.1 (Memurai).
     → Confirmar que RECAUDACIONES_API_URL sigue apuntando a una URL
       externa real (o a un mock local de desarrollo, ver nota abajo),
-      no a un servicio dentro de este mismo docker-compose — el Core de
-      Recaudaciones no es parte de esta infraestructura local.
+      no a un servicio dentro de esta infraestructura local — el Core
+      de Recaudaciones no es parte de esta infraestructura.
 
 [ ] (Opcional, recomendado) Preparar un mock local del Core para desarrollo
     → Mientras el equipo del Core no entregue un ambiente de pruebas
@@ -607,24 +607,27 @@ aquí).
       tarea opcional a criterio del equipo, no como parte obligatoria
       del cierre de este módulo.
 
-[ ] Verificar que el entorno completo levanta
+[N/A] Verificar que el entorno completo levanta
     → docker compose -f infrastructure/docker-compose.yml up -d desde
       la raíz. Confirmar que db, redis y backend/nginx quedan
       "healthy"/"running" sin reinicios en bucle.
 
-[ ] Verificar la conexión de Laravel a PostgreSQL
-    → php artisan migrate --pretend dentro del contenedor backend.
+[x] Verificar la conexión de Laravel a PostgreSQL
+    → php artisan migrate dentro del entorno local.
+    → 4 migraciones ejecutadas: users, cache, jobs, personal_access_tokens.
 
-[ ] Verificar la conexión a Redis
+[x] Verificar la conexión a Redis
     → php artisan tinker y Illuminate\Support\Facades\Redis::ping()
-      debe responder "PONG".
+      respondió "PONG" (Memurai).
 
-[ ] Dejar un docker-compose.prod.yml de referencia (sin completar)
+[N/A] Dejar un docker-compose.prod.yml de referencia (sin completar)
 
-[ ] Actualizar el README.md con los comandos reales de arranque
+[x] Documentar el setup local de infraestructura
+    → Crear docs/infrastructure/LOCAL_SETUP.md con instrucciones de
+      PostgreSQL 18.4 local y Memurai como Redis nativo para Windows.
 
-[ ] Commit de infraestructura
-    → Mensaje: "chore: infraestructura Docker local con PostgreSQL y Redis"
+[x] Commit de infraestructura
+    → Mensaje: "chore: configuración de infraestructura local (PostgreSQL + Memurai)"
 ```
 
 ---
