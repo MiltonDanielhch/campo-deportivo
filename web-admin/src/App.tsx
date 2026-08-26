@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import apiClient from './services/apiClient';
 import type { HealthCheckResponse } from './types';
-import './App.css';
 
 function App() {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);

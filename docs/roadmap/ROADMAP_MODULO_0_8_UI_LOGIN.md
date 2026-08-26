@@ -66,25 +66,25 @@ la librería haya que aplicarlas a mano cuando se necesiten.
 ## Tareas de la Fase 0.8.1
 
 ```
-[ ] Instalar Tailwind CSS v4 en web-admin
+[x] Instalar Tailwind CSS v4 en web-admin
     → tailwindcss + @tailwindcss/vite, configurado como plugin en
       vite.config.ts (Tailwind v4 se integra directo al pipeline de
       Vite, ya no requiere postcss.config.js ni tailwind.config.js
       separados como en versiones anteriores).
 
-[ ] Inicializar shadcn (npx shadcn@latest init)
+[x] Inicializar shadcn (npx shadcn@latest init)
     → Genera components.json (aliases de rutas), y el tema base con
       variables CSS (colores, radios de borde) en el archivo de
       estilos global.
 
-[ ] Agregar los componentes base que el resto del proyecto va a reutilizar
+[x] Agregar los componentes base que el resto del proyecto va a reutilizar
     → button, input, label, card, form, sonner (para notificaciones
       tipo toast) — el mínimo necesario para construir el login de la
       Fase 0.8.3; el resto de componentes (table, dialog, select, etc.)
       se agregan a demanda en cada módulo que los necesite, no todos de
       una vez ahora.
 
-[ ] Limpiar el boilerplate del template de Vite
+[x] Limpiar el boilerplate del template de Vite
     → Eliminar App.css y los assets de demostración que trae el
       template por defecto de "npm create vite" — no tiene sentido
       arrastrar estilos que se van a pisar de inmediato.
@@ -93,7 +93,7 @@ la librería haya que aplicarlas a mano cuando se necesiten.
         se muda a una ruta pública /health (o se integra como indicador
         de estado en el layout de la Fase 0.8.3).
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(web): base de sistema de diseño con Tailwind + shadcn/ui"
 ```
 
