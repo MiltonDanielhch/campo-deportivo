@@ -687,16 +687,16 @@ la primera línea de lógica de negocio en el Módulo 1.
 ## Checklist de cierre del Módulo 0
 
 ```
-[ ] docker compose up levanta PostgreSQL, Redis y el backend de Canchas
+[N/A] docker compose up levanta PostgreSQL, Redis y el backend de Canchas
     sin errores.
 
-[ ] GET /api/v1/health responde 200 con la hora en formato boliviano
+[x] GET /api/v1/health responde 200 con la hora en formato boliviano
     correcto.
 
-[ ] El panel web se conecta al backend de Canchas y su pantalla de
+[x] El panel web se conecta al backend de Canchas y su pantalla de
     verificación muestra "operational".
 
-[ ] La app móvil se conecta al backend de Canchas y su pantalla de
+[x] La app móvil se conecta al backend de Canchas y su pantalla de
     verificación muestra "operational".
 
 [ ] RECAUDACIONES_API_URL y RECAUDACIONES_API_TOKEN están definidos en
@@ -704,7 +704,7 @@ la primera línea de lógica de negocio en el Módulo 1.
     README, para que cualquiera que clone el repo sepa que debe
     solicitarlos al equipo del Core antes de poder generar cobros.
 
-[ ] No existe ninguna carpeta ni clase relacionada a
+[x] No existe ninguna carpeta ni clase relacionada a
     Integrations/Pasarelas/, SintesisGateway, BancoUnionGateway ni
     Circuit Breaker en este repositorio — esa responsabilidad quedó
     completamente fuera del satélite de Canchas.
@@ -712,10 +712,10 @@ la primera línea de lógica de negocio en el Módulo 1.
 [ ] Los tres pipelines de CI pasan en verde sobre un Pull Request de
     prueba, cada uno disparado únicamente por cambios en su carpeta.
 
-[ ] git status no muestra vendor/, node_modules/, build/ ni ningún .env
+[x] git status no muestra vendor/, node_modules/, build/ ni ningún .env
     real.
 
-[ ] Los tres ADR (monorepo, PostgreSQL, Hub & Spoke) y los tres
+[x] Los tres ADR (monorepo, PostgreSQL, Hub & Spoke) y los tres
     Documentos de arquitectura (marcados como pendientes de revisión)
     están versionados en docs/.
 
