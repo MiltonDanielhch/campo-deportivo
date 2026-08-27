@@ -13,7 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // No necesitamos EnsureFrontendRequestIsStateful porque usamos tokens Bearer,
+        // no cookies de sesión SPA.
+
+        // Para APIs: cuando auth:sanctum rechaza, devolver JSON 401
+        // en lugar de intentar redirigir a una ruta 'login' inexistente.
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

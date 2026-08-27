@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\HealthController;
-use Illuminate\Http\Request;
+use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -10,12 +10,12 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('v1')->group(function () {
-    // Público: verificación de conectividad (sin autenticación)
-    Route::get('/health', HealthController::class);
+// Endpoints públicos
+Route::get('/v1/health', [HealthController::class, 'index']);
+Route::post('/v1/auth/login', [AuthController::class, 'login']);
 
-    // Protegidas con Sanctum (funcionarios del panel web)
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    })->middleware('auth:sanctum');
+// Endpoints protegidos
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/v1/auth/me', [AuthController::class, 'me']);
+    Route::post('/v1/auth/logout', [AuthController::class, 'logout']);
 });

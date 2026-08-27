@@ -140,7 +140,7 @@ ni en un eventual despliegue a subdominios separados.
 ## Tareas de la Fase 0.8.2
 
 ```
-[ ] Crear docs/adr/ADR-004-autenticacion-tokens-sanctum.md
+[x] Crear docs/adr/ADR-004-autenticacion-tokens-sanctum.md
     → Documentar la decisión anterior: contexto (SPA en origen distinto
       al backend), decisión (tokens Bearer, no cookies), consecuencias
       (más simple de operar, pero el frontend debe guardar el token de
@@ -149,21 +149,21 @@ ni en un eventual despliegue a subdominios separados.
       ADR-002 (PostgreSQL) y ADR-003 (Hub & Spoke) ya existen desde el
       Módulo 0 — no reutilizar ADR-003 para esto.
 
-[ ] Migración de extensiones (pgcrypto + btree_gist)
+[x] Migración de extensiones (pgcrypto + btree_gist)
     → Igual que la Fase 1.1 original del Módulo 1: ambas vía
       DB::statement('CREATE EXTENSION IF NOT EXISTS "..."').
 
-[ ] Migración de roles
+[x] Migración de roles
     → id (uuid, PK), nombre (varchar(50), único — sin enum), descripcion
       (varchar(200), nullable), permisos (jsonb, nullable).
 
-[ ] Migración de funcionarios
+[x] Migración de funcionarios
     → id (uuid, PK), nombre_completo (varchar(200)), ci (varchar(20),
       único), usuario (varchar(50), único), password_hash
       (varchar(255)), rol_id (FK → roles.id), estado (enum:
       activo/inactivo), creado_en (timestamptz).
 
-[ ] Modelos Eloquent Rol y Funcionario
+[x] Modelos Eloquent Rol y Funcionario
     → Ambos con HasUuids, $incrementing = false, $keyType = 'string'.
     → Funcionario además implementa Authenticatable + HasApiTokens
       (Sanctum), con getAuthPassword() apuntando a password_hash (la
@@ -171,7 +171,7 @@ ni en un eventual despliegue a subdominios separados.
       defecto).
     → Relación Funcionario belongsTo(Rol).
 
-[ ] Seeders: 3 roles + funcionario administrador inicial
+[x] Seeders: 3 roles + funcionario administrador inicial
     → RolesSeeder: admin_parametricas, funcionario_control, gerencia.
     → FuncionarioSeeder: un usuario admin_parametricas de prueba, con
       contraseña de desarrollo.
@@ -183,7 +183,7 @@ ni en un eventual despliegue a subdominios separados.
       db:seed en producción lo omita automáticamente aunque alguien lo
       ejecute por error.
 
-[ ] Actualizar config/auth.php
+[x] Actualizar config/auth.php
     → providers.users.model => App\Models\Funcionario
       (o agregar un provider/guard 'funcionarios').
     → Decidir qué hacer con el modelo User y la tabla users del
