@@ -190,7 +190,7 @@ ni en un eventual despliegue a subdominios separados.
       template: se conservan por ahora como deuda técnica
       documentada, no se eliminan en este módulo.
 
-[ ] Crear AuthService y AuthController
+[x] Crear AuthService y AuthController
     → AuthService::login() busca por 'usuario', verifica Hash::check()
       contra password_hash, rechaza si estado no es 'activo', y genera
       un token con createToken('panel-web')->plainTextToken.
@@ -201,13 +201,13 @@ ni en un eventual despliegue a subdominios separados.
       /api/v1/auth/me y POST /api/v1/auth/logout (ambas con
       auth:sanctum).
 
-[ ] Tests de autenticación
+[x] Tests de autenticación
     → Login correcto devuelve 200 y un token.
     → Login con funcionario 'inactivo' es rechazado con 401, aunque la
       contraseña sea correcta.
     → Una ruta protegida sin token devuelve 401.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(backend): autenticación de funcionarios con Sanctum"
 ```
 
