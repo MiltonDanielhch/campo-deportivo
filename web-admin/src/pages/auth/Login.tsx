@@ -24,7 +24,8 @@ export default function Login() {
       toast.success('Inicio de sesión exitoso');
 
       // Redirige a la página de origen si vino de un redirect, sino a /
-      const from = (location.state as any)?.from?.pathname || '/';
+      // const from = (location.state as any)?.from?.pathname || '/';
+      const from = (location.state as any)?.from?.pathname || '/panel';
       navigate(from, { replace: true });
     } catch (error: any) {
       const mensaje =

@@ -15,9 +15,12 @@ function App() {
       <Toaster position="top-right" richColors />
       <BrowserRouter>
         <Routes>
+          {/* Pública: login de funcionarios */}
           <Route path="/login" element={<Login />} />
+
+          {/* Protegida: panel administrativo bajo /panel */}
           <Route
-            path="/"
+            path="/panel"
             element={
               <RequireAuth>
                 <AppLayout />
@@ -30,7 +33,9 @@ function App() {
             <Route path="reservas" element={<Reservas />} />
             <Route path="funcionarios" element={<Funcionarios />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+
+          {/* Catch-all: cualquier otra ruta redirige al panel */}
+          <Route path="*" element={<Navigate to="/panel" replace />} />
         </Routes>
       </BrowserRouter>
     </>
