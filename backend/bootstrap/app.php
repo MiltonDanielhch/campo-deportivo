@@ -19,6 +19,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Para APIs: cuando auth:sanctum rechaza, devolver JSON 401
         // en lugar de intentar redirigir a una ruta 'login' inexistente.
         $middleware->redirectGuestsTo(fn () => null);
+
+        // Alias del middleware de rol (registrado en Módulo 0.8, creado ahora)
+        $middleware->alias([
+            'role' => \App\Http\Middleware\RoleMiddleware::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
