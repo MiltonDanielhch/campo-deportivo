@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
-Project Auditor v2.1 — Refactored
+Project Auditor v2.3 — Refactored
 ====================================
 Auditoría de proyectos con métricas detalladas, CLI completa,
 manejo de symlinks, lectura de .gitignore, y análisis por capas.
 
+Mejoras v2.3:
+- Detección automática de proyectos Flutter.
+- Carpetas ios/ y android/ en Flutter se tratan como código generado (resumen).
+- Resumen inteligente de dependencias (vendor, node_modules, etc.).
+
 Uso:
-    python audit_v2.py
-    python audit_v2.py /path/to/project --output report.md --depth 2
-    python audit_v2.py . --json --no-gitignore --skip-empty
+    python audit.py
+    python audit.py /path/to/project --output report.md --depth 2
+    python audit.py . --json --no-gitignore --skip-empty
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ except ImportError:
     tqdm = None  # type: ignore[misc,assignment]
 
 # ── Constants ──────────────────────────────────────────────────────────────────
+# Carpetas que se ignoran por completo (no aportan a métricas ni al árbol)
 DEFAULT_IGNORE = {
     ".git",
     ".gitignore",
@@ -37,9 +43,6 @@ DEFAULT_IGNORE = {
     ".DS_Store",
     ".vscode",
     ".idea",
-    "node_modules",
-    "target",
-    "dist",
     ".astro",
     "__pycache__",
     ".venv",
@@ -51,7 +54,32 @@ DEFAULT_IGNORE = {
     "archive",
     "test-results",
     "playwright-report",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
 }
+
+# Carpetas de dependencias/artefactos que se resumen en una sola línea
+DEPENDENCY_DIRS = {
+    "vendor",       # PHP/Composer, Go
+    "node_modules", # Node.js / Deno / Bun
+    ".dart_tool",   # Flutter / Dart
+    "Pods",         # iOS (CocoaPods)
+    "deps",         # Elixir (Mix)
+    "_build",       # Elixir (Mix)
+    ".gradle",      # Android / Gradle
+    ".m2",          # Maven
+    "build",        # Java, Flutter, JS build outputs
+    "dist",         # JS / Python build outputs
+    "target",       # Rust / Java (Maven)
+    "bin",          # .NET
+    "obj",          # .NET
+    "coverage",     # Test coverage reports
+    ".pytest_cache",
+}
+
+# Carpetas que son código generado SOLO en proyectos Flutter
+FLUTTER_GENERATED_DIRS = {"ios", "android"}
 
 COMMENT_PATTERNS = {
     ".py": ("#", "/*"),
@@ -132,6 +160,28 @@ def human_size(b: int, factor: int = 1024, suffix: str = "B") -> str:
             return f"{b:.2f}{unit}{suffix}"
         b /= factor
     return f"{b:.2f}E{suffix}"
+
+
+def summarize_dependency(directory: Path) -> tuple[int, int]:
+    """Cuenta archivos y tamaño total de un directorio de dependencias sin analizar contenido."""
+    file_count = 0
+    total_size = 0
+    try:
+        for entry in directory.rglob('*'):
+            if entry.is_file() and not entry.is_symlink():
+                file_count += 1
+                try:
+                    total_size += entry.stat().st_size
+                except OSError:
+                    pass
+    except (OSError, PermissionError):
+        pass
+    return file_count, total_size
+
+
+def is_flutter_project(directory: Path) -> bool:
+    """Detecta si un directorio es un proyecto Flutter."""
+    return (directory / "pubspec.yaml").exists()
 
 
 def is_binary(file_path: Path, sample_size: int = 8192) -> bool:
@@ -264,6 +314,9 @@ def analyze_directory(
     tree_lines: list[str] = []
     dm = DirMetrics(path=directory)
 
+    # 🆕 Detectar si este directorio es un proyecto Flutter
+    is_flutter = is_flutter_project(directory)
+
     try:
         entries = sorted(
             [
@@ -289,6 +342,34 @@ def analyze_directory(
             tree_lines.append(
                 f"{prefix}{connector}{entry.name} -> {target} (symlink)\n"
             )
+            continue
+
+        # 🆕 Manejo de carpetas de dependencias (Resumen rápido)
+        is_dependency = entry.name in DEPENDENCY_DIRS
+
+        # 🆕 Si es proyecto Flutter, tratar ios/ y android/ como código generado
+        if is_flutter and entry.name in FLUTTER_GENERATED_DIRS:
+            is_dependency = True
+
+        if entry.is_dir() and is_dependency:
+            file_count, size = summarize_dependency(entry)
+
+            # Creamos un DirMetrics sintético para que el tamaño sume al total del proyecto
+            # pero sin aportar líneas de código (LoC) ni ensuciar las tablas de extensiones.
+            sub_dm = DirMetrics(path=entry)
+            sub_dm._cached_size = size
+
+            dm.subdirs.append(sub_dm)
+
+            # Mensaje diferente para Flutter
+            if is_flutter and entry.name in FLUTTER_GENERATED_DIRS:
+                tree_lines.append(
+                    f"{prefix}{connector}{entry.name}/ [{human_size(size)} | {file_count} archivos | código nativo generado]\n"
+                )
+            else:
+                tree_lines.append(
+                    f"{prefix}{connector}{entry.name}/ [{human_size(size)} | {file_count} archivos | dependencias omitidas]\n"
+                )
             continue
 
         if entry.is_dir():
@@ -347,10 +428,21 @@ def build_layer_table(
             rel_name = current.path.name or "."
             yield (rel_name, file_count, loc, comments, size)
 
+        # 🆕 Detectar si el directorio actual es un proyecto Flutter
+        is_flutter_parent = is_flutter_project(current.path)
+
         for sub in current.subdirs:
             if current_depth < depth:
                 yield from collect_layers(sub, current_depth + 1)
             else:
+                # Filtramos subdirectorios sintéticos de dependencias para no mostrarlos como "Capas"
+                if sub.path.name in DEPENDENCY_DIRS:
+                    continue
+
+                # 🆕 Si el padre es Flutter, también filtrar ios/ y android/
+                if is_flutter_parent and sub.path.name in FLUTTER_GENERATED_DIRS:
+                    continue
+
                 yield (sub.path.name, sub.file_count, sub.total_lines, 0, sub.total_size)
 
     layers = list(collect_layers(dm, 0))
@@ -469,10 +561,30 @@ def generate_audit(args: argparse.Namespace) -> None:
     if not args.no_gitignore:
         gitignore = parse_gitignore(root)
 
+    # Conteo preciso de archivos para la barra de progreso (omitiendo dependencias)
     total_files = 0
     if tqdm:
-        for _, _, files in os.walk(root):
-            total_files += len(files)
+        for root_dir, dirs, files in os.walk(root):
+            # Verificar si estamos en un proyecto Flutter
+            is_flutter = is_flutter_project(Path(root_dir))
+
+            # Filtrar directorios
+            filtered_dirs = []
+            for d in dirs:
+                if d in ignore_names:
+                    continue
+                if d in DEPENDENCY_DIRS:
+                    continue
+                # Si es Flutter, omitir ios/ y android/
+                if is_flutter and d in FLUTTER_GENERATED_DIRS:
+                    continue
+                filtered_dirs.append(d)
+
+            dirs[:] = filtered_dirs
+
+            # Filtrar archivos
+            filtered_files = [f for f in files if f not in ignore_names]
+            total_files += len(filtered_files)
 
     progress = tqdm(total=total_files, desc="Analizando", unit="arch") if tqdm else None
 
