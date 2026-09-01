@@ -89,7 +89,7 @@ pagos.
 ## Tareas de la Fase 2.2
 
 ```
-[ ] Crear TipoCampoService y TipoCampoController
+[x] Crear TipoCampoService y TipoCampoController
     → CRUD estándar: listar, crear, actualizar, e inhabilitar (cambiar
       estado a 'inactivo' en vez de eliminar físicamente).
     → Rutas: GET/POST /api/v1/tipos-campo, PUT /api/v1/tipos-campo/{id}.
