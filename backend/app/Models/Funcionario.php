@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Funcionario extends Authenticatable
 {
@@ -57,5 +58,10 @@ class Funcionario extends Authenticatable
 
         return in_array('*', $permisos, true)
             || in_array($permiso, $permisos, true);
+    }
+
+    public function asignaciones(): HasMany
+    {
+        return $this->hasMany(AsignacionFuncionario::class, 'funcionario_id');
     }
 }
