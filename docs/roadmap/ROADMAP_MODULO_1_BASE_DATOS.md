@@ -118,35 +118,35 @@ puede ejecutarse sin ningún bloqueo de dependencias.
 ## Tareas de la Fase 1.2
 
 ```
-[ ] Crear la migración de tipos_campo
+[x] Crear la migración de tipos_campo
     → id (uuid, PK), nombre (varchar(100), único), descripcion (text,
       nullable), estado (enum: activo/inactivo).
 
-[ ] Crear la migración de campos_deportivos
+[x] Crear la migración de campos_deportivos
     → id (uuid, PK), tipo_campo_id (FK → tipos_campo.id), codigo
       (varchar(30), único), nombre (varchar(150)), direccion (text),
       latitud (numeric(10,8)), longitud (numeric(11,8)), estado (enum:
       activo/mantenimiento/inactivo), creado_en (timestamptz).
 
-[ ] Crear la migración de horarios_atencion
+[x] Crear la migración de horarios_atencion
     → id (uuid, PK), campo_id (FK → campos_deportivos.id), dia_semana
       (smallint, 0=Domingo…6=Sábado), hora_apertura (time), hora_cierre
       (time). Restricción: UNIQUE (campo_id, dia_semana).
 
-[ ] Crear la migración de tarifas_campo
+[x] Crear la migración de tarifas_campo
     → id (uuid, PK), campo_id (FK → campos_deportivos.id),
       precio_por_hora (numeric(12,2)), vigente_desde (timestamptz),
       vigente_hasta (timestamptz, nullable — NULL = tarifa activa),
       creado_por (FK → funcionarios.id).
 
-[ ] Crear la migración de asignaciones_funcionario
+[x] Crear la migración de asignaciones_funcionario
     → id (uuid, PK), funcionario_id (FK → funcionarios.id), campo_id
       (FK → campos_deportivos.id), asignado_en (timestamptz).
 
-[ ] Ejecutar las migraciones y verificar
+[x] Ejecutar las migraciones y verificar
     → php artisan migrate.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(db): catálogos y paramétricas de campos deportivos"
 ```
 
@@ -201,7 +201,7 @@ de contingencia manual, ninguno de los cuales vive ya en Canchas.
 ## Tareas de la Fase 1.3
 
 ```
-[ ] Crear la migración de solicitudes_reserva
+[x] Crear la migración de solicitudes_reserva
     → id (uuid, PK), codigo_seguimiento (varchar(40), único — el código
       público que el ciudadano usa para consultar su estado), monto_total
       (numeric(12,2)), nombre_pagador (varchar(150)), telefono_pagador
@@ -211,7 +211,7 @@ de contingencia manual, ninguno de los cuales vive ya en Canchas.
       (enum: pendiente/confirmada/expirada/cancelada/rechazada, default
       'pendiente'), creado_en (timestamptz), expira_en (timestamptz).
 
-[ ] Crear la migración de solicitud_reserva_detalle
+[x] Crear la migración de solicitud_reserva_detalle
     → Columnas estándar: id (uuid, PK), solicitud_reserva_id (FK →
       solicitudes_reserva.id), campo_id (FK → campos_deportivos.id),
       fecha_reserva (date), hora_inicio (time), hora_fin (time),
@@ -235,7 +235,7 @@ de contingencia manual, ninguno de los cuales vive ya en Canchas.
           ADD COLUMN estado_solicitud varchar(30) NOT NULL DEFAULT 'pendiente'
         ");
 
-[ ] Crear el trigger que sincroniza estado_solicitud
+[x] Crear el trigger que sincroniza estado_solicitud
     → CREATE OR REPLACE FUNCTION sync_estado_solicitud() RETURNS trigger AS $$
       BEGIN
         UPDATE solicitud_reserva_detalle
@@ -249,7 +249,7 @@ de contingencia manual, ninguno de los cuales vive ya en Canchas.
       AFTER UPDATE OF estado ON solicitudes_reserva
       FOR EACH ROW EXECUTE FUNCTION sync_estado_solicitud();
 
-[ ] Crear la restricción de no-solape (EXCLUDE)
+[x] Crear la restricción de no-solape (EXCLUDE)
     → DB::statement("
         ALTER TABLE solicitud_reserva_detalle
         ADD CONSTRAINT no_solape_horario
@@ -266,7 +266,7 @@ de contingencia manual, ninguno de los cuales vive ya en Canchas.
       btree_gist (ya habilitada desde el Módulo 0.8) sigue activa en
       esta base de datos.
 
-[ ] Crear la migración de reservas
+[x] Crear la migración de reservas
     → id (uuid, PK), solicitud_reserva_id (FK → solicitudes_reserva.id),
       solicitud_reserva_detalle_id (FK → solicitud_reserva_detalle.id,
       único), codigo_reserva (varchar(20), único), campo_id (FK →
@@ -275,18 +275,18 @@ de contingencia manual, ninguno de los cuales vive ya en Canchas.
       denormalizado), monto_pagado (numeric(12,2)), confirmado_en
       (timestamptz).
 
-[ ] Ejecutar todas las migraciones de la fase, en orden
+[x] Ejecutar todas las migraciones de la fase, en orden
     → php artisan migrate.
     → Verificar con \d solicitud_reserva_detalle en psql que aparecen la
       columna generada rango_horario y la restricción no_solape_horario.
 
-[ ] Prueba manual de la restricción
+[x] Prueba manual de la restricción
     → Insertar dos filas de solicitud_reserva_detalle para el mismo
       campo_id con horarios que se crucen, ambas con estado_solicitud =
       'pendiente'. La segunda inserción DEBE fallar con "conflicting key
       value violates exclusion constraint".
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(db): núcleo de reservas con restricción anti-doble-reserva"
 ```
 
@@ -304,22 +304,22 @@ parámetros de Circuit Breaker ni de contingencia, que ya no aplican) y
 ## Tareas de la Fase 1.4
 
 ```
-[ ] Crear la migración de parametros_sistema
+[x] Crear la migración de parametros_sistema
     → clave (varchar(100), PK), valor (varchar(255)), descripcion
       (text, nullable), actualizado_por (FK → funcionarios.id,
       nullable), actualizado_en (timestamptz).
 
-[ ] Crear la migración de auditoria
+[x] Crear la migración de auditoria
     → id (uuid, PK), tabla (varchar(50)), registro_id (varchar(100)),
       accion (varchar(50), texto libre), usuario_id (FK →
       funcionarios.id, nullable — NULL si la ejecuta un job
       automático), datos_anteriores (jsonb, nullable), datos_nuevos
       (jsonb, nullable), fecha (timestamptz).
 
-[ ] Ejecutar las migraciones y verificar
+[x] Ejecutar las migraciones y verificar
     → php artisan migrate.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(db): parámetros del sistema y bitácora de auditoría"
 ```
 
@@ -345,21 +345,21 @@ cuya PK es la clave natural `clave`).
 ## Tareas de la Fase 1.5
 
 ```
-[ ] Crear los 10 modelos Eloquent restantes
+[x] Crear los 10 modelos Eloquent restantes
     → TipoCampo / CampoDeportivo / HorarioAtencion / TarifaCampo /
       AsignacionFuncionario / SolicitudReserva / SolicitudReservaDetalle
       / Reserva / ParametroSistema / Auditoria.
     → 9 con HasUuids + $incrementing = false + $keyType = 'string'.
       ParametroSistema con $primaryKey = 'clave', sin autoincrement.
 
-[ ] Configurar $fillable y $casts en cada modelo
+[x] Configurar $fillable y $casts en cada modelo
     → 'estado' en SolicitudReserva castea al Enum de PHP correspondiente
       (app/Enums/EstadoSolicitudReserva.php — pendiente, confirmada,
       expirada, cancelada, rechazada).
     → Campos monetarios a 'decimal:2'. Campos de tiempo a 'datetime'.
       permisos y datos_anteriores/datos_nuevos a 'array'.
 
-[ ] Definir las relaciones Eloquent entre modelos
+[x] Definir las relaciones Eloquent entre modelos
     → CampoDeportivo: belongsTo(TipoCampo), hasMany(TarifaCampo),
       hasMany(HorarioAtencion), hasMany(AsignacionFuncionario).
     → Funcionario (ya existente): agregar hasMany(AsignacionFuncionario)
@@ -373,12 +373,12 @@ cuya PK es la clave natural `clave`).
     → Nótese la ausencia total de relaciones hacia proveedores de
       pasarela o pagos — ya no existen en este modelo.
 
-[ ] Escribir un test rápido de humo por modelo nuevo
+[x] Escribir un test rápido de humo por modelo nuevo
     → Confirmar que el mapeo Eloquent↔PostgreSQL funciona para los 10
       modelos nuevos (los de Rol y Funcionario ya se probaron en el
       Módulo 0.8).
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(db): modelos Eloquent y relaciones del dominio de reservas"
 ```
 
@@ -397,7 +397,7 @@ junto al ya existente, y crea los índices de rendimiento.
 ## Tareas de la Fase 1.6
 
 ```
-[ ] Crear ParametrosSistemaSeeder (reducido)
+[x] Crear ParametrosSistemaSeeder (reducido)
     → solicitud_reserva_expiracion_minutos = 15 (cuánto tiempo Canchas
       mantiene bloqueada una franja mientras espera la confirmación del
       Core antes de liberarla).
@@ -408,11 +408,11 @@ junto al ya existente, y crea los índices de rendimiento.
       circuit_breaker_cooldown_segundos, pasarela_timeout_segundos ni
       contingencia_plazo_horas — ninguno aplica a este sistema.
 
-[ ] Registrar ParametrosSistemaSeeder en DatabaseSeeder
+[x] Registrar ParametrosSistemaSeeder en DatabaseSeeder
     → Se agrega junto al RolesSeeder ya existente, sin duplicarlo. Sin
       ProveedoresPasarelaSeeder — esa tabla no existe.
 
-[ ] Crear la migración de índices de rendimiento
+[x] Crear la migración de índices de rendimiento
     → Expiración de solicitudes pendientes: sobre
       solicitudes_reserva(estado, expira_en) WHERE estado = 'pendiente'.
     → Reservas por campo/fecha: reservas(campo_id, fecha_reserva).
@@ -425,7 +425,7 @@ junto al ya existente, y crea los índices de rendimiento.
       telefono_pagador).
     → Ya NO existe el índice sobre intentos_pasarela — esa tabla no existe.
 
-[ ] Ejecutar seeders y verificar
+[x] Ejecutar seeders y verificar
     → php artisan db:seed.
     → SELECT * FROM roles; → 3 filas (ya sembradas desde el Módulo 0.8,
       se re-verifican aquí como parte del flujo completo).
