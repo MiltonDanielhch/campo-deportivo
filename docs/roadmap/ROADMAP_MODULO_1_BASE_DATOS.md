@@ -431,7 +431,7 @@ junto al ya existente, y crea los índices de rendimiento.
       se re-verifican aquí como parte del flujo completo).
     → SELECT * FROM parametros_sistema; → 2 filas.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(db): parámetros del sistema e índices de rendimiento"
 ```
 
