@@ -444,34 +444,34 @@ junto al ya existente, y crea los índices de rendimiento.
 ## Checklist de cierre del Módulo 1
 
 ```
-[ ] php artisan migrate:fresh --seed corre de principio a fin sin errores
+[x] php artisan migrate:fresh --seed corre de principio a fin sin errores
     — incluye de nuevo las migraciones del Módulo 0.8, ya que
     migrate:fresh reconstruye la base completa desde cero.
 
-[ ] Existen exactamente 12 tablas en PostgreSQL (verificable con \dt),
+[x] Existen exactamente 12 tablas en PostgreSQL (verificable con \dt),
     ninguna llamada proveedores_pasarela, pagos_confirmados,
     pagos_contingencia ni intentos_pasarela.
 
-[ ] La restricción no_solape_horario sigue rechazando dos franjas
+[x] La restricción no_solape_horario sigue rechazando dos franjas
     superpuestas del mismo campo en estado 'pendiente' o 'confirmada'.
 
-[ ] referencia_recaudaciones en solicitudes_reserva tiene restricción
+[x] referencia_recaudaciones en solicitudes_reserva tiene restricción
     UNIQUE, verificable insertando dos filas con la misma referencia y
     confirmando que la segunda falla.
 
-[ ] roles y parametros_sistema quedan poblados correctamente tras
+[x] roles y parametros_sistema quedan poblados correctamente tras
     db:seed, con la lista reducida de parámetros.
 
-[ ] El login construido en el Módulo 0.8 sigue funcionando de punta a
+[x] El login construido en el Módulo 0.8 sigue funcionando de punta a
     punta después de correr migrate:fresh --seed — confirma que ningún
     cambio de este módulo rompió lo ya construido.
 
-[ ] El test de humo de los 10 modelos nuevos pasa en verde.
+[x] El test de humo de los 10 modelos nuevos pasa en verde.
 
-[ ] El pipeline de CI de backend (Módulo 0) pasa en verde sobre un Pull
+[x] El pipeline de CI de backend (Módulo 0) pasa en verde sobre un Pull
     Request con todas las migraciones de este módulo.
 
-[ ] Commit final de cierre del módulo
+[x] Commit final de cierre del módulo
     → Mensaje: "chore: cierre Módulo 1 - base de datos reducida del satélite de Canchas"
     → Tag sugerido: v0.2.0-base-datos-hub-spoke
 ```

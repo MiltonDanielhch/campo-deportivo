@@ -94,7 +94,7 @@ pagos.
       estado a 'inactivo' en vez de eliminar físicamente).
     → Rutas: GET/POST /api/v1/tipos-campo, PUT /api/v1/tipos-campo/{id}.
 
-[ ] Crear CampoDeportivoService y CampoDeportivoController
+[x] Crear CampoDeportivoService y CampoDeportivoController
     → store(): crea el campo y sus horarios_atencion en una única
       transacción — si la creación de cualquiera de los 7 horarios
       falla, el campo tampoco debe quedar creado. Recibe un DTO
@@ -106,15 +106,15 @@ pagos.
       recibe el nuevo estado (activo/mantenimiento/inactivo) y registra
       el cambio en auditoria (ver Fase 2.3) — implementa HU-A4.
 
-[ ] Crear el FormRequest de campo deportivo
+[x] Crear el FormRequest de campo deportivo
     → Código único, coordenadas dentro de rangos geográficos válidos, y
       que la lista de horarios no tenga dos entradas para el mismo día.
 
-[ ] Crear el DTO CrearCampoDTO
+[x] Crear el DTO CrearCampoDTO
     → app/DTOs/CrearCampoDTO.php — datos del campo más un arreglo
       tipado de franjas de horario.
 
-[ ] Tests
+[x] Tests
     → Crear un campo con 7 horarios queda con las 7 filas en
       horarios_atencion.
     → Crear un campo con código duplicado falla con 422.
@@ -122,7 +122,7 @@ pagos.
     → Cambiar el estado a 'mantenimiento' se refleja correctamente
       (se verifica la auditoría en la Fase 2.3).
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(parametricas): CRUD de tipos de campo, campos deportivos y horarios"
 ```
 
@@ -178,37 +178,37 @@ acoplarlo a ningún detalle específico de paramétricas.
 ## Tareas de la Fase 2.3
 
 ```
-[ ] Crear la migración del índice único parcial
+[x] Crear la migración del índice único parcial
     → add_unique_active_tarifa_index — CREATE UNIQUE INDEX
       uq_tarifa_activa, vía DB::statement().
 
-[ ] Crear el AuditoriaService genérico
+[x] Crear el AuditoriaService genérico
     → app/Services/AuditoriaService.php con
       registrar(string $tabla, string $registroId, string $accion,
       ?string $usuarioId, ?array $datosAnteriores, ?array $datosNuevos).
 
-[ ] Crear TarifaCampoService
+[x] Crear TarifaCampoService
     → actualizarTarifa(): el bloque de código de arriba completo,
       terminando con AuditoriaService::registrar().
     → historial(): tarifas de un campo ordenadas por vigente_desde
       descendente.
 
-[ ] Actualizar CampoDeportivoService::cambiarEstado() (de la Fase 2.2)
+[x] Actualizar CampoDeportivoService::cambiarEstado() (de la Fase 2.2)
     → Llamar a AuditoriaService::registrar() con
       tabla='campos_deportivos', accion='cambiar_estado'.
 
-[ ] Crear TarifaCampoController
+[x] Crear TarifaCampoController
     → POST /api/v1/campos-deportivos/{id}/tarifas (nueva tarifa).
     → GET /api/v1/campos-deportivos/{id}/tarifas (historial).
 
-[ ] Tests
+[x] Tests
     → Crear una segunda tarifa cierra automáticamente la anterior.
     → Insertar dos tarifas activas saltando el Service falla por el
       índice único parcial.
     → Cada cambio de tarifa y cada cambio de estado de campo generan
       una fila nueva en auditoria.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(parametricas): versionado de tarifas con lock transaccional y auditoría reutilizable"
 ```
 
@@ -227,14 +227,14 @@ Módulo 0.8.
 ## Tareas de la Fase 2.4
 
 ```
-[ ] Crear FuncionarioService y FuncionarioController
+[x] Crear FuncionarioService y FuncionarioController
     → store(): valida CI y usuario únicos, aplica Hash::make() sobre la
       contraseña, valida que rol_id exista. Registra en auditoria.
     → index(): listado con filtro opcional por rol y estado.
     → cambiarEstado(): activar/inactivar sin eliminar (para no perder
       la trazabilidad de tarifas que haya creado en el pasado).
 
-[ ] Crear AsignacionFuncionarioService y AsignacionFuncionarioController
+[x] Crear AsignacionFuncionarioService y AsignacionFuncionarioController
     → asignar() / desasignar(): vincula o desvincula un funcionario_id
       y un campo_id.
     → misAsignaciones() / porFuncionario(): lista los campos asignados
@@ -244,14 +244,14 @@ Módulo 0.8.
       con rol funcionario_control — rechazar con mensaje claro si se
       intenta con admin_parametricas o gerencia.
 
-[ ] Tests
+[x] Tests
     → Crear un funcionario guarda la contraseña hasheada y genera una
       fila en auditoria.
     → Crear un funcionario con CI ya existente falla con 422.
     → Asignar un campo a un funcionario_control funciona correctamente.
     → Asignar un campo a un funcionario con rol gerencia es rechazado.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(usuarios): gestión de funcionarios y asignación de control"
 ```
 
@@ -309,22 +309,22 @@ no con HTML plano.
 ## Tareas de la Fase 2.6
 
 ```
-[ ] Crear los tipos TypeScript del dominio
+[x] Crear los tipos TypeScript del dominio
     → web-admin/src/types/parametricas.ts — TipoCampo, CampoDeportivo,
       HorarioAtencion, TarifaCampo, reflejando los modelos Eloquent del
       Módulo 1.
 
-[ ] Crear los servicios de API
+[x] Crear los servicios de API
     → services/tiposCampoService.ts, services/camposService.ts,
       services/tarifasService.ts — un método por endpoint de las Fases
       2.2 y 2.3, usando el apiClient centralizado (ya adjunta el token
       automáticamente desde el Módulo 0.8).
 
-[ ] Pantalla de Tipos de Campo
+[x] Pantalla de Tipos de Campo
     → pages/parametricas/TiposCampo.tsx — Table de shadcn para el
       listado, Dialog + Form para alta/edición.
 
-[ ] Pantalla de Campos Deportivos
+[x] Pantalla de Campos Deportivos
     → pages/parametricas/CamposDeportivos.tsx — listado con filtro por
       estado, formulario de alta con datos generales, un input de
       latitud/longitud (el selector visual sobre un mapa se deja para
@@ -336,18 +336,18 @@ no con HTML plano.
       confirmación antes de aplicar (shadcn) — cambiar a mantenimiento
       bloquea reservas futuras, no debe ser un clic accidental.
 
-[ ] Pantalla de Tarifas
+[x] Pantalla de Tarifas
     → pages/parametricas/Tarifas.tsx — accesible desde el detalle de un
       campo: línea de tiempo de tarifas y formulario para fijar una
       nueva, dejando claro en la UI que la tarifa anterior se cierra
       automáticamente al guardar.
 
-[ ] Habilitar el ítem "Campos" del sidebar (Módulo 0.8)
+[x] Habilitar el ítem "Campos" del sidebar (Módulo 0.8)
     → Reemplazar el placeholder/enlace deshabilitado por la ruta real
       hacia CamposDeportivos.tsx. Eliminar el ítem "Horarios" del
       sidebar, tal como se decidió en la Fase 2.5.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(web-admin): pantallas de tipos de campo, campos deportivos y tarifas"
 ```
 
