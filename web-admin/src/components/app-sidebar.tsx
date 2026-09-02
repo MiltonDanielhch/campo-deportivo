@@ -1,6 +1,5 @@
 import * as React from "react"
 import {
-  CalendarIcon,
   CommandIcon,
   HomeIcon,
   LogOutIcon,
@@ -27,10 +26,19 @@ import { useAuth } from "@/context/AuthContext"
 
 const navItems = [
   { title: "Dashboard", url: "/panel", icon: HomeIcon, permiso: null },
-  { title: "Campos", url: "/panel/campos", icon: MapIcon, permiso: "gestionar-campos" },
-  { title: "Horarios", url: "/panel/horarios", icon: CalendarIcon, permiso: "gestionar-horarios" },
+  {
+    title: "Campos",
+    url: "/panel/parametricas/campos",
+    icon: MapIcon,
+    permiso: "gestionar-campos",
+  },
   { title: "Reservas", url: "/panel/reservas", icon: MapPinIcon, permiso: "ver-reservas" },
-  { title: "Funcionarios", url: "/panel/funcionarios", icon: UsersIcon, permiso: "gestionar-funcionarios" },
+  {
+    title: "Funcionarios",
+    url: "/panel/funcionarios",
+    icon: UsersIcon,
+    permiso: "gestionar-funcionarios",
+  },
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
