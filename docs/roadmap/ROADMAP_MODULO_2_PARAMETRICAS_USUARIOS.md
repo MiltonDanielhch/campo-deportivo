@@ -397,40 +397,40 @@ no con HTML plano.
 ## Checklist de cierre del Módulo 2
 
 ```
-[ ] El login construido en el Módulo 0.8 sigue funcionando de punta a
+[x] El login construido en el Módulo 0.8 sigue funcionando de punta a
     punta después de agregar todo lo de este módulo — confirma que
     ningún cambio rompió la autenticación ya resuelta.
 
-[ ] Desde la UI: crear un tipo de campo, luego un campo deportivo con
+[x] Desde la UI: crear un tipo de campo, luego un campo deportivo con
     sus 7 horarios, y verificar en la base de datos que todo quedó
     guardado exactamente como se cargó.
 
-[ ] Desde la UI: cambiar la tarifa de ese campo dos veces seguidas.
+[x] Desde la UI: cambiar la tarifa de ese campo dos veces seguidas.
     Verificar en tarifas_campo que hay dos filas, la primera con
     vigente_hasta poblado y la segunda con NULL.
 
-[ ] Intentar, fuera de la UI, insertar una segunda tarifa activa
+[x] Intentar, fuera de la UI, insertar una segunda tarifa activa
     saltándose el Service — debe fallar por el índice único parcial.
 
-[ ] Cambiar el campo a estado 'mantenimiento' desde la UI y confirmar
+[x] Cambiar el campo a estado 'mantenimiento' desde la UI y confirmar
     la fila nueva en auditoria con el estado anterior y el nuevo.
 
-[ ] Crear un funcionario con rol funcionario_control desde la UI,
+[x] Crear un funcionario con rol funcionario_control desde la UI,
     asignarle 2 de los campos existentes, y confirmar que un tercer
     campo no aparece marcado como asignado.
 
-[ ] Iniciar sesión como ese funcionario_control y confirmar que el menú
+[x] Iniciar sesión como ese funcionario_control y confirmar que el menú
     NO muestra las secciones de Paramétricas ni Usuarios, y que llamar
     directamente a esos endpoints devuelve 403.
 
-[ ] El sidebar del Módulo 0.8 ya no muestra "Horarios" como ítem
+[x] El sidebar del Módulo 0.8 ya no muestra "Horarios" como ítem
     separado, y "Campos" y "Funcionarios" apuntan a pantallas reales en
     vez de placeholders.
 
 [ ] Los pipelines de CI de backend y web-admin pasan en verde sobre un
     Pull Request que incluya todo el módulo.
 
-[ ] Commit final de cierre del módulo
+[x] Commit final de cierre del módulo
     → Mensaje: "chore: cierre Módulo 2 - paramétricas y usuarios funcionales"
     → Tag sugerido: v0.3.0-parametricas-usuarios
 ```

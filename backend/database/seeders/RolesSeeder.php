@@ -18,7 +18,9 @@ class RolesSeeder extends Seeder
             [
                 'nombre' => 'funcionario_control',
                 'descripcion' => 'Consulta reservas y controla el uso de los campos deportivos.',
-                'permisos' => ['ver-reservas', 'gestionar-campos'],
+                // Solo puede ver reservas; los permisos específicos de
+                // "ver campos asignados" se agregarán en Épica F.
+                'permisos' => ['ver-reservas'],
             ],
             [
                 'nombre' => 'gerencia',

@@ -72,4 +72,16 @@ export const camposService = {
     }>(`${BASE}/${id}/estado`, payload);
     return data.data;
   },
+
+  /**
+   * Lista todos los campos activos (para poblar listas de selección).
+   * Usa un per_page alto para traer todos en una sola petición.
+   */
+  async listarTodos(): Promise<CampoDeportivo[]> {
+    const { data } = await apiClient.get<PaginatedResponse<CampoDeportivo>>(
+      BASE,
+      { params: { estado: 'activo', per_page: 100 } },
+    );
+    return data.data;
+  },
 };
