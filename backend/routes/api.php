@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\CampoDeportivoController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\TarifaCampoController;
 use App\Http\Controllers\Api\V1\TipoCampoController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
@@ -35,13 +36,17 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('/{tipoCampo}/reactivar', [TipoCampoController::class, 'reactivar']);
         });
 
-        // Campos deportivos
+        // Campos deportivos (con tarifas anidadas)
         Route::prefix('v1/campos-deportivos')->group(function () {
             Route::get('/', [CampoDeportivoController::class, 'index']);
             Route::post('/', [CampoDeportivoController::class, 'store']);
             Route::get('/{campoDeportivo}', [CampoDeportivoController::class, 'show']);
             Route::put('/{campoDeportivo}', [CampoDeportivoController::class, 'update']);
             Route::patch('/{campoDeportivo}/estado', [CampoDeportivoController::class, 'cambiarEstado']);
+
+            // Tarifas del campo (HU-A3)
+            Route::post('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'store']);
+            Route::get('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'historial']);
         });
     });
 });

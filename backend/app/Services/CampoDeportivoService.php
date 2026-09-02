@@ -88,23 +88,24 @@ class CampoDeportivoService
     }
 
     /**
-     * Cambia el estado del campo.
-     * PLACEHOLDER: en la Fase 2.3 se conectará con AuditoriaService.
+     * Cambia el estado del campo (HU-A4).
+     * Registra el cambio en la bitácora de auditoría.
      */
     public function cambiarEstado(CampoDeportivo $campo, string $nuevoEstado): CampoDeportivo
     {
         $estadoAnterior = $campo->estado;
+        $usuarioId = auth()->id();
 
         $campo->update(['estado' => $nuevoEstado]);
 
-        // TODO Fase 2.3: AuditoriaService::registrar(
-        //     'campos_deportivos',
-        //     $campo->id,
-        //     'cambiar_estado',
-        //     $usuarioId,
-        //     ['estado' => $estadoAnterior],
-        //     ['estado' => $nuevoEstado]
-        // );
+        AuditoriaService::registrar(
+            tabla: 'campos_deportivos',
+            registroId: $campo->id,
+            accion: 'cambiar_estado',
+            usuarioId: $usuarioId,
+            datosAnteriores: ['estado' => $estadoAnterior],
+            datosNuevos: ['estado' => $nuevoEstado],
+        );
 
         return $campo->fresh();
     }
