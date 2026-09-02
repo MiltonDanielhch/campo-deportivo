@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\CampoDeportivoController;
+use App\Http\Controllers\Api\V1\FuncionarioController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\TarifaCampoController;
 use App\Http\Controllers\Api\V1\TipoCampoController;
@@ -47,6 +48,15 @@ Route::middleware('auth:sanctum')->group(function () {
             // Tarifas del campo (HU-A3)
             Route::post('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'store']);
             Route::get('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'historial']);
+        });
+
+        // Funcionarios (HU-B1)
+        Route::prefix('v1/funcionarios')->group(function () {
+            Route::get('/', [FuncionarioController::class, 'index']);
+            Route::post('/', [FuncionarioController::class, 'store']);
+            Route::get('/{funcionario}', [FuncionarioController::class, 'show']);
+            Route::put('/{funcionario}', [FuncionarioController::class, 'update']);
+            Route::patch('/{funcionario}/estado', [FuncionarioController::class, 'cambiarEstado']);
         });
     });
 });
