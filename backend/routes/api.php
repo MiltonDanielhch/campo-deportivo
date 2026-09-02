@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AsignacionFuncionarioController;
 use App\Http\Controllers\Api\V1\CampoDeportivoController;
 use App\Http\Controllers\Api\V1\FuncionarioController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\RolController;
 use App\Http\Controllers\Api\V1\TarifaCampoController;
 use App\Http\Controllers\Api\V1\TipoCampoController;
 use App\Http\Controllers\AuthController;
@@ -68,5 +69,8 @@ Route::middleware('auth:sanctum')->group(function () {
         });
 
         Route::get('/v1/asignaciones', [AsignacionFuncionarioController::class, 'index']);
+
+        // Roles (para selects de alta de funcionarios)
+        Route::get('/v1/roles', [RolController::class, 'index']);
     });
 });

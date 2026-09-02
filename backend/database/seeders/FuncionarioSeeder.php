@@ -18,6 +18,7 @@ class FuncionarioSeeder extends Seeder
             return;
         }
 
+        // 1. Admin paramétricas: gestiona catálogos (tipos, campos, tarifas)
         Funcionario::updateOrCreate(
             ['usuario' => 'admin'],
             [
@@ -26,6 +27,19 @@ class FuncionarioSeeder extends Seeder
                 // Credenciales SOLO desarrollo: admin / secret
                 'password_hash' => Hash::make('secret'),
                 'rol_id' => Rol::where('nombre', 'admin_parametricas')->first()?->id,
+                'estado' => 'activo',
+            ]
+        );
+
+        // 2. Funcionario de control: supervisa el uso de campos y consulta reservas
+        Funcionario::updateOrCreate(
+            ['usuario' => 'control'],
+            [
+                'nombre_completo' => 'Control de Desarrollo',
+                'ci' => '1111111',
+                // Credenciales SOLO desarrollo: control / control123
+                'password_hash' => Hash::make('control123'),
+                'rol_id' => Rol::where('nombre', 'funcionario_control')->first()?->id,
                 'estado' => 'activo',
             ]
         );

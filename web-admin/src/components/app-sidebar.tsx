@@ -32,11 +32,24 @@ const navItems = [
     icon: MapIcon,
     permiso: "gestionar-campos",
   },
+  {
+    title: "Tipos de Campo",
+    url: "/panel/parametricas/tipos-campo",
+    icon: MapIcon,
+    permiso: "gestionar-tipos-campo",
+  },
   { title: "Reservas", url: "/panel/reservas", icon: MapPinIcon, permiso: "ver-reservas" },
   {
     title: "Funcionarios",
     url: "/panel/funcionarios",
     icon: UsersIcon,
+    permiso: "gestionar-funcionarios",
+  },
+
+  {
+    title: "Asignaciones",
+    url: "/panel/asignaciones",
+    icon: MapPinIcon, // o cualquier otro ícono de lucide-react
     permiso: "gestionar-funcionarios",
   },
 ]

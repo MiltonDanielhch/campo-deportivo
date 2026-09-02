@@ -4,13 +4,12 @@ import { RequireAuth } from '@/components/RequireAuth';
 import AppLayout from '@/components/layout/AppLayout';
 import Login from '@/pages/auth/Login';
 import Dashboard from '@/pages/Dashboard';
-import Campos from '@/pages/Campos';
-import Horarios from '@/pages/Horarios';
 import Reservas from '@/pages/Reservas';
-import Funcionarios from '@/pages/Funcionarios';
 import TiposCampo from '@/pages/parametricas/TiposCampo';
 import CamposDeportivos from '@/pages/parametricas/CamposDeportivos';
 import Tarifas from '@/pages/parametricas/Tarifas';
+import FuncionariosPage from '@/pages/usuarios/Funcionarios';
+import Asignaciones from '@/pages/usuarios/Asignaciones';
 
 function App() {
   return (
@@ -31,15 +30,19 @@ function App() {
             }
           >
             <Route index element={<Dashboard />} />
+
+            {/* Paramétricas (Fase 2.6) */}
             <Route path="parametricas/tipos-campo" element={<TiposCampo />} />
-            <Route path="parametricas/tipos-campo" element={<TiposCampo />} />
-            <Route path="parametricas/campos" element={<CamposDeportivos />} />
             <Route path="parametricas/campos" element={<CamposDeportivos />} />
             <Route path="parametricas/campos/:campoId/tarifas" element={<Tarifas />} />
-            <Route path="campos" element={<Campos />} />
-            <Route path="horarios" element={<Horarios />} />
+
+            {/* Usuarios (Fase 2.7) */}
+            <Route path="funcionarios" element={<FuncionariosPage />} />
+
+            {/* Reservas (placeholder hasta módulo correspondiente) */}
             <Route path="reservas" element={<Reservas />} />
-            <Route path="funcionarios" element={<Funcionarios />} />
+
+            <Route path="asignaciones" element={<Asignaciones />} />
           </Route>
 
           {/* Catch-all: cualquier otra ruta redirige al panel */}
