@@ -66,4 +66,5 @@ desktop.ini
 .local/
 .mise/
 
+/storage/framework/views/*.php
 AUDITORIA_MASTER.md
