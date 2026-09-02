@@ -64,4 +64,14 @@ class Funcionario extends Authenticatable
     {
         return $this->hasMany(AsignacionFuncionario::class, 'funcionario_id');
     }
+
+    public function camposAsignados(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(
+            CampoDeportivo::class,
+            'asignaciones_funcionario',
+            'funcionario_id',
+            'campo_id'
+        ); // Sin withTimestamps()
+    }
 }

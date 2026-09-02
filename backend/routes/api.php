@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AsignacionFuncionarioController;
 use App\Http\Controllers\Api\V1\CampoDeportivoController;
 use App\Http\Controllers\Api\V1\FuncionarioController;
 use App\Http\Controllers\Api\V1\HealthController;
@@ -58,5 +59,14 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::put('/{funcionario}', [FuncionarioController::class, 'update']);
             Route::patch('/{funcionario}/estado', [FuncionarioController::class, 'cambiarEstado']);
         });
+
+        // Asignaciones de campos a funcionarios (HU-B3)
+        Route::prefix('v1/funcionarios/{funcionario}/campos')->group(function () {
+            Route::get('/', [AsignacionFuncionarioController::class, 'porFuncionario']);
+            Route::post('/{campoDeportivo}', [AsignacionFuncionarioController::class, 'asignar']);
+            Route::delete('/{campoDeportivo}', [AsignacionFuncionarioController::class, 'desasignar']);
+        });
+
+        Route::get('/v1/asignaciones', [AsignacionFuncionarioController::class, 'index']);
     });
 });

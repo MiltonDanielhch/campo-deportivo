@@ -54,4 +54,14 @@ class CampoDeportivo extends Model
     {
         return $this->hasMany(Reserva::class, 'campo_id');
     }
+
+    public function funcionariosAsignados(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(
+            Funcionario::class,
+            'asignaciones_funcionario',
+            'campo_id',
+            'funcionario_id'
+        ); // Sin withTimestamps()
+    }
 }
