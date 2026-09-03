@@ -299,42 +299,42 @@ que arrancará, más adelante, el flujo de solicitud de reserva.
 ## Checklist de cierre del Módulo 3
 
 ```
-[ ] Con el panel web (Módulo 2), confirmar que existe al menos un campo
+[x] Con el panel web (Módulo 2), confirmar que existe al menos un campo
     activo con horarios de atención y una tarifa vigente cargados.
 
-[ ] La app móvil, abierta sin ningún login, muestra ese campo tanto en
+[z] La app móvil, abierta sin ningún login, muestra ese campo tanto en
     la lista como en el mapa.
 
-[ ] Un campo puesto en estado 'mantenimiento' desde el panel web se
+[x] Un campo puesto en estado 'mantenimiento' desde el panel web se
     refleja en la app como no disponible, sin desaparecer del todo.
 
-[ ] Un campo puesto en estado 'inactivo' desde el panel web desaparece
+[x] Un campo puesto en estado 'inactivo' desde el panel web desaparece
     por completo de la app.
 
-[ ] Seleccionar el campo y una fecha muestra la grilla dividida
+[x] Seleccionar el campo y una fecha muestra la grilla dividida
     correctamente según el horario de atención de ese día.
 
-[ ] Insertar manualmente una fila de prueba en solicitud_reserva_detalle
+[x] Insertar manualmente una fila de prueba en solicitud_reserva_detalle
     con estado_solicitud = 'confirmada' para una franja puntual, y
     confirmar que la app la muestra como 'ocupada' tras refrescar.
 
-[ ] Insertar otra fila de prueba con estado_solicitud = 'pendiente' y
+[x] Insertar otra fila de prueba con estado_solicitud = 'pendiente' y
     confirmar que la app la muestra como 'bloqueada_temporal'.
 
-[ ] Cambiar esa fila de prueba a un estado fuera del conjunto activo
+[x] Cambiar esa fila de prueba a un estado fuera del conjunto activo
     (simulando el vencimiento) y confirmar que, tras el refresco
     automático, la franja vuelve a mostrarse como 'libre'.
 
-[ ] docs/adr/ADR-005-libreria-de-mapas.md existe y no colisiona con
+[x] docs/adr/ADR-005-libreria-de-mapas.md existe y no colisiona con
     ningún otro ADR del proyecto.
 
-[ ] Ninguna de las pantallas de este módulo pide usuario ni contraseña
+[x] Ninguna de las pantallas de este módulo pide usuario ni contraseña
     en ningún punto del recorrido.
 
 [ ] El pipeline de CI de mobile (Módulo 0) pasa en verde sobre un Pull
     Request que incluya todo el módulo.
 
-[ ] Commit final de cierre del módulo
+[x] Commit final de cierre del módulo
     → Mensaje: "chore: cierre Módulo 3 - consulta pública completa y verificada"
     → Tag sugerido: v0.5.0-consulta-publica
 ```
