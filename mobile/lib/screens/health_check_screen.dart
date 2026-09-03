@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/ApiClient.dart';
+import '../services/api_client.dart';
 
 class HealthCheckScreen extends StatefulWidget {
   const HealthCheckScreen({super.key});
