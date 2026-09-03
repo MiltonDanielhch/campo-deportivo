@@ -198,16 +198,14 @@ class _CampoTarjeta extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    Icons.attach_money,
+                    Icons.payments,
                     size: 20,
-                    color: campo.tarifaVigente != null
-                        ? Colors.green
-                        : Colors.grey,
+                    color: campo.tarifaVigente != null ? Colors.green : Colors.grey,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     campo.tarifaVigente != null
-                        ? '\$${campo.tarifaVigente!.precioPorHora.toStringAsFixed(2)} por hora'
+                        ? 'Bs ${campo.tarifaVigente!.precioPorHora.toStringAsFixed(2)} por hora'
                         : 'Sin tarifa definida',
                     style: TextStyle(
                         fontSize: 16,

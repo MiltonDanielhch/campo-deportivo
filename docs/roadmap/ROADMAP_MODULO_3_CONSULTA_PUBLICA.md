@@ -201,41 +201,41 @@ tokens de Sanctum. Esta decisión pasa a ser **ADR-005**.
 ## Tareas de la Fase 3.3
 
 ```
-[ ] Crear docs/adr/ADR-005-libreria-de-mapas.md
+[x] Crear docs/adr/ADR-005-libreria-de-mapas.md
     → Documentar la elección (flutter_map/OSM por defecto, o Google
       Maps si el equipo ya cuenta con presupuesto) con su contexto y
       consecuencias. Verificar antes de crearlo que ningún otro módulo
       haya usado ya ADR-005 en el camino.
 
-[ ] Instalar el paquete de mapas elegido
+[x] Instalar el paquete de mapas elegido
     → flutter_map + latlong2, o google_maps_flutter con su
       configuración nativa correspondiente.
 
-[ ] Crear el modelo Dart CampoDeportivo
+[x] Crear el modelo Dart CampoDeportivo
     → mobile/lib/models/campo_deportivo.dart, reflejando el
       CampoPublicoResource del backend.
 
-[ ] Crear camposService.dart
+[x] Crear camposService.dart
     → Consume GET /public/campos y GET /public/campos/{id}.
 
-[ ] Crear la pantalla de listado
+[x] Crear la pantalla de listado
     → screens/campos_listado_screen.dart — tarjetas con nombre, tipo,
       tarifa vigente y estado (marcando visualmente los campos en
       mantenimiento como no disponibles por ahora, sin ocultarlos).
 
-[ ] Crear la pantalla de mapa
+[x] Crear la pantalla de mapa
     → screens/campos_mapa_screen.dart — un marcador por campo; los
       campos en mantenimiento usan un ícono o color distinto.
 
-[ ] Alternar entre lista y mapa
+[x] Alternar entre lista y mapa
     → Un toggle simple en la parte superior de la pantalla principal.
 
-[ ] Manejo de permisos de ubicación (opcional, no bloqueante)
+[x] Manejo de permisos de ubicación (opcional, no bloqueante)
     → Si se deniega, el mapa se centra por defecto en la ciudad
       principal de operación — la app sigue siendo completamente
       usable sin ese permiso.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(mobile): listado y mapa interactivo de campos deportivos"
 ```
 
@@ -251,25 +251,25 @@ que arrancará, más adelante, el flujo de solicitud de reserva.
 ## Tareas de la Fase 3.4
 
 ```
-[ ] Crear el modelo Dart BloqueDisponibilidad
+[x] Crear el modelo Dart BloqueDisponibilidad
     → mobile/lib/models/bloque_disponibilidad.dart — hora_inicio,
       hora_fin, estado (libre/ocupada/bloqueada_temporal), precio.
 
-[ ] Crear disponibilidadService.dart
+[x] Crear disponibilidadService.dart
     → Consume el endpoint de la Fase 3.2.
 
-[ ] Crear la pantalla de detalle de campo con selector de fecha
+[x] Crear la pantalla de detalle de campo con selector de fecha
     → screens/campo_detalle_screen.dart — información del campo y un
       selector de fecha acotado a la misma ventana que valida el
       backend (hoy hasta +60 días).
 
-[ ] Crear el widget de grilla horaria
+[x] Crear el widget de grilla horaria
     → widgets/grilla_horaria.dart — libre (interactivo), ocupada
       (deshabilitado), bloqueada temporal (deshabilitado, con un texto
       como "en proceso de cobro"). Si `abierto: false`, mostrar un
       mensaje claro en vez de una grilla vacía sin explicación.
 
-[ ] Refrescar la grilla periódicamente mientras la pantalla está abierta
+[x] Refrescar la grilla periódicamente mientras la pantalla está abierta
     → Cada 30–60 segundos, ya que el estado cambia en tiempo real
       conforme otras personas confirman su cobro con el Core o sus
       solicitudes expiran.
@@ -279,14 +279,14 @@ que arrancará, más adelante, el flujo de solicitud de reserva.
       Recaudaciones; esto es la app refrescando su propia vista de la
       grilla contra el backend de Canchas.
 
-[ ] Dejar preparado el punto de entrada al flujo de reserva
+[x] Dejar preparado el punto de entrada al flujo de reserva
     → El evento de tocar uno o varios bloques libres debe quedar
       capturado (una lista de bloques seleccionados en el estado de la
       pantalla), sin conectarlo todavía a ninguna llamada de cobro —
       eso se construye en el módulo que reemplaza a la antigua Épica D,
       sobre esta base.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(mobile): selección de fecha y grilla de disponibilidad horaria"
 ```
 
