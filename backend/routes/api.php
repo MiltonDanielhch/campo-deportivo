@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\TarifaCampoController;
 use App\Http\Controllers\Api\V1\TipoCampoController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\V1\Public\DisponibilidadController;
 
 /*
 |--------------------------------------------------------------------------
@@ -27,6 +28,7 @@ Route::post('/v1/auth/login', [AuthController::class, 'login']);
 Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
     Route::get('/campos', [PublicCampoController::class, 'index']);
     Route::get('/campos/{campo}', [PublicCampoController::class, 'show']);
+    Route::get('/campos/{campo}/disponibilidad', [DisponibilidadController::class, 'show']);
 });
 
 // ─── Endpoints protegidos ───────────────────────────────────────────────

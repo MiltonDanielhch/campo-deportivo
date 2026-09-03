@@ -149,22 +149,22 @@ v3, Anexo A.1).
 ## Tareas de la Fase 3.2
 
 ```
-[ ] Crear DisponibilidadService
+[x] Crear DisponibilidadService
     → app/Services/DisponibilidadService.php con
       calcularGrilla(CampoDeportivo $campo, Carbon $fecha), que
       implementa los 4 pasos de arriba sobre solicitud_reserva_detalle
       y devuelve los bloques con hora_inicio, hora_fin, estado y precio.
 
-[ ] Crear el DisponibilidadController y su ruta pública
+[x] Crear el DisponibilidadController y su ruta pública
     → GET /api/v1/public/campos/{id}/disponibilidad?fecha=YYYY-MM-DD
     → Validar que fecha no sea anterior a hoy ni exceda una ventana
       razonable hacia adelante (ej. 60 días).
 
-[ ] Crear DisponibilidadResource
+[x] Crear DisponibilidadResource
     → Fecha consultada, nombre del campo, y la lista de bloques con su
       estado y precio.
 
-[ ] Tests
+[x] Tests
     → Un día de la semana sin horario_atencion definido devuelve una
       grilla vacía con `abierto: false`.
     → Una franja con una solicitud en 'confirmada' se etiqueta 'ocupada'.
@@ -174,7 +174,7 @@ v3, Anexo A.1).
       'cancelada' o 'rechazada' se etiqueta 'libre'.
     → Solicitar una fecha pasada devuelve 422.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(publico): endpoint de disponibilidad horaria por campo y fecha"
 ```
 
