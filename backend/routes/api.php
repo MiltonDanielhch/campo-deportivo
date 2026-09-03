@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AsignacionFuncionarioController;
 use App\Http\Controllers\Api\V1\CampoDeportivoController;
 use App\Http\Controllers\Api\V1\FuncionarioController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\Public\CampoController as PublicCampoController;
 use App\Http\Controllers\Api\V1\RolController;
 use App\Http\Controllers\Api\V1\TarifaCampoController;
 use App\Http\Controllers\Api\V1\TipoCampoController;
@@ -20,6 +21,14 @@ use Illuminate\Support\Facades\Route;
 Route::get('/v1/health', [HealthController::class, 'index']);
 Route::post('/v1/auth/login', [AuthController::class, 'login']);
 
+// Consulta ciudadana (Épica C, HU-C1): sin autenticación
+// throttle:60,1 = salvaguarda mínima; el rate-limiting robusto por IP/
+// dispositivo llega con la Épica G (HU-G1).
+Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
+    Route::get('/campos', [PublicCampoController::class, 'index']);
+    Route::get('/campos/{campo}', [PublicCampoController::class, 'show']);
+});
+
 // ─── Endpoints protegidos ───────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
     // Auth
@@ -27,14 +36,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/v1/auth/logout', [AuthController::class, 'logout']);
 
     // Rutas de admin_parametricas
-    Route::middleware('role:admin_parametricas')->group(function () {
+    Route::middleware('role:admin_parametricas')->group(function (){
         // Tipos de campo
         Route::prefix('v1/tipos-campo')->group(function () {
             Route::get('/', [TipoCampoController::class, 'index']);
             Route::get('/activos', [TipoCampoController::class, 'activos']);
             Route::post('/', [TipoCampoController::class, 'store']);
-            Route::get('/{tipoCampo}', [TipoCampoController::class, 'show']);
-            Route::put('/{tipoCampo}', [TipoCampoController::class, 'update']);
+            Route::get('/{tipoCampo}', [TipoCampoController::class,'show']);
+            Route::put('/{tipoCampo}', [TipoCampoController::class,'update']);
             Route::patch('/{tipoCampo}/inhabilitar', [TipoCampoController::class, 'inhabilitar']);
             Route::patch('/{tipoCampo}/reactivar', [TipoCampoController::class, 'reactivar']);
         });

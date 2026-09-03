@@ -65,16 +65,16 @@ columnas tenga el modelo Eloquent por dentro.
 ## Tareas de la Fase 3.1
 
 ```
-[ ] Crear el namespace de controladores públicos
+[x] Crear el namespace de controladores públicos
     → app/Http/Controllers/Api/V1/Public/CampoController.php
 
-[ ] Crear CampoPublicoResource
+[x] Crear CampoPublicoResource
     → app/Http/Resources/CampoPublicoResource.php — expone únicamente:
       id, nombre, tipo de campo, dirección, latitud, longitud, estado,
       tarifa vigente y horarios de atención. NO expone creado_en ni
       ningún campo de auditoría interna.
 
-[ ] Implementar el listado público
+[x] Implementar el listado público
     → GET /api/v1/public/campos
     → Devuelve campos con estado 'activo' o 'mantenimiento' —no se
       ocultan los campos en mantenimiento, para que el ciudadano
@@ -82,24 +82,24 @@ columnas tenga el modelo Eloquent por dentro.
       estado 'inactivo' se excluyen por completo.
     → Filtros opcionales por tipo_campo_id.
 
-[ ] Implementar el detalle público
+[x] Implementar el detalle público
     → GET /api/v1/public/campos/{id}
     → Incluye los 7 horarios de atención y la tarifa vigente, para que
       la app muestre el precio antes de que el ciudadano elija fecha.
 
-[ ] Aplicar un límite de tasa básico como salvaguarda mínima
+[x] Aplicar un límite de tasa básico como salvaguarda mínima
     → Middleware throttle:60,1 sobre el grupo de rutas públicas. NO
       reemplaza el rate limiting robusto por IP/dispositivo de la Épica
       G (HU-G1) — es solo una barrera mínima mientras esa parte del
       roadmap llega.
 
-[ ] Tests
+[x] Tests
     → Un campo 'inactivo' no aparece en el listado público.
     → Un campo 'mantenimiento' sí aparece, con su estado visible.
     → Ninguna de las dos rutas requiere token.
     → El JSON de respuesta no contiene ningún campo de auditoría interna.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(publico): endpoints públicos de consulta de campos deportivos"
 ```
 
