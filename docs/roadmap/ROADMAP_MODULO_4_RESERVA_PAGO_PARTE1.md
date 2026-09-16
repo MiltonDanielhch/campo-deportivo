@@ -104,18 +104,18 @@ Recaudaciones (Fase 4.2) — nunca antes.
 ## Tareas de la Fase 4.1
 
 ```
-[ ] Crear el DTO FranjaSolicitadaDTO
+[x] Crear el DTO FranjaSolicitadaDTO
     → app/DTOs/FranjaSolicitadaDTO.php (el mismo anticipado desde el
       Módulo 0): campo_id, fecha, hora_inicio, hora_fin.
 
-[ ] Crear el DTO SolicitudReservaDTO
+[x] Crear el DTO SolicitudReservaDTO
     → nombre_pagador, telefono_pagador, ci_nit_pagador (nullable), y un
       arreglo de FranjaSolicitadaDTO.
 
-[ ] Crear la excepción FranjaNoDisponibleException
+[x] Crear la excepción FranjaNoDisponibleException
     → Se traduce a HTTP 409 (Conflict).
 
-[ ] Crear SolicitudReservaService::crear()
+[x] Crear SolicitudReservaService::crear()
     → Implementa el flujo de dos capas de arriba. calcularMontoTotal()
       suma la tarifa vigente de cada franja, congelándola en
       tarifa_aplicada. Valida que cada franja esté dentro de la ventana
@@ -123,11 +123,11 @@ Recaudaciones (Fase 4.2) — nunca antes.
     → Al final, llama a RecaudacionesApiClient (Fase 4.2) — ver ahí el
       manejo de éxito y de fallo.
 
-[ ] Crear el SolicitudReservaController y su ruta pública
+[x] Crear el SolicitudReservaController y su ruta pública
     → POST /api/v1/public/solicitudes-reserva (sin autenticación,
       mismo throttle básico del Módulo 3).
 
-[ ] Tests
+[x] Tests
     → Crear una solicitud con 2 franjas de fechas distintas genera 1
       fila en solicitudes_reserva y 2 en solicitud_reserva_detalle, con
       monto_total igual a la suma de ambas tarifas.
@@ -136,7 +136,7 @@ Recaudaciones (Fase 4.2) — nunca antes.
     → expira_en corresponde al parámetro
       solicitud_reserva_expiracion_minutos vigente.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(reserva): creación de solicitud de reserva multi-franja con protección de base de datos"
 ```
 
@@ -249,39 +249,39 @@ la arquitectura de contingencia anterior nunca podía garantizar.
 ## Tareas de la Fase 4.2
 
 ```
-[ ] Agregar el parámetro de timeout que faltaba
+[x] Agregar el parámetro de timeout que faltaba
     → Documento 2 v3 no anticipó este valor porque no hacía falta hasta
       ahora: nueva fila en parametros_sistema,
       recaudaciones_timeout_segundos = 8.
 
-[ ] Crear RecaudacionesApiClientInterface
+[x] Crear RecaudacionesApiClientInterface
     → app/Integrations/Recaudaciones/RecaudacionesApiClientInterface.php
     → Un método: solicitarCobro(SolicitudCobroDTO $datos): RespuestaCobroDTO.
 
-[ ] Completar RecaudacionesApiClient (implementación real)
+[x] Completar RecaudacionesApiClient (implementación real)
     → Usa el facade Http de Laravel, con
       Http::timeout($segundos)->withToken(RECAUDACIONES_API_TOKEN)->post(...).
     → El endpoint exacto, el formato del payload y de la respuesta
       quedan como TODO explícito hasta contar con la documentación
       oficial del Core.
 
-[ ] Crear RecaudacionesApiClientSimulado
+[x] Crear RecaudacionesApiClientSimulado
     → Implementación exclusiva para desarrollo y pruebas, que permite
       forzar éxito, timeout o error de forma controlada. Se registra
       como el binding por defecto de RecaudacionesApiClientInterface en
       el entorno local/testing —nunca en producción—, mismo criterio de
       cautela ya aplicado a los seeders de desarrollo desde el Módulo 0.8.
 
-[ ] Crear ServicioDeCobroNoDisponibleException
+[x] Crear ServicioDeCobroNoDisponibleException
     → Se traduce a un HTTP 503 (Service Unavailable) con el mensaje de
       HU-D8, distinto del 409 de FranjaNoDisponibleException —son dos
       situaciones distintas y la app necesita distinguirlas.
 
-[ ] Completar SolicitudReservaService::crear() (de la Fase 4.1)
+[x] Completar SolicitudReservaService::crear() (de la Fase 4.1)
     → Agregar el bloque de llamada al Core mostrado arriba, incluyendo
       el manejo de fallo con liberación inmediata de la franja.
 
-[ ] Tests (contra RecaudacionesApiClientSimulado)
+[x] Tests (contra RecaudacionesApiClientSimulado)
     → Con el simulado devolviendo éxito, la solicitud queda con
       referencia_recaudaciones poblada y el QR/checkoutUrl disponible.
     → Con el simulado forzando una falla de conexión, la solicitud
@@ -292,7 +292,7 @@ la arquitectura de contingencia anterior nunca podía garantizar.
     → La respuesta HTTP ante un fallo de conexión es 503 con el mensaje
       de HU-D8, no un 500 genérico.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(recaudaciones): integración con el Core vía RecaudacionesApiClient"
 ```
 

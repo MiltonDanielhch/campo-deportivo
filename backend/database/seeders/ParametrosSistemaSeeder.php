@@ -20,6 +20,11 @@ class ParametrosSistemaSeeder extends Seeder
                 'valor' => '20',
                 'descripcion' => 'Intervalo de consulta activa contra el Core, si se implementa polling además del webhook.',
             ],
+            [
+                'clave' => 'recaudaciones_timeout_segundos',
+                'valor' => '8',
+                'descripcion' => 'Timeout en segundos para las llamadas al Core de Recaudaciones.',
+            ],
         ];
 
         foreach ($parametros as $parametro) {

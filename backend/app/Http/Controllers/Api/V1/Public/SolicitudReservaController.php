@@ -31,13 +31,18 @@ class SolicitudReservaController extends Controller
     {
         $dto = SolicitudReservaDTO::desdeArray($request->validated());
 
-        $solicitud = $this->service->crear($dto);
+        $resultado = $this->service->crear($dto);
 
-        return (new SolicitudReservaResource($solicitud->load('detalles')))
+        $cobro = $resultado->cobro;
+
+        return (new SolicitudReservaResource($resultado->solicitud->load('detalles')))
             ->additional([
-                // Fase 4.2: aquí viajará la respuesta del Core
-                // (referencia_recaudaciones, qr, checkoutUrl).
-                'cobro' => null,
+                'cobro' => $cobro ? [
+                    'referencia_recaudaciones' => $cobro->referenciaRecaudaciones,
+                    'qr_string' => $cobro->qrString,
+                    'qr_image_base64' => $cobro->qrImageBase64,
+                    'checkout_url' => $cobro->checkoutUrl,
+                ] : null,
             ])
             ->response()
             ->setStatusCode(201);

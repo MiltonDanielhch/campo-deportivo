@@ -3,9 +3,14 @@
 namespace App\Services;
 
 use App\DTOs\FranjaSolicitadaDTO;
+use App\DTOs\SolicitudCobroDTO;
+use App\DTOs\SolicitudCreadaDTO;
 use App\DTOs\SolicitudReservaDTO;
 use App\Enums\EstadoSolicitudReserva;
 use App\Exceptions\FranjaNoDisponibleException;
+use App\Exceptions\RecaudacionesApiException;
+use App\Exceptions\ServicioDeCobroNoDisponibleException;
+use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Models\CampoDeportivo;
 use App\Models\ParametroSistema;
 use App\Models\SolicitudReserva;
@@ -15,28 +20,30 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Creación de solicitudes de reserva multi-franja (HU-D1, HU-D2).
+ * Creación de solicitudes de reserva multi-franja (HU-D1, HU-D2, HU-D3, HU-D8).
  *
- * Dos capas de protección:
- *   1. Verificación rápida (aplicativa) con la grilla del Módulo 3:
- *      da el error amigable en el caso común.
- *   2. Escritura protegida: el INSERT vive en una transacción y la
- *      restricción EXCLUDE (no_solape_horario) decide quién gana si
- *      dos ciudadanos llegan a la misma franja al mismo tiempo.
+ * Dos capas de protección anti-doble-reserva:
+ *   1. Verificación rápida (aplicativa) con la grilla del Módulo 3.
+ *   2. Escritura protegida: la restricción EXCLUDE decide en concurrencia.
+ *
+ * Recién DESPUÉS de que la transacción tiene éxito se llama al Core de
+ * Recaudaciones — nunca antes. Si el Core no responde (HU-D8), la
+ * solicitud queda 'rechazada' de inmediato y la franja se libera al acto.
  */
 class SolicitudReservaService
 {
-    /** Misma ventana de reserva que valida el Módulo 3. */
     public const VENTANA_DIAS = 60;
 
-    /** Alfabeto sin caracteres ambiguos (0/O, 1/I) para lectura por teléfono. */
     private const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-    public function __construct(private DisponibilidadService $disponibilidad)
-    {
+    public function __construct(
+        private DisponibilidadService $disponibilidad,
+        private RecaudacionesApiClientInterface $recaudaciones,
+        private AuditoriaService $auditoria,
+    ) {
     }
 
-    public function crear(SolicitudReservaDTO $datos): SolicitudReserva
+    public function crear(SolicitudReservaDTO $datos): SolicitudCreadaDTO
     {
         // ── Capa 1: verificación rápida (aplicativa) ──
         $campos = $this->verificarFranjas($datos->franjas);
@@ -69,8 +76,6 @@ class SolicitudReservaService
                 return $solicitudNueva;
             });
         } catch (QueryException $e) {
-            // 23P01 = exclusion_violation: el EXCLUDE decidió que esta
-            // franja ya tiene dueño. Caso de concurrencia real.
             if ($e->getCode() === '23P01') {
                 throw new FranjaNoDisponibleException(
                     'Una de las franjas seleccionadas ya no está disponible.',
@@ -79,10 +84,51 @@ class SolicitudReservaService
             throw $e;
         }
 
-        // TODO (Fase 4.2): recién aquí, con la transacción exitosa,
-        // se llama al Core de Recaudaciones. Nunca antes.
+        // ── Recién aquí, con la transacción exitosa, se llama al Core ──
+        try {
+            $respuestaCore = $this->recaudaciones->solicitarCobro(new SolicitudCobroDTO(
+                referenciaExterna: $solicitud->codigo_seguimiento,
+                monto: (float) $solicitud->monto_total,
+                nombrePagador: $solicitud->nombre_pagador,
+                telefonoPagador: $solicitud->telefono_pagador,
+                ciNitPagador: $solicitud->ci_nit_pagador,
+                descripcion: $this->describirSolicitud($solicitud),
+            ));
+        } catch (RecaudacionesApiException $e) {
+            // HU-D8: resolución inmediata. No se despacha job de expiración:
+            // el estado queda resuelto de forma síncrona y la franja se
+            // libera en el acto (el EXCLUDE deja de verla como activa).
+            $solicitud->update(['estado' => EstadoSolicitudReserva::Rechazada]);
 
-        return $solicitud;
+            $this->auditoria->registrar(
+                'solicitudes_reserva',
+                $solicitud->id,
+                'fallo_conexion_core',
+                null,
+                null,
+                ['error' => $e->getMessage()],
+            );
+
+            throw new ServicioDeCobroNoDisponibleException(
+                'El sistema de cobro no está disponible en este momento. Intenta nuevamente en unos minutos.',
+            );
+        }
+
+        $solicitud->update(['referencia_recaudaciones' => $respuestaCore->referenciaRecaudaciones]);
+
+        return new SolicitudCreadaDTO($solicitud, $respuestaCore);
+    }
+
+    /** Descripción legible del cobro para el Core / comprobante. */
+    private function describirSolicitud(SolicitudReserva $solicitud): string
+    {
+        $detalle = $solicitud->detalles()->with('campo')->first();
+        $campoNombre = $detalle?->campo?->nombre ?? 'Campo';
+        $fecha = $detalle?->fecha_reserva?->format('d/m') ?? '';
+        $total = $solicitud->detalles()->count();
+
+        return "Reserva {$campoNombre} - {$fecha}"
+            . ($total > 1 ? " (+".($total - 1).' franjas)' : '');
     }
 
     /**
@@ -90,13 +136,12 @@ class SolicitudReservaService
      * horario de atención y disponibilidad de cada franja contra la grilla.
      *
      * @param  FranjaSolicitadaDTO[]  $franjas
-     * @return array<string, array{tarifa: float}> tarifas congeladas por campo
+     * @return array<string, array{tarifa: float}>
      */
     private function verificarFranjas(array $franjas): array
     {
         $campos = [];
 
-        // Agrupa por campo+fecha para calcular la grilla una sola vez por grupo
         $grupos = collect($franjas)->groupBy(
             fn (FranjaSolicitadaDTO $f) => $f->campoId.'|'.$f->fecha,
         );
@@ -123,10 +168,8 @@ class SolicitudReservaService
             $fecha = Carbon::parse($primera->fecha)->startOfDay();
             $this->validarVentana($fecha);
 
-            // Ninguna franja del mismo pedido puede solaparse con otra
             $this->validarSolapeInterno($grupo->all());
 
-            // La grilla necesita la tarifa vigente cargada (no cualquier tarifa)
             $campo->load(['tarifas' => fn ($q) => $q->whereNull('vigente_hasta')]);
             $grilla = $this->disponibilidad->calcularGrilla($campo, $fecha);
 
@@ -144,11 +187,6 @@ class SolicitudReservaService
         return $campos;
     }
 
-    /**
-     * Cruza una franja contra los bloques de la grilla:
-     * - Sin bloques solapados → fuera del horario de atención (422).
-     * - Algún bloque solapado no libre → ya tiene dueño (409).
-     */
     private function verificarFranjaEnGrilla(FranjaSolicitadaDTO $franja, array $grilla): void
     {
         $fInicio = self::aSegundos($franja->horaInicio);
@@ -179,8 +217,6 @@ class SolicitudReservaService
     }
 
     /**
-     * Dos franjas del MISMO pedido no pueden pisarse entre sí.
-     *
      * @param  FranjaSolicitadaDTO[]  $franjas
      */
     private function validarSolapeInterno(array $franjas): void
@@ -214,10 +250,6 @@ class SolicitudReservaService
         }
     }
 
-    /**
-     * La franja es la unidad de cobro: una tarifa vigente por franja,
-     * congelada en tarifa_aplicada al momento de crear la solicitud.
-     */
     private function calcularMontoTotal(array $franjas, array $campos): float
     {
         return (float) collect($franjas)->sum(
@@ -234,10 +266,6 @@ class SolicitudReservaService
         return (int) ($valor ?? 15);
     }
 
-    /**
-     * RES-YYYYMMDD-XXXXXX — legible por teléfono para soporte,
-     * 20 caracteres (límite de columna: 40).
-     */
     private function generarCodigoSeguimiento(): string
     {
         do {
@@ -251,7 +279,6 @@ class SolicitudReservaService
         return $codigo;
     }
 
-    /** Convierte 'HH:MM' o 'HH:MM:SS' a segundos desde medianoche. */
     private static function aSegundos(string $hora): int
     {
         $partes = array_map('intval', explode(':', $hora));

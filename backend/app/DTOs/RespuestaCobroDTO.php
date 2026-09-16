@@ -3,30 +3,26 @@
 namespace App\DTOs;
 
 /**
- * Respuesta del Core al solicitar un cobro.
- *
- * TODO: las claves exactas del payload del Core están pendientes de
- * confirmación con el equipo del Core; fromArray() mapea la forma
- * esperada por Canchas y se ajustará al llegar la documentación real.
+ * Respuesta del Core al solicitar un cobro (forma v2.0.0 del roadmap).
+ * El Core puede devolver QR renderizable (string o imagen) o un enlace
+ * de checkout; la pantalla de pago acepta cualquiera de los dos.
  */
 final class RespuestaCobroDTO
 {
     public function __construct(
-        public readonly string $solicitudCobroId,
-        public readonly ?string $qrContenido,
-        public readonly ?string $urlPago,
-        public readonly int $montoTotal,
-        public readonly string $estado,
+        public readonly string $referenciaRecaudaciones,
+        public readonly ?string $qrString,
+        public readonly ?string $qrImageBase64,
+        public readonly ?string $checkoutUrl,
     ) {}
 
     public static function fromArray(array $data): self
     {
         return new self(
-            solicitudCobroId: (string) ($data['solicitud_cobro_id'] ?? $data['id'] ?? ''),
-            qrContenido: $data['qr'] ?? null,
-            urlPago: $data['url_pago'] ?? null,
-            montoTotal: (int) ($data['monto_total'] ?? 0),
-            estado: (string) ($data['estado'] ?? 'pendiente'),
+            referenciaRecaudaciones: (string) ($data['referencia_recaudaciones'] ?? $data['referencia'] ?? $data['id'] ?? ''),
+            qrString: $data['qr_string'] ?? $data['qr'] ?? null,
+            qrImageBase64: $data['qr_image_base64'] ?? null,
+            checkoutUrl: $data['checkout_url'] ?? $data['url_pago'] ?? null,
         );
     }
 }
