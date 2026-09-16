@@ -421,42 +421,42 @@ Módulo 4 dejó deliberadamente abierto en la pantalla de cobro.
 ## Checklist de cierre del Módulo 5
 
 ```
-[ ] Flujo feliz completo: generar una solicitud (Módulo 4), simular su
+[x] Flujo feliz completo: generar una solicitud (Módulo 4), simular su
     confirmación (llamando manualmente al webhook con
     RecaudacionesApiClientSimulado, o esperando a que el polling lo
     detecte), y confirmar que la pantalla de cobro navega
     automáticamente al comprobante con el/los código(s) de reserva
     correctos.
 
-[ ] Enviar el mismo webhook de confirmación dos veces seguidas para la
+[x] Enviar el mismo webhook de confirmación dos veces seguidas para la
     misma solicitud. Verificar que el número de filas en reservas
     coincide exactamente con el número de franjas — ni de más, ni de
     menos.
 
-[ ] Crear una solicitud, dejarla vencer sin confirmación, y confirmar
+[x] Crear una solicitud, dejarla vencer sin confirmación, y confirmar
     que queda 'expirada' automáticamente dentro del plazo configurado.
 
-[ ] Crear una solicitud "huérfana de job" con expira_en en el pasado,
+[x] Crear una solicitud "huérfana de job" con expira_en en el pasado,
     correr el comando de barrido manualmente, y confirmar que igual
     queda expirada.
 
-[ ] Simular una confirmación tardía: crear una solicitud, dejarla
+[x] Simular una confirmación tardía: crear una solicitud, dejarla
     expirar, y recién después enviarle un webhook de confirmación.
     Confirmar que permanece 'expirada', que no se crea ninguna reserva,
     y que aparece una fila en auditoria con
     'confirmacion_tardia_no_conciliada'.
 
-[ ] Desde la pantalla de "Consultar estado", ingresar el código de una
+[x] Desde la pantalla de "Consultar estado", ingresar el código de una
     solicitud confirmada de prueba y verificar que muestra sus reservas
     sin exponer datos de contacto ni la referencia interna del Core.
 
-[ ] Confirmar que QUEUE_CONNECTION=redis está activo y que
+[x] Confirmar que QUEUE_CONNECTION=redis está activo y que
     php artisan queue:work efectivamente procesa los jobs.
 
 [ ] Los pipelines de CI de backend y mobile pasan en verde sobre un
     Pull Request que incluya todo el módulo.
 
-[ ] Commit final de cierre del módulo
+[x] Commit final de cierre del módulo
     → Mensaje: "chore: cierre Módulo 5 - confirmación de cobro, comprobante y consulta de estado"
     → Tag sugerido: v0.7.0-reserva-cobro-parte2
 ```
