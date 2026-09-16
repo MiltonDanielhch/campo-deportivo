@@ -5,6 +5,7 @@ return [
     'allowed_methods' => ['*'],
     'allowed_origins' => [
         'http://localhost:5173', // panel web (Vite)
+        'http://localhost:5174', // web-public
     ],
     // Desarrollo local: acepta cualquier puerto de localhost
     // (Vite, Flutter web con puerto aleatorio, etc.).

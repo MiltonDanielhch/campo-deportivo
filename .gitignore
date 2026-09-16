@@ -55,6 +55,16 @@ mobile/ios/Pods/
 mobile/ios/.symlinks/
 
 # ==========================================================
+# WEB PÚBLICA (React + Vite) — Fase WP.1
+# ==========================================================
+web-public/.env
+web-public/.env.*
+!web-public/.env.example
+web-public/node_modules/
+web-public/dist/
+web-public/.vite/
+
+# ==========================================================
 # IDEs Y ENTORNO LOCAL
 # ==========================================================
 .idea/
