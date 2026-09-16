@@ -129,17 +129,17 @@ la que también protege contra el doble procesamiento.
 ## Tareas de la Fase 5.1
 
 ```
-[ ] Crear ConfirmacionCobroService
+[x] Crear ConfirmacionCobroService
     → app/Services/ConfirmacionCobroService.php, tal como se muestra
       arriba, incluyendo confirmar() y registrarConfirmacionTardia()
       (esta última llama a AuditoriaService::registrar() con
       accion='confirmacion_tardia_no_conciliada').
 
-[ ] Crear el generador de código de reserva
+[x] Crear el generador de código de reserva
     → Igual criterio que ya se aplicó a codigo_seguimiento: código
       corto alfanumérico único, con reintento en caso de colisión.
 
-[ ] Tests
+[x] Tests
     → confirmar() sobre una solicitud 'pendiente' la deja 'confirmada'
       y genera una reserva por cada franja.
     → Llamar a confirmar() dos veces seguidas no genera reservas
@@ -151,7 +151,7 @@ la que también protege contra el doble procesamiento.
       monto_total igual confirma la solicitud, pero deja una fila en
       auditoria con la discrepancia.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(recaudaciones): servicio de confirmación compartido y regla de confirmación tardía"
 ```
 

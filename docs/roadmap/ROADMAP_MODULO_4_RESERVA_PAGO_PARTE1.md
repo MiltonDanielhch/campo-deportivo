@@ -365,16 +365,16 @@ hasta que quede confirmado con el equipo del Core cuál es el caso real.
 ## Tareas de la Fase 4.4
 
 ```
-[ ] Instalar el paquete qr_flutter
+[x] Instalar el paquete qr_flutter
     → Para renderizar el QR cuando la respuesta incluye qrString. Si en
       cambio incluye qrImageBase64, se muestra con Image.memory().
 
-[ ] Manejar el caso de checkoutUrl
+[x] Manejar el caso de checkoutUrl
     → Si la respuesta del Core no trae QR sino un enlace de checkout,
       abrirlo con url_launcher (navegador externo o WebView, según lo
       que el flujo del Core requiera).
 
-[ ] Crear la pantalla de cobro
+[x] Crear la pantalla de cobro
     → screens/pago_qr_screen.dart — muestra el QR o el botón de
       checkout según corresponda, el monto total, el
       codigo_seguimiento (visible, por si el ciudadano necesita
@@ -382,7 +382,7 @@ hasta que quede confirmado con el equipo del Core cuál es el caso real.
     → La cuenta regresiva se calcula contra el expira_en que devuelve
       el backend, nunca sumando minutos a la hora local del dispositivo.
 
-[ ] Alcance explícito de esta fase
+[x] Alcance explícito de esta fase
     → Esta pantalla, en este módulo, NO detecta automáticamente cuándo
       el Core confirmó el pago —esa conexión se construye en el
       siguiente módulo (parte 2 de la Épica D), junto con el webhook.
@@ -390,7 +390,7 @@ hasta que quede confirmado con el equipo del Core cuál es el caso real.
       muestra "el tiempo para pagar expiró" con un botón para volver a
       intentar la selección desde cero.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(mobile): pantalla de cobro con cuenta regresiva"
 ```
 
@@ -409,32 +409,32 @@ condiciones reales, no solo en tests aislados.
 ## Checklist de cierre del Módulo 4
 
 ```
-[ ] Desde la app: seleccionar 2 franjas de fechas distintas del mismo
+[x] Desde la app: seleccionar 2 franjas de fechas distintas del mismo
     campo, completar los datos del solicitante, y confirmar. Verificar
     en la base que se creó 1 fila en solicitudes_reserva y 2 en
     solicitud_reserva_detalle, con monto_total correcto.
 
-[ ] expira_en de esa solicitud corresponde exactamente a los minutos
+[x] expira_en de esa solicitud corresponde exactamente a los minutos
     configurados en parametros_sistema.
 
-[ ] Prueba de concurrencia real (script de shell, no un test de
+[x] Prueba de concurrencia real (script de shell, no un test de
     PHPUnit): disparar dos solicitudes HTTP simultáneas pidiendo
     exactamente la misma franja. Confirmar que solo una responde 201 y
     la otra 409, y que solicitud_reserva_detalle solo tiene una fila
     viva para esa franja.
 
-[ ] Con RecaudacionesApiClientSimulado devolviendo éxito, la app
+[x] Con RecaudacionesApiClientSimulado devolviendo éxito, la app
     muestra el QR (o el botón de checkout) y una cuenta regresiva
     correcta.
 
-[ ] Con RecaudacionesApiClientSimulado forzando una falla de conexión:
+[x] Con RecaudacionesApiClientSimulado forzando una falla de conexión:
     la respuesta es 503 con el mensaje de HU-D8, la solicitud queda
     'rechazada' de inmediato (no 15 minutos después), y una nueva
     solicitud para la misma franja se puede crear sin problema
     inmediatamente después —confirma que el horario se liberó en el
     acto, no que quedó esperando un job de expiración.
 
-[ ] La app distingue correctamente el mensaje de "franja no disponible"
+[x] La app distingue correctamente el mensaje de "franja no disponible"
     (409, invita a elegir otra) del de "servicio no disponible" (503,
     invita a reintentar más tarde) — no deben verse iguales para el
     ciudadano.
@@ -442,7 +442,7 @@ condiciones reales, no solo en tests aislados.
 [ ] Los pipelines de CI de backend y mobile pasan en verde sobre un
     Pull Request que incluya todo el módulo.
 
-[ ] Commit final de cierre del módulo
+[x] Commit final de cierre del módulo
     → Mensaje: "chore: cierre Módulo 4 - solicitud de reserva y cobro delegado al Core"
     → Tag sugerido: v0.6.0-reserva-cobro-parte1
 ```
