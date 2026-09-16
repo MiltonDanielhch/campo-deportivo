@@ -36,6 +36,7 @@ class SolicitudCreada {
 
   String? get qrString => (cobro?['qr_string'] as String?);
   String? get checkoutUrl => (cobro?['checkout_url'] as String?);
+  String? get qrImageBase64 => (cobro?['qr_image_base64'] as String?);
 }
 
 class SolicitudReservaService {

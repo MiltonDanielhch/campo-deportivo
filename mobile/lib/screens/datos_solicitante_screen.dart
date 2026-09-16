@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/carrito_reserva_provider.dart';
 import '../services/solicitud_reserva_service.dart';
+import 'pago_qr_screen.dart';
 
 /// Datos de contacto del solicitante y envío de la solicitud (HU-D1).
 ///
@@ -59,14 +60,13 @@ class _DatosSolicitanteScreenState extends State<DatosSolicitanteScreen> {
       if (!mounted) return;
 
       // Las franjas ya quedaron bloqueadas como 'pendiente':
-      // el carrito se vacía. La pantalla de pago llega en la Fase 4.4.
+      // el carrito se vacía y pasamos directo a la pantalla de cobro.
       carrito.limpiar();
-      _mostrar(
-        'Solicitud creada: ${resultado.codigoSeguimiento}. '
-        'Pantalla de pago en la Fase 4.4.',
-        color: Colors.green,
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => PagoQrScreen(resultado: resultado),
+        ),
       );
-      Navigator.of(context).popUntil((route) => route.isFirst);
     } on SolicitudReservaException catch (e) {
       if (!mounted) return;
 
