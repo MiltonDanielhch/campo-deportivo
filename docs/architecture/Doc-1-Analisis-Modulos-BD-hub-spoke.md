@@ -17,8 +17,7 @@ esos cambios directamente en el texto.*
 
 1. **Arquitectura Hub & Spoke — Canchas delega el cobro al Core de Recaudaciones**:
 El Sistema de Campos Deportivos es un **satélite** dentro del ecosistema de
-sistemas del GAD Beni. El **Core de Recaudaciones** es el sistema central
-(desarrollado por otro equipo, con su propio repositorio) que registra
+sistemas del GAD Beni. El **Core de Recaudaciones** es el sistema central que registra
 clientes, genera liquidaciones, integra pasarelas de pago (AGETIC/SINTESIS),
 recibe webhooks bancarios, procesa pagos manuales, concilia y factura — **es
 el único sistema del ecosistema que habla con bancos.** Canchas nunca se
