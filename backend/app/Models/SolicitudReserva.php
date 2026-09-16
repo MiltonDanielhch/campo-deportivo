@@ -19,7 +19,7 @@ class SolicitudReserva extends Model
     protected $fillable = [
         'codigo_seguimiento', 'monto_total', 'monto_confirmado',
         'nombre_pagador', 'telefono_pagador', 'ci_nit_pagador',
-        'referencia_recaudaciones', 'estado', 'expira_en',
+        'referencia_recaudaciones', 'datos_cobro_pendiente', 'estado', 'expira_en',
     ];
 
     protected function casts(): array
@@ -28,6 +28,7 @@ class SolicitudReserva extends Model
             'estado' => EstadoSolicitudReserva::class,
             'monto_total' => 'decimal:2',
             'monto_confirmado' => 'decimal:2',
+            'datos_cobro_pendiente' => 'array',
             'creado_en' => 'datetime',
             'expira_en' => 'datetime',
         ];

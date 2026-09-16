@@ -125,7 +125,14 @@ class SolicitudReservaService
             );
         }
 
-        $solicitud->update(['referencia_recaudaciones' => $respuestaCore->referenciaRecaudaciones]);
+        $solicitud->update([
+            'referencia_recaudaciones' => $respuestaCore->referenciaRecaudaciones,
+            'datos_cobro_pendiente' => [
+                'qr_string' => $respuestaCore->qrString,
+                'qr_image_base64' => $respuestaCore->qrImageBase64,
+                'checkout_url' => $respuestaCore->checkoutUrl,
+            ],
+        ]);
 
         // ── NUEVO: Despachar jobs de expiración y polling ──
         ExpirarSolicitudJob::dispatch($solicitud->id)->delay($solicitud->expira_en);
