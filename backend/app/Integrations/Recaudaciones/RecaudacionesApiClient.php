@@ -8,6 +8,8 @@ use App\Exceptions\RecaudacionesApiException;
 use App\Models\ParametroSistema;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use App\DTOs\WebhookPayloadDTO;
+use Illuminate\Http\Request;
 
 /**
  * Única integración externa del satélite de Canchas: cliente HTTP
@@ -63,6 +65,33 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
         $data = $this->request('get', "/cobros/{$solicitudCobroId}");
 
         return (string) ($data['estado'] ?? 'desconocido');
+    }
+
+        /**
+     * Verificación HMAC-SHA256 con secreto compartido.
+     *
+     * TODO: el mecanismo exacto (nombre del header, formato del hash,
+     * si incluye timestamp) se ajusta al llegar la documentación
+     * oficial del Core. Lo no negociable es que falle cerrado.
+     */
+    public function verificarFirma(Request $request): bool
+    {
+        $secret = (string) config('services.recaudaciones.webhook_secret');
+        $firma = (string) $request->header('X-Recaudaciones-Signature', '');
+
+        // Sin secreto configurado o sin firma: rechazo (fail closed)
+        if ($secret === '' || $firma === '') {
+            return false;
+        }
+
+        $esperada = 'sha256='.hash_hmac('sha256', $request->getContent(), $secret);
+
+        return hash_equals($esperada, $firma);
+    }
+
+    public function parsearWebhook(Request $request): WebhookPayloadDTO
+    {
+        return WebhookPayloadDTO::fromArray($request->json()->all());
     }
 
     /**

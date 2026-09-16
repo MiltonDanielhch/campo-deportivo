@@ -181,7 +181,7 @@ cualquier solicitud que no la pase.
 ## Tareas de la Fase 5.2
 
 ```
-[ ] Agregar verificarFirma() y parsearWebhook() a RecaudacionesApiClientInterface
+[x] Agregar verificarFirma() y parsearWebhook() a RecaudacionesApiClientInterface
     → Amplía la interfaz del Módulo 4 con estos dos métodos.
       verificarFirma() valida el request contra el secreto compartido
       (RECAUDACIONES_WEBHOOK_SECRET, nueva variable de entorno).
@@ -192,7 +192,7 @@ cualquier solicitud que no la pase.
       (ej. un header de prueba), suficiente para testear el flujo
       completo sin depender del Core real.
 
-[ ] Crear el WebhookRecaudacionesController
+[x] Crear el WebhookRecaudacionesController
     → app/Http/Controllers/Api/V1/WebhookRecaudacionesController.php —
       vive fuera del namespace Public/, en su propio espacio: no
       requiere sesión de usuario, pero tampoco es tráfico de la app
@@ -209,7 +209,7 @@ cualquier solicitud que no la pase.
     → Si la encuentra: llama a ConfirmacionCobroService::confirmar() y
       responde 200.
 
-[ ] Tests
+[x] Tests
     → Un webhook con firma inválida responde 401 y no crea ninguna
       reserva.
     → Un webhook válido para una solicitud pendiente la confirma
@@ -222,7 +222,7 @@ cualquier solicitud que no la pase.
     → Un webhook para una solicitud ya expirada no genera reservas y
       deja la fila de confirmación tardía en auditoria.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(recaudaciones): webhook idempotente de confirmación con verificación de firma"
 ```
 

@@ -4,7 +4,9 @@ namespace App\Integrations\Recaudaciones;
 
 use App\DTOs\RespuestaCobroDTO;
 use App\DTOs\SolicitudCobroDTO;
+use App\DTOs\WebhookPayloadDTO;
 use App\Exceptions\RecaudacionesApiException;
+use Illuminate\Http\Request;
 
 /**
  * Cliente simulado EXCLUSIVO para desarrollo y pruebas.
@@ -41,5 +43,20 @@ class RecaudacionesApiClientSimulado implements RecaudacionesApiClientInterface
             qrImageBase64: null,
             checkoutUrl: 'https://core.gob.bo/checkout/sim/' . $datos->referenciaExterna,
         );
+    }
+
+    /**
+     * Verificación simple para desarrollo y pruebas: un header fijo.
+     * Suficiente para testear el flujo completo (401 incluido)
+     * sin depender del Core real ni configurar HMAC.
+     */
+    public function verificarFirma(Request $request): bool
+    {
+        return $request->header('X-Test-Signature') === 'test';
+    }
+
+    public function parsearWebhook(Request $request): WebhookPayloadDTO
+    {
+        return WebhookPayloadDTO::fromArray($request->json()->all());
     }
 }

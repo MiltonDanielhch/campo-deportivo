@@ -40,6 +40,7 @@ return [
         'token' => env('RECAUDACIONES_API_TOKEN'),
         // Solo aplica cuando el binding activo es el Simulado (local/testing)
         'simulado_modo' => env('RECAUDACIONES_SIMULADO_MODO', 'exito'),
+        'webhook_secret' => env('RECAUDACIONES_WEBHOOK_SECRET'),
     ],
 
 ];

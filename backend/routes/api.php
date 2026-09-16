@@ -12,6 +12,7 @@ use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\Public\DisponibilidadController;
 use App\Http\Controllers\Api\V1\Public\SolicitudReservaController;
+use App\Http\Controllers\Api\V1\WebhookRecaudacionesController;
 
 /*
 |--------------------------------------------------------------------------
@@ -22,6 +23,11 @@ use App\Http\Controllers\Api\V1\Public\SolicitudReservaController;
 // ─── Endpoints públicos ─────────────────────────────────────────────────
 Route::get('/v1/health', [HealthController::class, 'index']);
 Route::post('/v1/auth/login', [AuthController::class, 'login']);
+
+// Webhook servidor-a-servidor del Core de Recaudaciones (HU-D4).
+// Fuera del grupo público (sin throttle: no debe bloquear reintentos
+// del Core) y fuera de auth:sanctum (se autentica por firma HMAC).
+Route::post('/v1/webhooks/recaudaciones', [WebhookRecaudacionesController::class, 'handle']);
 
 // Consulta ciudadana (Épica C, HU-C1): sin autenticación
 // throttle:60,1 = salvaguarda mínima; el rate-limiting robusto por IP/
