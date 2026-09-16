@@ -4,20 +4,19 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+// import '../models/estado_solicitud.dart';
+import '../services/estado_solicitud_service.dart';
 import '../services/solicitud_reserva_service.dart';
+import 'comprobante_screen.dart';
 
-/// Pantalla de cobro con cuenta regresiva (Fase 4.4).
+/// Pantalla de cobro con cuenta regresiva (Fase 4.4) y detección
+/// automática de confirmación (Fase 5.5, HU-D6).
 ///
-/// Muestra el QR (string o imagen base64) o el botón de checkout según
-/// lo que el Core haya devuelto — el contrato exacto aún no está
-/// confirmado, así que la pantalla acepta cualquiera de los dos.
-///
-/// La cuenta regresiva se calcula contra el expira_en que devolvió el
-/// backend, NUNCA sumando minutos al reloj del dispositivo.
-///
-/// Alcance explícito: esta pantalla NO detecta cuándo el Core confirma
-/// el pago (eso es el Módulo 5 con el webhook). Al llegar a cero muestra
-/// "el tiempo expiró" y un botón para volver a elegir franjas.
+/// Mientras está visible consulta el estado cada 5 segundos:
+///  • confirmada → navega al comprobante
+///  • expirada   → vista de expiración (Módulo 4)
+///  • rechazada  → mensaje distinto: el Core procesó el intento y lo
+///                  rechazó (no confundir con el 503 inmediato del Módulo 4)
 class PagoQrScreen extends StatefulWidget {
   final SolicitudCreada resultado;
 
@@ -29,8 +28,13 @@ class PagoQrScreen extends StatefulWidget {
 
 class _PagoQrScreenState extends State<PagoQrScreen> {
   Timer? _timer;
+  Timer? _pollingTimer;
   Duration _restante = Duration.zero;
   bool _expirado = false;
+  bool _rechazado = false;
+  bool _navegando = false;
+
+  final EstadoSolicitudService _estadoService = EstadoSolicitudService();
 
   @override
   void initState() {
@@ -41,6 +45,10 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
       const Duration(seconds: 1),
       (_) => _sincronizar(expira),
     );
+    _pollingTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _consultarEstado(),
+    );
   }
 
   void _sincronizar(DateTime expira) {
@@ -50,16 +58,59 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
       if (r.isNegative) {
         _restante = Duration.zero;
         _expirado = true;
-        _timer?.cancel();
+        _detenerTimers();
       } else {
         _restante = r;
       }
     });
   }
 
+  void _detenerTimers() {
+    _timer?.cancel();
+    _pollingTimer?.cancel();
+  }
+
+  Future<void> _consultarEstado() async {
+    if (_navegando) return;
+
+    try {
+      final estado =
+          await _estadoService.consultar(widget.resultado.codigoSeguimiento);
+      if (!mounted || _navegando) return;
+
+      if (estado.estaConfirmada) {
+        _navegando = true;
+        _detenerTimers();
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => ComprobanteScreen(estado: estado)),
+        );
+        return;
+      }
+
+      if (estado.estaExpirada) {
+        setState(() {
+          _expirado = true;
+          _detenerTimers();
+        });
+        return;
+      }
+
+      if (estado.estaRechazada) {
+        setState(() {
+          _rechazado = true;
+          _detenerTimers();
+        });
+      }
+
+    } catch (_) {
+      // Si la consulta falla (red caída), se reintenta en el siguiente
+      // tick. La cuenta regresiva sigue siendo la fuente de verdad local.
+    }
+  }
+
   @override
   void dispose() {
-    _timer?.cancel();
+    _detenerTimers();
     super.dispose();
   }
 
@@ -85,8 +136,6 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      // El botón atrás no debe devolver al formulario con el carrito vacío:
-      // vuelve directo al listado.
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
@@ -95,7 +144,11 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
       },
       child: Scaffold(
         appBar: AppBar(title: const Text('Pago de tu reserva')),
-        body: _expirado ? _vistaExpirada() : _vistaPago(),
+        body: _expirado
+            ? _vistaExpirada()
+            : _rechazado
+                ? _vistaRechazada()
+                : _vistaPago(),
       ),
     );
   }
@@ -150,8 +203,8 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
         const SizedBox(height: 24),
         const Text(
           'Escanea el QR con tu app de banca móvil o usa el botón de pago. '
-          'Esta pantalla no detecta el pago automáticamente: cuando el Core '
-          'confirme, tu reserva quedará confirmada.',
+          'Esta pantalla detecta automáticamente cuando el Core confirma '
+          'tu pago y te muestra el comprobante.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 12, color: Colors.grey),
         ),
@@ -159,7 +212,6 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
     );
   }
 
-  /// Acepta cualquiera de las tres formas que el Core podría devolver.
   Widget _medioDePago(SolicitudCreada r) {
     if (r.qrString != null && r.qrString!.isNotEmpty) {
       return Center(
@@ -232,6 +284,44 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
               'pago y será cerrada al cumplir el plazo.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.of(context).popUntil((route) => route.isFirst),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Volver a elegir franjas'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Distinta de la expiración y del 503 del Módulo 4: acá el Core SÍ
+  /// procesó el intento de cobro pero lo rechazó.
+  Widget _vistaRechazada() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.orange),
+            const SizedBox(height: 16),
+            const Text(
+              'Tu pago no pudo procesarse',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'El sistema de recaudaciones rechazó el intento de cobro. '
+              'Intenta nuevamente con otro medio de pago.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 24),
             ElevatedButton(

@@ -348,7 +348,7 @@ cobro usará para detectar automáticamente cuándo se confirmó.
 ## Tareas de la Fase 5.4
 
 ```
-[ ] Crear EstadoSolicitudResource
+[x] Crear EstadoSolicitudResource
     → Expone: codigo_seguimiento, estado, monto_total, expira_en (si
       sigue activa), y si el estado es 'confirmada', la lista de
       reservas (codigo_reserva, nombre del campo, fecha, hora_inicio,
@@ -357,12 +357,12 @@ cobro usará para detectar automáticamente cuándo se confirmó.
       referencia_recaudaciones (esta última es un detalle interno de
       la integración con el Core, no algo que el ciudadano necesite ver).
 
-[ ] Crear el endpoint
+[x] Crear el endpoint
     → GET /api/v1/public/solicitudes-reserva/{codigo_seguimiento}/estado
     → 404 genérico si el código no existe. Mismo throttle básico del
       Módulo 3.
 
-[ ] Tests
+[x] Tests
     → Consultar un código válido de una solicitud confirmada devuelve
       sus reservas correctamente.
     → Consultar un código inexistente devuelve 404.
@@ -385,7 +385,7 @@ Módulo 4 dejó deliberadamente abierto en la pantalla de cobro.
 ## Tareas de la Fase 5.5
 
 ```
-[ ] Actualizar pago_qr_screen.dart (creada en el Módulo 4)
+[x] Actualizar pago_qr_screen.dart (creada en el Módulo 4)
     → Mientras la pantalla está visible, consultar
       GET /public/solicitudes-reserva/{codigo}/estado cada 5 segundos.
     → Si el estado pasa a 'confirmada', navegar automáticamente a la
@@ -399,16 +399,16 @@ Módulo 4 dejó deliberadamente abierto en la pantalla de cobro.
       pago no pudo procesarse, intenta nuevamente"), para no confundir
       dos situaciones distintas con el mismo texto.
 
-[ ] Crear la pantalla de comprobante digital
+[x] Crear la pantalla de comprobante digital
     → screens/comprobante_screen.dart — codigo_seguimiento y, por cada
       reserva generada, su codigo_reserva, campo, fecha y horario.
 
-[ ] Crear la pantalla de consulta de estado
+[x] Crear la pantalla de consulta de estado
     → screens/consultar_estado_screen.dart — accesible desde la
       pantalla principal en cualquier momento, con un campo para
       ingresar manualmente un código y ver su estado.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(mobile): detección de confirmación, comprobante digital y consulta de estado"
 ```
 

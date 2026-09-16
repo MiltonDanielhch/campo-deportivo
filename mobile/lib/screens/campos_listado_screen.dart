@@ -3,6 +3,7 @@ import '../models/campo_deportivo.dart';
 import '../services/campos_service.dart';
 import 'campo_detalle_screen.dart';
 import 'campos_mapa_screen.dart';
+import 'consultar_estado_screen.dart';
 
 enum ModoVista { lista, mapa }
 
@@ -38,6 +39,16 @@ class _CamposListadoScreenState extends State<CamposListadoScreen> {
       appBar: AppBar(
         title: const Text('Campos Deportivos'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.receipt_long),
+            tooltip: 'Consultar estado de mi reserva',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ConsultarEstadoScreen()),
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [
