@@ -10,6 +10,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use App\DTOs\WebhookPayloadDTO;
 use Illuminate\Http\Request;
+use App\DTOs\EstadoCobroDTO;
 
 /**
  * Única integración externa del satélite de Canchas: cliente HTTP
@@ -60,11 +61,18 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
      *
      * TODO: pendiente del contrato real del Core.
      */
-    public function consultarEstado(string $solicitudCobroId): string
+    public function consultarEstado(string $referenciaRecaudaciones): ?EstadoCobroDTO
     {
-        $data = $this->request('get', "/cobros/{$solicitudCobroId}");
-
-        return (string) ($data['estado'] ?? 'desconocido');
+        try {
+            $data = $this->request('get', "/cobros/{$referenciaRecaudaciones}");
+            return EstadoCobroDTO::fromArray($data);
+        } catch (RecaudacionesApiException $e) {
+            // Si el Core responde 404, la referencia no existe
+            if ($e->statusCode === 404) {
+                return null;
+            }
+            throw $e;
+        }
     }
 
         /**

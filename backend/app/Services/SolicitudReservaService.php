@@ -11,6 +11,8 @@ use App\Exceptions\FranjaNoDisponibleException;
 use App\Exceptions\RecaudacionesApiException;
 use App\Exceptions\ServicioDeCobroNoDisponibleException;
 use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
+use App\Jobs\ExpirarSolicitudJob;
+use App\Jobs\PollingSolicitudJob;
 use App\Models\CampoDeportivo;
 use App\Models\ParametroSistema;
 use App\Models\SolicitudReserva;
@@ -124,6 +126,12 @@ class SolicitudReservaService
         }
 
         $solicitud->update(['referencia_recaudaciones' => $respuestaCore->referenciaRecaudaciones]);
+
+        // ── NUEVO: Despachar jobs de expiración y polling ──
+        ExpirarSolicitudJob::dispatch($solicitud->id)->delay($solicitud->expira_en);
+
+        $intervaloPolling = (int) ParametroSistema::where('clave', 'polling_intervalo_segundos')->value('valor');
+        PollingSolicitudJob::dispatch($solicitud->id)->delay(now()->addSeconds($intervaloPolling ?: 20));
 
         return new SolicitudCreadaDTO($solicitud, $respuestaCore);
     }

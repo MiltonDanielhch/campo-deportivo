@@ -2,6 +2,7 @@
 
 namespace App\Integrations\Recaudaciones;
 
+use App\DTOs\EstadoCobroDTO;
 use App\DTOs\RespuestaCobroDTO;
 use App\DTOs\SolicitudCobroDTO;
 use App\DTOs\WebhookPayloadDTO;
@@ -45,11 +46,6 @@ class RecaudacionesApiClientSimulado implements RecaudacionesApiClientInterface
         );
     }
 
-    /**
-     * Verificación simple para desarrollo y pruebas: un header fijo.
-     * Suficiente para testear el flujo completo (401 incluido)
-     * sin depender del Core real ni configurar HMAC.
-     */
     public function verificarFirma(Request $request): bool
     {
         return $request->header('X-Test-Signature') === 'test';
@@ -58,5 +54,30 @@ class RecaudacionesApiClientSimulado implements RecaudacionesApiClientInterface
     public function parsearWebhook(Request $request): WebhookPayloadDTO
     {
         return WebhookPayloadDTO::fromArray($request->json()->all());
+    }
+
+    /**
+     * Simula consulta de estado para polling (HU-D5).
+     * Usa config('services.recaudaciones.simulado_polling_modo'):
+     * - 'pendiente': devuelve pagado=false
+     * - 'pagado': devuelve pagado=true con monto
+     * - 'no_existe': devuelve null
+     */
+    public function consultarEstado(string $referenciaRecaudaciones): ?EstadoCobroDTO
+    {
+        $modo = config('services.recaudaciones.simulado_polling_modo', 'pendiente');
+
+        if ($modo === 'no_existe') {
+            return null;
+        }
+
+        if ($modo === 'pagado') {
+            return new EstadoCobroDTO(
+                pagado: true,
+                montoConfirmado: 300.00,
+            );
+        }
+
+        return new EstadoCobroDTO(pagado: false);
     }
 }
