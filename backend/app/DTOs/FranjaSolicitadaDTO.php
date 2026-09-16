@@ -4,22 +4,25 @@ namespace App\DTOs;
 
 /**
  * Franja horaria que el ciudadano desea reservar.
- * Las fechas viajan como strings ISO 8601 en zona horaria America/La_Paz.
+ * Coincide con las columnas de solicitud_reserva_detalle:
+ * fecha_reserva (date) + hora_inicio/hora_fin (time).
  */
 final class FranjaSolicitadaDTO
 {
     public function __construct(
-        public readonly int $campoId,
-        public readonly string $inicio,
-        public readonly string $fin,
+        public readonly string $campoId,     // UUID del campo
+        public readonly string $fecha,       // 'YYYY-MM-DD'
+        public readonly string $horaInicio,  // 'HH:MM' o 'HH:MM:SS'
+        public readonly string $horaFin,     // 'HH:MM' o 'HH:MM:SS'
     ) {}
 
     public function toArray(): array
     {
         return [
             'campo_id' => $this->campoId,
-            'inicio' => $this->inicio,
-            'fin' => $this->fin,
+            'fecha' => $this->fecha,
+            'hora_inicio' => $this->horaInicio,
+            'hora_fin' => $this->horaFin,
         ];
     }
 }

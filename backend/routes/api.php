@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\TipoCampoController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\Public\DisponibilidadController;
+use App\Http\Controllers\Api\V1\Public\SolicitudReservaController;
 
 /*
 |--------------------------------------------------------------------------
@@ -29,6 +30,7 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
     Route::get('/campos', [PublicCampoController::class, 'index']);
     Route::get('/campos/{campo}', [PublicCampoController::class, 'show']);
     Route::get('/campos/{campo}/disponibilidad', [DisponibilidadController::class, 'show']);
+    Route::post('/solicitudes-reserva', [SolicitudReservaController::class, 'store']);
 });
 
 // ─── Endpoints protegidos ───────────────────────────────────────────────
