@@ -310,29 +310,29 @@ pasarelas ni de Circuit Breaker, solo arma la solicitud.
 ## Tareas de la Fase 4.3
 
 ```
-[ ] Elegir un gestor de estado simple para el carrito
+[x] Elegir un gestor de estado simple para el carrito
     → Se recomienda el paquete provider — suficiente para este alcance.
 
-[ ] Crear CarritoReservaProvider
+[x] Crear CarritoReservaProvider
     → Lista de franjas seleccionadas (posiblemente de fechas distintas),
       con métodos para agregar, quitar, y calcular el monto total
       estimado en el cliente (el monto real y definitivo siempre lo
       calcula el backend).
 
-[ ] Conectar la grilla horaria del Módulo 3 al carrito
+[x] Conectar la grilla horaria del Módulo 3 al carrito
     → Tocar un bloque 'libre' lo agrega o quita del carrito, con una
       marca visual de "seleccionado".
 
-[ ] Crear la pantalla de resumen del carrito
+[x] Crear la pantalla de resumen del carrito
     → screens/carrito_resumen_screen.dart — franjas elegidas, monto
       total estimado, opción de quitar cualquier franja, botón
       "Continuar".
 
-[ ] Crear la pantalla de datos del solicitante
+[x] Crear la pantalla de datos del solicitante
     → screens/datos_solicitante_screen.dart — nombre, teléfono
       (obligatorio), CI/NIT (opcional), validación básica.
 
-[ ] Conectar el envío de la solicitud
+[x] Conectar el envío de la solicitud
     → Al confirmar, llamar a POST /public/solicitudes-reserva. Manejar
       dos respuestas de error distintas:
         • 409 (franja no disponible): identificar cuál franja falló,
@@ -343,7 +343,7 @@ pasarelas ni de Circuit Breaker, solo arma la solicitud.
           ciudadano puede simplemente reintentar en unos minutos, su
           selección de franjas sigue siendo válida.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(mobile): carrito de selección multi-franja y datos del solicitante"
 ```
 

@@ -1,23 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/bloque_disponibilidad.dart';
 import '../models/campo_deportivo.dart';
+import '../models/franja_carrito.dart';
+import '../providers/carrito_reserva_provider.dart';
 import '../services/disponibilidad_service.dart';
+import 'carrito_resumen_screen.dart';
 
-/// Pantalla de detalle de un campo con selector de fecha (HU-C2).
+/// Pantalla de detalle de un campo con selector de fecha (HU-C2) y
+/// selección de franjas hacia el carrito global (HU-D1).
 ///
-/// Muestra la información pública del campo y permite consultar la
-/// disponibilidad horaria para fechas dentro de la ventana válida
-/// (hoy hasta +60 días, misma validación que el backend).
-///
-/// La grilla se refresca automáticamente cada 45 segundos mientras la
-/// pantalla está abierta. Esto NO es el Active Polling de HU-D5: aquel
-/// es el backend consultando al Core de Recaudaciones; este es la app
-/// refrescando su propia vista contra el backend de Canchas.
-///
-/// El estado de selección de bloques se mantiene localmente para
-/// preparar el flujo de reserva (se conecta en el módulo siguiente).
+/// La grilla se refresca cada 45s. El carrito NO se limpia al cambiar
+/// de fecha ni al refrescar: las franjas pueden ser de fechas y campos
+/// distintos (multi-franja).
 class CampoDetalleScreen extends StatefulWidget {
   final CampoDeportivo campo;
 
@@ -36,15 +33,11 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
   String? _error;
   Timer? _refreshTimer;
 
-  // Estado preparado para el flujo de reserva (Épica D)
-  final Set<BloqueSeleccionado> _bloquesSeleccionados = {};
-
   @override
   void initState() {
     super.initState();
     _fechaSeleccionada = DateTime.now();
     _cargar(silencioso: false);
-    // Refresco automático de la grilla cada 45 segundos
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 45),
       (_) => _cargar(silencioso: true),
@@ -57,15 +50,11 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
     super.dispose();
   }
 
-  /// Carga la disponibilidad. En modo silencioso (refresco automático)
-  /// no muestra spinner ni limpia la selección; si falla, conserva la
-  /// última grilla conocida.
   Future<void> _cargar({required bool silencioso}) async {
     if (!silencioso) {
       setState(() {
         _cargando = true;
         _error = null;
-        _bloquesSeleccionados.clear();
       });
     }
 
@@ -118,6 +107,11 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
     return '$dia ${fecha.day}/${fecha.month}';
   }
 
+  String get _fechaStr {
+    final f = _fechaSeleccionada;
+    return '${f.year.toString().padLeft(4, '0')}-${f.month.toString().padLeft(2, '0')}-${f.day.toString().padLeft(2, '0')}';
+  }
+
   void _seleccionarFecha(DateTime fecha) {
     if (fecha != _fechaSeleccionada) {
       setState(() {
@@ -127,73 +121,17 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
     }
   }
 
-  void _toggleBloque(BloqueDisponibilidad bloque) {
-    setState(() {
-      final seleccion = BloqueSeleccionado(
-        horaInicio: bloque.horaInicio,
-        horaFin: bloque.horaFin,
-        precio: bloque.precio,
-      );
-
-      if (_bloquesSeleccionados.contains(seleccion)) {
-        _bloquesSeleccionados.remove(seleccion);
-      } else {
-        _bloquesSeleccionados.add(seleccion);
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final fechas = _generarFechas(14);
+    final carrito = context.watch<CarritoReservaProvider>();
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.campo.nombre)),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ─── Información del campo ───
-          Container(
-            color: Colors.grey[100],
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.campo.tipoCampo.nombre,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 16),
-                    const SizedBox(width: 4),
-                    Expanded(child: Text(widget.campo.direccion)),
-                  ],
-                ),
-                if (widget.campo.tarifaVigente != null) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.payments, size: 20, color: Colors.green),
-                      Text(
-                        'Bs ${widget.campo.tarifaVigente!.precioPorHora.toStringAsFixed(2)} por hora',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
+          _InfoCampo(campo: widget.campo),
 
           // ─── Selector de fechas ───
           Container(
@@ -252,26 +190,19 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
 
           const Divider(height: 1),
 
-          // ─── Grilla de disponibilidad ───
           Expanded(child: _construirGrilla()),
 
-          // ─── Barra inferior con bloques seleccionados ───
-          if (_bloquesSeleccionados.isNotEmpty)
-            _BarraSeleccionados(
-              seleccionados: _bloquesSeleccionados,
-              onConfirmar: () {
-                // PLACEHOLDER: aquí se conectará el flujo de reserva
-                // en el módulo siguiente (Épica D)
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      '${_bloquesSeleccionados.length} bloque(s) seleccionado(s). '
-                      'Flujo de reserva pendiente (Módulo 4).',
-                    ),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              },
+          // ─── Barra del carrito global ───
+          if (!carrito.estaVacio)
+            _BarraCarrito(
+              cantidad: carrito.cantidad,
+              total: carrito.totalEstimado,
+              onVer: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CarritoResumenScreen(),
+                ),
+              ),
             ),
         ],
       ),
@@ -310,7 +241,6 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
       return const Center(child: Text('Sin datos'));
     }
 
-    // El campo no abre ese día (sin horario_atencion)
     if (!disponibilidad.abierto) {
       return Center(
         child: Padding(
@@ -342,57 +272,85 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
 
     return _GrillaHoraria(
       bloques: disponibilidad.bloques,
-      bloquesSeleccionados: _bloquesSeleccionados,
-      onToggleBloque: _toggleBloque,
+      fecha: _fechaStr,
+      campo: widget.campo,
     );
   }
 }
 
-/// Modelo simple para un bloque seleccionado (hora de inicio es la clave única).
-class BloqueSeleccionado {
-  final String horaInicio;
-  final String horaFin;
-  final double? precio;
+/// Información pública del campo en la cabecera.
+class _InfoCampo extends StatelessWidget {
+  final CampoDeportivo campo;
 
-  const BloqueSeleccionado({
-    required this.horaInicio,
-    required this.horaFin,
-    this.precio,
-  });
+  const _InfoCampo({required this.campo});
 
   @override
-  bool operator ==(Object other) =>
-      other is BloqueSeleccionado && other.horaInicio == horaInicio;
-
-  @override
-  int get hashCode => horaInicio.hashCode;
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.grey[100],
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            campo.tipoCampo.nombre,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.grey,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(Icons.location_on, size: 16),
+              const SizedBox(width: 4),
+              Expanded(child: Text(campo.direccion)),
+            ],
+          ),
+          if (campo.tarifaVigente != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.payments, size: 20, color: Colors.green),
+                Text(
+                  'Bs ${campo.tarifaVigente!.precioPorHora.toStringAsFixed(2)} por hora',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
-/// Widget de grilla horaria con los 3 estados de bloque.
+/// Grilla horaria: los bloques 'libre' se agregan/quitan del carrito global.
 class _GrillaHoraria extends StatelessWidget {
   final List<BloqueDisponibilidad> bloques;
-  final Set<BloqueSeleccionado> bloquesSeleccionados;
-  final void Function(BloqueDisponibilidad) onToggleBloque;
+  final String fecha;
+  final CampoDeportivo campo;
 
   const _GrillaHoraria({
     required this.bloques,
-    required this.bloquesSeleccionados,
-    required this.onToggleBloque,
+    required this.fecha,
+    required this.campo,
   });
 
-  Color _colorEstado(BloqueDisponibilidad bloque) {
+  Color _colorEstado(BloqueDisponibilidad bloque, bool seleccionado) {
     if (bloque.estaOcupada) return Colors.red[100]!;
     if (bloque.estaBloqueadaTemporal) return Colors.orange[100]!;
-    final seleccionado =
-        bloquesSeleccionados.any((s) => s.horaInicio == bloque.horaInicio);
     return seleccionado ? Colors.teal[100]! : Colors.green[100]!;
   }
 
-  Color _colorBorde(BloqueDisponibilidad bloque) {
+  Color _colorBorde(BloqueDisponibilidad bloque, bool seleccionado) {
     if (bloque.estaOcupada) return Colors.red;
     if (bloque.estaBloqueadaTemporal) return Colors.orange;
-    final seleccionado =
-        bloquesSeleccionados.any((s) => s.horaInicio == bloque.horaInicio);
     return seleccionado ? Colors.teal : Colors.green;
   }
 
@@ -410,6 +368,8 @@ class _GrillaHoraria extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final carrito = context.watch<CarritoReservaProvider>();
+
     return GridView.builder(
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -421,18 +381,30 @@ class _GrillaHoraria extends StatelessWidget {
       itemCount: bloques.length,
       itemBuilder: (context, index) {
         final bloque = bloques[index];
+
+        final franja = FranjaCarrito(
+          campoId: campo.id,
+          campoNombre: campo.nombre,
+          fecha: fecha,
+          horaInicio: bloque.horaInicio,
+          horaFin: bloque.horaFin,
+          precio: bloque.precio,
+        );
+
+        final seleccionado = carrito.esta(franja);
         final esLibre = bloque.estaLibre;
-        final seleccionado =
-            bloquesSeleccionados.any((s) => s.horaInicio == bloque.horaInicio);
 
         return InkWell(
-          onTap: esLibre ? () => onToggleBloque(bloque) : null,
+          onTap: esLibre ? () => carrito.toggle(franja) : null,
           borderRadius: BorderRadius.circular(8),
           child: Container(
             decoration: BoxDecoration(
-              color: _colorEstado(bloque),
+              color: _colorEstado(bloque, seleccionado),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _colorBorde(bloque), width: 2),
+              border: Border.all(
+                color: _colorBorde(bloque, seleccionado),
+                width: 2,
+              ),
             ),
             padding: const EdgeInsets.all(8),
             child: Column(
@@ -442,10 +414,10 @@ class _GrillaHoraria extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(_iconoEstado(bloque),
-                        size: 16, color: _colorBorde(bloque)),
+                        size: 16, color: _colorBorde(bloque, seleccionado)),
                     const SizedBox(width: 4),
                     Text(
-                      '${bloque.horaInicio} - ${bloque.horaFin}',
+                      '${bloque.horaInicio.substring(0, 5)} - ${bloque.horaFin.substring(0, 5)}',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -458,7 +430,7 @@ class _GrillaHoraria extends StatelessWidget {
                   _textoEstado(bloque),
                   style: TextStyle(
                     fontSize: 11,
-                    color: _colorBorde(bloque),
+                    color: _colorBorde(bloque, seleccionado),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -475,23 +447,20 @@ class _GrillaHoraria extends StatelessWidget {
   }
 }
 
-/// Barra inferior que muestra los bloques seleccionados y botón de confirmar.
-class _BarraSeleccionados extends StatelessWidget {
-  final Set<BloqueSeleccionado> seleccionados;
-  final VoidCallback onConfirmar;
+/// Barra inferior con el estado del carrito global y acceso al resumen.
+class _BarraCarrito extends StatelessWidget {
+  final int cantidad;
+  final double total;
+  final VoidCallback onVer;
 
-  const _BarraSeleccionados({
-    required this.seleccionados,
-    required this.onConfirmar,
+  const _BarraCarrito({
+    required this.cantidad,
+    required this.total,
+    required this.onVer,
   });
 
   @override
   Widget build(BuildContext context) {
-    final total = seleccionados.fold<double>(
-      0,
-      (suma, b) => suma + (b.precio ?? 0),
-    );
-
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -512,23 +481,23 @@ class _BarraSeleccionados extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${seleccionados.length} bloque(s) seleccionado(s)',
+                  '$cantidad franja(s) seleccionada(s)',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  'Total: Bs ${total.toStringAsFixed(2)}',
+                  'Total estimado: Bs ${total.toStringAsFixed(2)}',
                   style: const TextStyle(color: Colors.green),
                 ),
               ],
             ),
           ),
           ElevatedButton(
-            onPressed: onConfirmar,
+            onPressed: onVer,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.teal,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Continuar'),
+            child: const Text('Ver carrito'),
           ),
         ],
       ),

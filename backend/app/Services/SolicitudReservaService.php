@@ -77,6 +77,15 @@ class SolicitudReservaService
             });
         } catch (QueryException $e) {
             if ($e->getCode() === '23P01') {
+                // La restricción EXCLUDE decidió. Re-corremos la verificación
+                // rápida contra datos ya commiteados para identificar CUÁL
+                // franja perdió y devolvérsela estructurada a la app.
+                try {
+                    $this->verificarFranjas($datos->franjas);
+                } catch (FranjaNoDisponibleException $especifica) {
+                    throw $especifica;
+                }
+
                 throw new FranjaNoDisponibleException(
                     'Una de las franjas seleccionadas ya no está disponible.',
                 );
@@ -212,6 +221,12 @@ class SolicitudReservaService
         if ($solapados->contains(fn (array $b) => $b['estado'] !== 'libre')) {
             throw new FranjaNoDisponibleException(
                 "La franja {$franja->horaInicio}-{$franja->horaFin} del {$franja->fecha} ya no está disponible.",
+                [
+                    'campo_id' => $franja->campoId,
+                    'fecha' => $franja->fecha,
+                    'hora_inicio' => $franja->horaInicio,
+                    'hora_fin' => $franja->horaFin,
+                ],
             );
         }
     }

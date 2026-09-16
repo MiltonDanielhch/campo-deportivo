@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'providers/carrito_reserva_provider.dart';
 import 'screens/campos_listado_screen.dart';
 
 void main() {
@@ -10,14 +12,17 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Campos Deportivos GAD Beni',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
+    return ChangeNotifierProvider(
+      create: (_) => CarritoReservaProvider(),
+      child: MaterialApp(
+        title: 'Campos Deportivos GAD Beni',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+          useMaterial3: true,
+        ),
+        home: const CamposListadoScreen(),
       ),
-      home: const CamposListadoScreen(),
     );
   }
 }
