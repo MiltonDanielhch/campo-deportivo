@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\Public\DisponibilidadController;
 use App\Http\Controllers\Api\V1\Public\SolicitudReservaController;
 use App\Http\Controllers\Api\V1\WebhookRecaudacionesController;
+use App\Http\Controllers\Api\V1\Public\SolicitudEstadoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -37,6 +38,7 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
     Route::get('/campos/{campo}', [PublicCampoController::class, 'show']);
     Route::get('/campos/{campo}/disponibilidad', [DisponibilidadController::class, 'show']);
     Route::post('/solicitudes-reserva', [SolicitudReservaController::class, 'store']);
+    Route::get('/solicitudes-reserva/{codigo}/estado', [SolicitudEstadoController::class, 'show']);
 });
 
 // ─── Endpoints protegidos ───────────────────────────────────────────────

@@ -291,17 +291,17 @@ class PollingSolicitudJob implements ShouldQueue
 ## Tareas de la Fase 5.3
 
 ```
-[ ] Agregar consultarEstado() a RecaudacionesApiClientInterface
+[x] Agregar consultarEstado() a RecaudacionesApiClientInterface
     → Ausente hasta ahora porque el Módulo 4 solo necesitaba
       solicitarCobro(). Se agrega aquí: consultarEstado(string
       $referencia): ?EstadoCobroDTO, implementada en
       RecaudacionesApiClient (real, con el mismo TODO honesto sobre el
       contrato exacto) y en RecaudacionesApiClientSimulado.
 
-[ ] Crear ExpirarSolicitudJob y PollingSolicitudJob
+[x] Crear ExpirarSolicitudJob y PollingSolicitudJob
     → Tal como se muestran arriba, en app/Jobs/.
 
-[ ] Actualizar SolicitudReservaService::crear() del Módulo 4
+[x] Actualizar SolicitudReservaService::crear() del Módulo 4
     → Justo después de que RecaudacionesApiClient devuelve una
       respuesta exitosa, despachar ambos jobs:
       ExpirarSolicitudJob::dispatch($solicitud->id)->delay($solicitud->expira_en)
@@ -310,18 +310,18 @@ class PollingSolicitudJob implements ShouldQueue
       ningún job — el estado ya quedó resuelto de forma síncrona en ese
       mismo momento.
 
-[ ] Crear el comando de barrido de seguridad
+[x] Crear el comando de barrido de seguridad
     → app/Console/Commands/ExpirarSolicitudesVencidas.php — busca toda
       solicitud con estado 'pendiente' y expira_en < now(), aplicando
       la misma lógica de ExpirarSolicitudJob a cada una.
     → Registrar en routes/console.php:
       Schedule::command('solicitudes:expirar-vencidas')->everyFiveMinutes().
 
-[ ] Configurar QUEUE_CONNECTION=redis
+[x] Configurar QUEUE_CONNECTION=redis
     → Cambiar de 'sync' (desarrollo, desde el Módulo 0) a 'redis'.
       Levantar un worker con php artisan queue:work redis.
 
-[ ] Tests
+[x] Tests
     → ExpirarSolicitudJob sobre una solicitud vencida y pendiente la
       marca 'expirada'.
     → ExpirarSolicitudJob sobre una solicitud ya 'confirmada' no la toca.
@@ -332,7 +332,7 @@ class PollingSolicitudJob implements ShouldQueue
     → El comando de barrido expira correctamente una solicitud "huérfana
       de job" (creada sin pasar por SolicitudReservaService::crear()).
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(recaudaciones): expiración y consulta activa por solicitud, con barrido de seguridad"
 ```
 
