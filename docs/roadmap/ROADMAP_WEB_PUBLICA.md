@@ -1,19 +1,57 @@
-Voy a crear el roadmap de la web pública siguiendo exactamente el mismo formato que los otros. Te lo preparo completo:
-
-
 # 📁 ROADMAP_WEB_PUBLICA.md
+**Proyecto:** Sistema de Administración del Alquiler de Campos Deportivos — GAD Beni
+**Arquitectura:** Canal público web (React + Vite + TypeScript), complementario a la app móvil
+**Versión:** 1.1.0 · **Formato:** Guía Arquitectónica Explicativa
+**Tiempo estimado:** 20–26 horas (ver nota de estimación) · **Dependencias:** Módulos 3, 4 y 5 completos
+**Bloquea:** Nada — es un canal adicional, paralelo al roadmap principal, no bloquea el flujo 0→7
 
-**Proyecto:** Sistema de Administración del Alquiler de Campos Deportivos — GAD Beni  
-**Arquitectura:** Canal público web (React + Vite + TypeScript), complementario a la app móvil  
-**Versión:** 1.0.0 · **Formato:** Guía Arquitectónica Explicativa  
-**Tiempo estimado:** 12–16 horas · **Dependencias:** Módulos 3, 4 y 5 completos  
-**Bloquea:** Nada (es un canal adicional, no bloquea el flujo principal)
+> **Objetivo del Módulo:** Crear un canal web público completo que permita
+> al ciudadano consultar campos deportivos, ver disponibilidad, reservar y
+> pagar sin instalar nada, complementando la app móvil. Este canal es
+> crítico para la adopción masiva: los links se comparten por WhatsApp,
+> funcionan en cualquier navegador, y no requieren descarga.
 
-> **Objetivo del Módulo:** Crear un canal web público completo que permita al ciudadano consultar campos deportivos, ver disponibilidad, reservar y pagar **sin instalar nada**, complementando la app móvil. Este canal es crítico para la adopción masiva: los links se comparten por WhatsApp, funcionan en cualquier navegador, y no requieren descarga.
->
-> **Por qué React y no Flutter web:** aunque la app móvil ya compila a web, Flutter web tiene problemas de SEO (es una SPA con renderizado sintético), carga inicial pesada (varios MB de WASM/JS), y accesibilidad web nativa inferior. Para un canal público institucional que el GAD quiere que Google indexe y que funcione en celulares con datos limitados, React + Vite es la mejor opción. Reutiliza el stack del web-admin (TypeScript + shadcn/ui + Tailwind) y consume los mismos endpoints públicos que ya creamos en los Módulos 3, 4 y 5.
->
-> **Arquitectura:** el proyecto vive en `web-public/` dentro del monorepo (ADR-001), junto a `web-admin/` y `mobile/`. Es una SPA con prerendering de rutas estáticas (landing, listado) para SEO, y rutas dinámicas (detalle, pago, comprobante) que se renderizan en cliente. El backend Laravel ya tiene todos los endpoints necesarios en `/api/v1/public/`, así que este módulo es **puro frontend**.
+> **Nota de estimación:** la versión original de este documento estimaba
+> 12–16 horas. Se ajusta a 20–26: ocho fases que replican prácticamente
+> toda la Épica C y la Épica D del móvil, más SEO real, generación de PDF,
+> y un compromiso explícito con WCAG 2.1 AA y Lighthouse >90 —ninguno de
+> esos tres últimos se logra bien en el tiempo que sobra al final, hay que
+> presupuestarlos desde el principio.
+
+> **Este módulo ya no es "puro frontend".** Al diseñar la pantalla de pago
+> pensando en que un link se puede cerrar y reabrir —el caso de uso central
+> de compartir por WhatsApp— apareció un hueco real en el backend ya
+> construido: el QR o el enlace de checkout que el Core devuelve **nunca se
+> guarda**, solo viaja una vez, en la respuesta del `POST` que crea la
+> solicitud. Si el ciudadano recarga la página o reabre el link más tarde,
+> no hay forma de volvérselo a mostrar. Este documento agrega una fase 0
+> para cerrar ese hueco antes de construir la pantalla de pago web. **El
+> mismo problema existe en la app Flutter** si alguien la cierra y la
+> reabre — no se había notado porque el flujo típico de la app es más
+> lineal; se recomienda aplicar el mismo parche a los Módulos 4 y 5 como
+> seguimiento, aunque no es tema de este documento.
+
+> **Por qué React y no Flutter Web:** aunque la app móvil ya compila a web,
+> Flutter Web tiene problemas de SEO (SPA con renderizado sintético), carga
+> inicial pesada, y accesibilidad web nativa inferior. Para un canal
+> público institucional que el GAD quiere que Google indexe y que funcione
+> en celulares con datos limitados, React + Vite es la mejor opción.
+> Reutiliza el stack del web-admin (TypeScript + shadcn/ui + Tailwind) y
+> consume los mismos endpoints públicos ya construidos en los Módulos 3, 4
+> y 5. Esta es una decisión consecuente —agrega un tercer cliente que
+> duplica una parte real de la lógica de negocio (carrito, cuenta
+> regresiva, grilla de disponibilidad) en un segundo lenguaje/framework, con
+> el costo de mantenimiento que eso implica— y se documenta como ADR-006,
+> no como una elección de bajo riesgo tipo librería de gráficos.
+
+> **Arquitectura:** el proyecto vive en `web-public/` dentro del monorepo
+> (ADR-001), junto a `web-admin/` y `mobile/`. Es una SPA con prerendering
+> de rutas para SEO (landing, listado, **y el detalle de cada campo activo**
+> —ver Fase WP.2, corregido respecto a la versión anterior de este
+> documento, que solo prerenderizaba landing y listado, dejando sin
+> vista previa correcta justo los links que más se comparten). El backend
+> Laravel ya tiene casi todos los endpoints necesarios en `/api/v1/public/`;
+> el único cambio de backend real es el de la Fase WP.0.
 
 ---
 
@@ -21,6 +59,7 @@ Voy a crear el roadmap de la web pública siguiendo exactamente el mismo formato
 
 ```
 Web Pública
+├── Fase WP.0 → Backend: persistir los datos de cobro pendiente (prerequisito)
 ├── Fase WP.1 → Scaffold del proyecto y configuración base
 ├── Fase WP.2 → Landing institucional (SEO + presencia del GAD)
 ├── Fase WP.3 → Listado de campos con filtros y mapa interactivo
@@ -37,89 +76,189 @@ Web Pública
 
 ---
 
+# FASE WP.0 — Backend: Persistir los Datos de Cobro Pendiente
+
+## El hueco, explicado con detalle
+
+`SolicitudReservaService::crear()` (Módulo 4) recibe del Core un
+`RespuestaCobroDTO` con `qrString`/`qrImageBase64`/`checkoutUrl`, y esos
+datos solo se devuelven en la respuesta HTTP de ese único `POST`. Nunca se
+guardan en `solicitudes_reserva`. `EstadoSolicitudResource` (Módulo 5) —el
+endpoint que la pantalla de pago consulta cada 5 segundos, y el que se
+llamaría al reabrir un link— no tiene de dónde sacar esos datos si el
+estado sigue en `pendiente`.
+
+Esto no rompía nada mientras la única forma de ver esa pantalla fuera
+completar el flujo de principio a fin sin recargar ni cerrar la app. Para
+un canal cuyo caso de uso central es *"te mando el link por WhatsApp y lo
+abrís cuando puedas"*, es un bloqueante real.
+
+## La corrección
+
+```sql
+ALTER TABLE solicitudes_reserva
+  ADD COLUMN datos_cobro_pendiente jsonb NULL;
+```
+
+Un único campo `jsonb`, no columnas separadas por cada posible dato del
+Core — es información opaca que Canchas solo necesita volver a mostrar tal
+cual, no consultar ni filtrar por ella.
+
+---
+
+## Tareas de la Fase WP.0
+
+```
+[x] Crear la migración
+    → add_datos_cobro_pendiente_to_solicitudes_reserva —
+      datos_cobro_pendiente jsonb, nullable.
+
+[x] Actualizar SolicitudReservaService::crear() (Módulo 4)
+    → Justo después de guardar referencia_recaudaciones, guardar también
+      datos_cobro_pendiente con el contenido relevante del
+      RespuestaCobroDTO (qrString, qrImageBase64, checkoutUrl).
+
+[x] Actualizar EstadoSolicitudResource (Módulo 5)
+    → Incluir datos_cobro_pendiente en la respuesta ÚNICAMENTE cuando
+      estado === 'pendiente' — una vez confirmada, rechazada o expirada,
+      ya no tiene sentido mostrarlo y no debería seguir viajando en cada
+      respuesta.
+
+[x] Tests
+    → Crear una solicitud, y sin tocar nada más, consultar el endpoint
+      de estado dos veces seguidas: ambas respuestas deben incluir el
+      mismo QR/checkout_url, byte por byte.
+    → Confirmar una solicitud y verificar que datos_cobro_pendiente ya
+      no aparece en la respuesta del endpoint de estado.
+
+[ ] Nota de seguimiento (fuera del alcance de este documento)
+    → Aplicar el mismo criterio a la pantalla pago_qr_screen.dart del
+      Módulo 4/5: si la app se cierra y se reabre con una solicitud
+      pendiente en curso, debería poder recuperar el QR de la misma
+      forma, en vez de perderlo.
+
+[ ] Commit de la fase
+    → Mensaje: "fix(recaudaciones): persistir datos de cobro pendiente para reapertura del link de pago"
+```
+
+---
+
 # FASE WP.1 — Scaffold del Proyecto y Configuración Base
 
 ## Stack técnico elegido
 
 - **Framework:** React 18 + TypeScript
-- **Bundler:** Vite (mismo que web-admin, configuración similar)
-- **UI:** shadcn/ui + Tailwind CSS (reutiliza componentes del web-admin donde aplique)
-- **Routing:** React Router v6
-- **Mapas:** React-Leaflet (más liviano que MapLibre, suficiente para marcadores simples)
-- **Estado global:** zustand (más simple que Redux, suficiente para carrito + autenticación futura si aplica)
-- **HTTP:** axios (más ergonómico que fetch nativo para interceptores y tipado)
-- **Prerendering:** vite-plugin-prerender (genera HTML estático para rutas clave: landing, listado)
-- **Deploy:** Vercel/Netlify (gratis para estáticos) o VPS con nginx (si el GAD tiene infraestructura)
+- **Bundler:** Vite (mismo que web-admin)
+- **UI:** shadcn/ui + Tailwind CSS
+- **Routing:** React Router v6, con `React.lazy` por ruta (ver nota de
+  bundle size en la Fase WP.8 — sin code splitting por ruta, esa meta no
+  se alcanza)
+- **Mapas:** React-Leaflet con tiles OSM — **misma decisión ya tomada dos
+  veces antes** (ADR-005, aplicada tanto en la app móvil como en el panel
+  web-admin, Módulo 6, Fase 6.5). No es una elección nueva, es coherencia
+  con lo ya construido.
+- **Estado global:** zustand
+- **HTTP:** axios
+- **Prerendering:** vite-plugin-prerender
+- **Deploy:** decisión pendiente de confirmar con el equipo — ver nota
+  abajo
 
-## Por qué este stack
+## Sobre compartir código con web-admin
 
-- **React + Vite:** el mismo stack del web-admin permite compartir componentes UI, tipos TypeScript, y conocimiento del equipo.
-- **TypeScript:** los contratos JSON de los endpoints ya están tipados en el backend; generar tipos compartidos evita bugs de desincronización.
-- **shadcn/ui:** componentes accesibles, personalizables y sin dependencias pesadas.
-- **React-Leaflet:** librería madura, bien documentada, con tiles OSM gratuitos (mismo criterio del ADR-005 del móvil).
-- **zustand:** store global liviana para el carrito (similar al `CarritoReservaProvider` de Flutter, pero con zustand en lugar de provider de Flutter).
-- **Prerendering:** la landing y el listado de campos se renderizan en build time (HTML estático), lo que da SEO perfecto y carga instantánea. Las rutas dinámicas (detalle, pago) se renderizan en cliente.
+`web-admin` y `web-public` son ambos React dentro del mismo monorepo. Sin
+ningún mecanismo de código compartido, los tipos TypeScript de
+`CampoDeportivo`, `SolicitudReserva`, etc. terminan copiados en los dos
+proyectos, con el riesgo de que diverjan con el tiempo (uno se actualiza
+tras un cambio de backend, el otro se olvida). Se recomienda crear un
+paquete compartido liviano —`packages/shared-types/` con los `npm
+workspaces` de la raíz del monorepo alcanza, no hace falta nada más
+sofisticado— con los tipos y, si se justifica, el cliente HTTP base. No es
+bloqueante para arrancar este módulo, pero conviene resolverlo antes de que
+la duplicación crezca.
+
+## Sobre el destino de despliegue
+
+Vercel/Netlify es una elección razonable para un sitio prerenderizado —CDN
+gratis, cero mantenimiento—, pero es una infraestructura **distinta** a la
+del resto del proyecto (Docker Compose + VPS, Módulo 0). Antes de decidir,
+confirmar con el equipo quién administra la cuenta de Vercel/Netlify, el
+dominio, y si el GAD prefiere mantener todo bajo su propia infraestructura
+por política institucional. Se documenta esta elección, junto con la de
+React sobre Flutter Web, en el mismo ADR-006.
 
 ---
 
 ## Tareas de la Fase WP.1
 
 ```
-[ ] Crear la carpeta web-public/ en la raíz del monorepo
+[x] Crear docs/adr/ADR-006-canal-web-publico-react.md
+    → Documentar: por qué un tercer cliente (alcance/adopción vs. costo
+      de mantener lógica de reserva duplicada en dos frameworks), por
+      qué React sobre Flutter Web, y la decisión de destino de despliegue
+      una vez confirmada con el equipo.
+
+[x] Crear la carpeta web-public/ en la raíz del monorepo
     → Al mismo nivel que web-admin/ y mobile/ (ADR-001).
 
 [ ] Inicializar el proyecto con Vite
     → npm create vite@latest web-public -- --template react-ts
-    → Limpiar el boilerplate de Vite (App.tsx, index.css, assets).
+    → Limpiar el boilerplate de Vite.
 
-[ ] Instalar dependencias base
+[x] Instalar dependencias base (solo lo que se usa desde esta fase)
     → npm install react-router-dom axios zustand
-    → npm install -D tailwindcss postcss autoprefixer @types/react @types/react-dom
-    → npm install -D vite-plugin-prerender
+    → npm install -D tailwindcss postcss autoprefixer vite-plugin-prerender
+    → El resto de dependencias (react-hook-form, zod, qrcode.react,
+      react-helmet-async, react-to-print) se instalan en la fase donde
+      se usan por primera vez, no todas de una vez acá.
 
-[ ] Configurar Tailwind CSS
+[x] Configurar Tailwind CSS
     → npx tailwindcss init -p
-    → Copiar tailwind.config.js del web-admin (mismo tema, colores del GAD).
-    → Crear src/index.css con @tailwind base/components/utilities.
+    → Copiar tailwind.config.js del web-admin (mismo tema).
 
-[ ] Configurar shadcn/ui
+[x] Configurar shadcn/ui
     → npx shadcn@latest init
     → Copiar components.json del web-admin.
-    → Instalar componentes necesarios: button, card, input, label, select, badge, dialog, sheet.
+    → Instalar componentes base: button, card, input, label, select,
+      badge, dialog, sheet.
 
-[ ] Configurar React Router
-    → src/router.tsx con las rutas:
-        / → Landing
-        /campos → Listado
-        /campos/:id → Detalle
-        /reserva → Carrito + datos solicitante
-        /pago/:codigo → Pantalla de pago
-        /comprobante/:codigo → Comprobante digital
-        /estado → Consulta manual de estado
-    → Configurar prerendering para / y /campos.
+[x] Configurar React Router con carga diferida por ruta
+    → src/router.tsx con las rutas (/, /campos, /campos/:id, /reserva,
+      /pago/:codigo, /comprobante/:codigo, /estado), cada componente de
+      página importado con React.lazy() y envuelto en <Suspense> — es lo
+      que hace posible la meta de bundle size de la Fase WP.8.
+    → Configurar prerendering para / y /campos (el detalle /campos/:id
+      se agrega en la Fase WP.4, ver ahí el porqué).
 
-[ ] Configurar axios con interceptor base
-    → src/lib/api.ts con baseURL desde import.meta.env.VITE_API_URL
-    → Interceptor para manejar errores 409 (franja no disponible) y 503 (cobro caído).
+[x] Configurar axios con interceptor base
+    → src/lib/api.ts con baseURL desde import.meta.env.VITE_API_BASE_URL
+      —mismo nombre de variable que usa web-admin desde el Módulo 0, no
+      VITE_API_URL: son dos proyectos del mismo monorepo, no hay razón
+      para que la convención de nombres difiera entre ellos.
+    → Interceptor para manejar errores 409 y 503 de forma centralizada.
 
-[ ] Crear el store global con zustand
-    → src/store/carritoStore.ts (similar a CarritoReservaProvider de Flutter)
-    → Métodos: agregarFranja, quitarFranja, limpiar, calcularTotal.
+[x] Crear el store global con zustand
+    → src/store/carritoStore.ts — agregarFranja, quitarFranja, limpiar,
+      calcularTotal.
 
-[ ] Configurar scripts de package.json
-    → "dev": "vite" (puerto 5174 para no chocar con web-admin en 5173)
+[x] Configurar scripts de package.json
+    → "dev": "vite" (puerto 5174, distinto al 5173 de web-admin)
     → "build": "vite build"
     → "preview": "vite preview"
 
-[ ] Agregar .env.example
-    → VITE_API_URL=http://localhost:8000/api/v1
+[x] Actualizar el CORS del backend (el único ajuste de backend además de
+    la Fase WP.0)
+    → backend/config/cors.php: agregar http://localhost:5174 a los
+      orígenes permitidos en desarrollo. Anotar como pendiente agregar
+      también el dominio de producción una vez que exista (Fase WP.8).
 
-[ ] Documentar en README.md
-    → Cómo correr en dev (npm run dev)
-    → Cómo hacer build (npm run build)
-    → Cómo desplegar (Vercel/Netlify/nginx)
+[x] Agregar .env.example
+    → VITE_API_BASE_URL=http://localhost:8000/api/v1
 
-[ ] Commit de la fase
+[x] Documentar en README.md
+    → Cómo correr en dev, cómo hacer build, cómo desplegar (una vez
+      resuelto el ADR-006).
+
+[x] Commit de la fase
     → Mensaje: "chore(web-public): scaffold inicial con Vite + React + TypeScript + shadcn/ui"
 ```
 
@@ -129,46 +268,48 @@ Web Pública
 
 ## Objetivo
 
-Crear la página de entrada del sistema: información institucional del GAD Beni, explicación del servicio, y llamadas a la acción claras para que el ciudadano comience a reservar. Esta página debe indexar bien en Google y cargar rápido.
+Página de entrada: información institucional, explicación del servicio, y
+llamadas a la acción claras. Debe indexar bien en Google y cargar rápido.
 
 ---
 
 ## Tareas de la Fase WP.2
 
 ```
+[ ] Instalar react-helmet-async y vite-plugin-sitemap
+    → Se usan por primera vez en esta fase.
+
 [ ] Crear src/pages/Landing.tsx
-    → Hero section con título, subtítulo y CTA "Ver canchas disponibles"
-    → Sección "Cómo funciona" (3 pasos: elegir cancha, pagar, jugar)
-    → Sección de campos destacados (últimos 3 campos activos del backend)
-    → Sección de información institucional (GAD Beni, contacto, horarios)
+    → Hero con título, subtítulo y CTA "Ver canchas disponibles"
+    → Sección "Cómo funciona" (3 pasos)
+    → Sección de campos destacados (últimos 3 campos activos)
+    → Sección institucional (GAD Beni, contacto, horarios)
     → Footer con links legales y redes sociales
 
 [ ] Implementar componentes de la landing
     → src/components/landing/Hero.tsx
     → src/components/landing/ComoFunciona.tsx
-    → src/components/landing/CamposDestacados.tsx (consume GET /public/campos)
+    → src/components/landing/CamposDestacados.tsx (consume
+      GET /public/campos — Módulo 3, Fase 3.1)
     → src/components/landing/InfoInstitucional.tsx
     → src/components/landing/Footer.tsx
 
 [ ] Optimizar SEO de la landing
-    → react-helmet-async para meta tags dinámicos
-    → Título: "Reserva de Canchas Deportivas - GAD Beni"
-    → Descripción: "Reserva canchas de fútbol, tenis y más en Trinidad, Beni. Pago online, confirmación inmediata."
-    → Open Graph tags para compartir en redes sociales
-    → Sitemap.xml generado automáticamente (vite-plugin-sitemap)
-
-[ ] Configurar prerendering para la landing
-    → vite-plugin-prerender genera /index.html estático en build time
-    → Verificar que Google pueda crawlear la página (sin JS requerido para contenido crítico)
+    → react-helmet-async para meta tags dinámicos.
+    → Título y descripción institucional. Open Graph tags para
+      compartir en redes.
+    → sitemap.xml generado con vite-plugin-sitemap, cubriendo las rutas
+      prerenderizadas (landing, listado, y detalle de campo — ver Fase
+      WP.4). No cubre rutas transaccionales (/reserva, /pago/:codigo),
+      que no tiene sentido indexar.
 
 [ ] Responsive mobile-first
-    → La landing debe verse perfecta en celular (ancho 375px)
-    → Menú hamburguesa en móvil, navegación horizontal en desktop
+    → Verse bien en celular (375px). Menú hamburguesa en móvil.
 
 [ ] Tests visuales manuales
-    → Verificar que la landing carga en < 2 segundos (Lighthouse score > 90)
-    → Verificar que los meta tags se renderizan correctamente (View Source)
-    → Verificar que los links "Ver canchas" navegan a /campos
+    → Lighthouse score > 90 en la landing.
+    → Meta tags correctos en View Source (sin ejecutar JS).
+    → Los links "Ver canchas" navegan a /campos.
 
 [ ] Commit de la fase
     → Mensaje: "feat(web-public): landing institucional con SEO optimizado y campos destacados"
@@ -180,7 +321,8 @@ Crear la página de entrada del sistema: información institucional del GAD Beni
 
 ## Objetivo
 
-Replicar la funcionalidad de `campos_listado_screen.dart` del móvil, pero en web: listado de campos con toggle lista/mapa, filtros por tipo de campo, y mapa interactivo con React-Leaflet usando tiles OSM (mismo ADR-005).
+Listado de campos con toggle lista/mapa, filtros por tipo, y mapa con
+React-Leaflet.
 
 ---
 
@@ -188,35 +330,34 @@ Replicar la funcionalidad de `campos_listado_screen.dart` del móvil, pero en we
 
 ```
 [ ] Crear src/pages/Campos.tsx
-    → Toggle "Lista" / "Mapa" en la parte superior
-    → Filtros: tipo de campo (dropdown), estado (activo/mantenimiento)
-    → Vista de lista: cards con info del campo (nombre, tipo, dirección, tarifa)
-    → Vista de mapa: React-Leaflet con marcadores por campo
+    → Toggle "Lista" / "Mapa". Filtros: tipo de campo, estado.
+    → Vista lista: cards. Vista mapa: React-Leaflet con marcadores.
+
+[ ] Instalar react-leaflet y leaflet
+    → Se usan por primera vez en esta fase.
 
 [ ] Implementar el listado
-    → src/components/campos/CampoCard.tsx (card individual)
-    → src/components/campos/FiltrosCampos.tsx (dropdown de tipo de campo)
-    → Consumir GET /public/campos con axios
-    → Mostrar skeleton loaders mientras carga
+    → src/components/campos/CampoCard.tsx
+    → src/components/campos/FiltrosCampos.tsx
+    → Consumir GET /public/campos. Skeleton loaders mientras carga.
 
 [ ] Implementar el mapa
     → src/components/campos/MapaCampos.tsx
-    → React-Leaflet con tiles OSM (https://tile.openstreetmap.org/{z}/{x}/{y}.png)
-    → Un marcador por campo (icono de fútbol, verde si activo, naranja si mantenimiento)
-    → Click en marcador → navegar a /campos/:id
-    → Atribución OSM en esquina inferior derecha (obligatorio por licencia ODbL)
-    → Centrar el mapa en Trinidad, Beni (lat: -14.84, lng: -64.90, zoom: 13)
+    → Tiles OSM, un marcador por campo (verde activo, naranja
+      mantenimiento). Click → navegar a /campos/:id.
+    → Atribución OSM visible (obligatorio por licencia ODbL).
+    → Centrar en Trinidad, Beni (lat: -14.84, lng: -64.90, zoom: 13).
 
 [ ] Responsive
-    → En móvil: mapa ocupa 100% del viewport, lista debajo
-    → En desktop: lista a la izquierda (40% del ancho), mapa a la derecha (60%)
+    → Móvil: mapa 100% del viewport, lista debajo. Desktop: lista 40% /
+      mapa 60%.
 
 [ ] Tests
-    → Verificar que el listado carga los campos del backend
-    → Verificar que el toggle lista/mapa funciona
-    → Verificar que click en un campo navega a /campos/:id
-    → Verificar que el mapa muestra marcadores en las coordenadas correctas
-    → Verificar que los campos en mantenimiento aparecen deshabilitados
+    → El listado carga los campos del backend.
+    → El toggle lista/mapa funciona.
+    → Click en un campo navega a /campos/:id.
+    → El mapa muestra marcadores en las coordenadas correctas.
+    → Los campos en mantenimiento aparecen deshabilitados.
 
 [ ] Commit de la fase
     → Mensaje: "feat(web-public): listado de campos con filtros y mapa interactivo"
@@ -228,7 +369,24 @@ Replicar la funcionalidad de `campos_listado_screen.dart` del móvil, pero en we
 
 ## Objetivo
 
-Replicar `campo_detalle_screen.dart` del móvil: información del campo, selector de fecha (próximos 14 días), y grilla de disponibilidad horaria con los 3 estados (libre/ocupada/bloqueada_temporal). Las franjas libres son seleccionables y se agregan al carrito global (zustand store).
+Información del campo, selector de fecha (próximos 14 días), y grilla de
+disponibilidad con los 3 estados (libre/ocupada/bloqueada_temporal —
+Módulo 3, Fase 3.2).
+
+## Por qué esta ruta también se prerenderiza, a diferencia de la versión anterior de este documento
+
+Un link a un campo específico —`/campos/:id`— es, en la práctica, el tipo
+de link que más se comparte por WhatsApp ("mirá esta cancha"). Si esta ruta
+no está prerenderizada, el scraper de vista previa de WhatsApp (que
+históricamente no ejecuta JavaScript) no puede leer el nombre ni la
+descripción del campo, y la vista previa del link sale vacía o genérica —
+justo el caso de uso que este canal existe para resolver. Se genera una
+página prerenderizada por cada campo activo en build time (la lista de IDs
+se obtiene de la API durante el build). El costo es que agregar un campo
+nuevo requiere un rebuild para que su página tenga vista previa correcta
+hasta ese momento —aceptable para un catálogo que no cambia todos los
+días—; mientras tanto, el campo ya es visible y reservable con normalidad,
+solo sin vista previa optimizada hasta el próximo build.
 
 ---
 
@@ -237,45 +395,43 @@ Replicar `campo_detalle_screen.dart` del móvil: información del campo, selecto
 ```
 [ ] Crear src/pages/CampoDetalle.tsx
     → Ruta: /campos/:id
-    → Información del campo arriba (nombre, tipo, dirección, tarifa vigente)
-    → Selector horizontal de fechas (próximos 14 días, formato "Hoy", "Mañana", "Jue 5/9")
-    → Grilla de disponibilidad horaria debajo
-    → Barra inferior con contador de franjas seleccionadas y botón "Ver carrito"
+    → Info del campo arriba, selector horizontal de fechas (14 días),
+      grilla de disponibilidad debajo, barra inferior de carrito.
+
+[ ] Configurar el prerendering de /campos/:id
+    → Extender la configuración de vite-plugin-prerender (Fase WP.1)
+      para incluir una ruta por cada campo con estado 'activo' o
+      'mantenimiento', obtenidas de GET /public/campos en build time.
+    → Meta tags (Open Graph) específicos por campo: nombre, tipo, y una
+      descripción corta con la dirección.
 
 [ ] Implementar el selector de fechas
-    → src/components/campo/SelectorFechas.tsx
-    → 14 días desde hoy, scroll horizontal en móvil
-    → Al cambiar de fecha, recargar la grilla (GET /public/campos/:id/disponibilidad?fecha=YYYY-MM-DD)
+    → src/components/campo/SelectorFechas.tsx — 14 días desde hoy,
+      scroll horizontal en móvil. Al cambiar de fecha, recargar la
+      grilla (GET /public/campos/:id/disponibilidad?fecha=...).
 
 [ ] Implementar la grilla de disponibilidad
-    → src/components/campo/GrillaDisponibilidad.tsx
-    → Grid de 2 columnas en móvil, 4 columnas en desktop
-    → Bloques con 3 estados visuales:
-        • libre (verde, click para agregar al carrito)
-        • ocupada (rojo, deshabilitado, icono lock)
-        • bloqueada_temporal (naranja, deshabilitado, "En proceso de cobro")
-    → Click en bloque libre → toggle en carritoStore (agregar/quitar)
+    → src/components/campo/GrillaDisponibilidad.tsx — grid de 2
+      columnas en móvil, 4 en desktop. Libre (verde, clickable), ocupada
+      (rojo, bloqueado, ícono candado), bloqueada_temporal (naranja,
+      bloqueado, "En proceso de cobro").
 
 [ ] Implementar la barra inferior del carrito
-    → src/components/campo/BarraCarrito.tsx
-    → Muestra cantidad de franjas seleccionadas y total estimado
-    → Botón "Ver carrito" → navega a /reserva
-    → Solo visible si el carrito no está vacío
+    → src/components/campo/BarraCarrito.tsx — cantidad seleccionada,
+      total estimado, botón "Ver carrito" (solo visible si hay algo
+      seleccionado).
 
 [ ] Refresco automático
-    → useEffect con setInterval cada 45 segundos para recargar la grilla
-    → Limpiar el intervalo en cleanup (cuando el usuario cambia de página)
+    → setInterval cada 45 segundos para recargar la grilla, limpiado en
+      cleanup del useEffect.
 
 [ ] Tests
-    → Verificar que la información del campo se muestra correctamente
-    → Verificar que el selector de fechas cambia la grilla
-    → Verificar que los bloques libres son clickables y se agregan al carrito
-    → Verificar que los bloques ocupados/bloqueados no son clickables
-    → Verificar que la barra inferior muestra el total correcto
-    → Verificar que el refresco automático funciona (cambiar estado en BD y esperar 45s)
+    → Info del campo correcta. Selector de fecha cambia la grilla.
+    → Bloques libres clickables, ocupados/bloqueados no.
+    → Barra inferior con total correcto. Refresco automático funciona.
 
 [ ] Commit de la fase
-    → Mensaje: "feat(web-public): detalle de campo con selector de fecha y grilla de disponibilidad"
+    → Mensaje: "feat(web-public): detalle de campo con selector de fecha, grilla de disponibilidad y prerendering por campo"
 ```
 
 ---
@@ -284,51 +440,57 @@ Replicar `campo_detalle_screen.dart` del móvil: información del campo, selecto
 
 ## Objetivo
 
-Replicar las pantallas `carrito_resumen_screen.dart` y `datos_solicitante_screen.dart` del móvil: resumen del carrito con opción de quitar franjas, formulario de datos del solicitante, y envío de la solicitud (POST /public/solicitudes-reserva).
+Resumen del carrito y formulario de datos del solicitante, con envío a
+`POST /public/solicitudes-reserva` (Módulo 4, Fase 4.1).
 
 ---
 
 ## Tareas de la Fase WP.5
 
 ```
+[ ] Instalar react-hook-form y zod
+    → Se usan por primera vez en esta fase.
+
 [ ] Crear src/pages/Reserva.tsx
-    → Ruta: /reserva
-    → Dos pasos en la misma página (wizard):
-        1. Resumen del carrito
-        2. Datos del solicitante
-    → Navegación entre pasos con estado local (no rutas separadas)
+    → Ruta: /reserva. Dos pasos en la misma página: resumen del carrito,
+      luego datos del solicitante.
 
 [ ] Implementar el resumen del carrito
-    → src/components/reserva/ResumenCarrito.tsx
-    → Lista de franjas seleccionadas con:
-        • Nombre del campo, fecha, horario, precio
-        • Botón "Quitar" para eliminar del carrito
-    → Total estimado al final
-    → Botón "Continuar" para ir al paso 2
+    → src/components/reserva/ResumenCarrito.tsx — franjas
+      seleccionadas con opción de quitar, total estimado, botón
+      "Continuar".
 
 [ ] Implementar el formulario de datos del solicitante
-    → src/components/reserva/FormularioSolicitante.tsx
-    → Campos: nombre completo (requerido), teléfono (requerido), CI/NIT (opcional)
-    → Validación en cliente con react-hook-form + zod
-    → Botón "Confirmar reserva" que hace POST /public/solicitudes-reserva
+    → src/components/reserva/FormularioSolicitante.tsx — nombre
+      (requerido), teléfono (requerido), CI/NIT (opcional). Validación
+      con react-hook-form + zod.
 
 [ ] Manejo de errores del POST
-    → Si 201: navegar a /pago/:codigo_seguimiento
-    → Si 409 (franja no disponible): quitar la franja del carrito, mostrar toast "Una franja ya no estaba disponible"
-    → Si 503 (cobro caído): mostrar toast "El sistema de cobro no está disponible, intenta más tarde"
-    → Si 422 (validación): mostrar errores específicos debajo de cada campo
+    → 201: limpiar el carrito (carritoStore.limpiar()) y navegar a
+      /pago/:codigo_seguimiento — limpiar el carrito acá, no con trucos
+      de historial de navegador, es lo que hace que volver atrás
+      muestre el estado vacío ya contemplado más abajo, en vez de
+      requerir lógica extra para bloquear el botón "atrás".
+    → 409: quitar la franja afectada del carrito, toast "Una franja ya
+      no estaba disponible".
+    → 503: toast "El sistema de cobro no está disponible, intenta más
+      tarde", sin tocar el carrito.
+    → 422: errores específicos debajo de cada campo.
 
 [ ] Empty state
-    → Si el carrito está vacío al llegar a /reserva, mostrar mensaje "Tu carrito está vacío" y botón "Ver canchas"
+    → Si el carrito está vacío al llegar a /reserva (incluyendo después
+      de un envío exitoso, si el usuario vuelve atrás), mostrar "Tu
+      carrito está vacío" y botón "Ver canchas" — esto reemplaza
+      cualquier intento de bloquear la navegación del navegador.
 
 [ ] Tests
-    → Verificar que el resumen muestra las franjas del carrito correctamente
-    → Verificar que "Quitar" elimina la franja del carrito
-    → Verificar que el formulario valida campos requeridos
-    → Verificar que el POST exitoso navega a /pago/:codigo
-    → Verificar que el error 409 quita la franja y muestra toast
-    → Verificar que el error 503 muestra toast sin tocar el carrito
-    → Verificar el empty state cuando el carrito está vacío
+    → Resumen muestra las franjas correctamente. "Quitar" funciona.
+    → Formulario valida campos requeridos.
+    → POST exitoso limpia el carrito y navega a /pago/:codigo.
+    → Error 409 quita la franja y muestra toast. Error 503 no toca el
+      carrito.
+    → Empty state se muestra correctamente, incluyendo al volver atrás
+      después de un envío exitoso.
 
 [ ] Commit de la fase
     → Mensaje: "feat(web-public): flujo de reserva con carrito y formulario de solicitante"
@@ -340,51 +502,51 @@ Replicar las pantallas `carrito_resumen_screen.dart` y `datos_solicitante_screen
 
 ## Objetivo
 
-Replicar `pago_qr_screen.dart` del móvil: pantalla de pago con cuenta regresiva, QR o botón de checkout (según lo que devuelva el Core), y código de seguimiento visible. Esta pantalla consulta el estado cada 5 segundos y navega automáticamente al comprobante cuando la solicitud se confirma.
+Cuenta regresiva, QR o checkout (según lo que devuelva el Core), código de
+seguimiento visible. Consulta el estado cada 5 segundos y navega
+automáticamente al comprobante cuando se confirma.
 
 ---
 
 ## Tareas de la Fase WP.6
 
 ```
+[ ] Instalar qrcode.react
+    → Se usa por primera vez en esta fase.
+
 [ ] Crear src/pages/Pago.tsx
     → Ruta: /pago/:codigo_seguimiento
-    → Información de la solicitud: código, monto total, tiempo restante
-    → QR renderizado o botón de checkout (según respuesta del Core)
-    → Polling cada 5 segundos a GET /public/solicitudes-reserva/:codigo/estado
+    → Al montar, hacer un GET inicial a
+      /public/solicitudes-reserva/:codigo/estado — la página debe
+      autoabastecerse de datos desde la URL, no depender de recibir
+      información de la pantalla anterior por navegación. Esto es lo
+      que permite que el link funcione al reabrirlo directamente,
+      apoyado en la Fase WP.0.
 
 [ ] Implementar la cuenta regresiva
-    → src/components/pago/CuentaRegresiva.tsx
-    → Calcular tiempo restante desde expira_en (no desde hora local)
-    → Formato MM:SS, cambiar a rojo cuando queden < 60 segundos
-    → Cuando llegue a 0, mostrar "El tiempo para pagar expiró" y botón "Volver a elegir franjas"
+    → src/components/pago/CuentaRegresiva.tsx — tiempo restante desde
+      expira_en del servidor, nunca desde la hora local. Formato MM:SS,
+      rojo bajo 60 segundos. Al llegar a 0: "El tiempo para pagar
+      expiró" y botón "Volver a elegir franjas".
 
 [ ] Implementar el medio de pago
-    → src/components/pago/MedioDePago.tsx
-    → Si qr_string está presente: renderizar QR con qrcode.react
-    → Si qr_image_base64 está presente: mostrar imagen con base64
-    → Si checkout_url está presente: botón "Pagar en el navegador" (window.open)
-    → Si ninguno está presente: mensaje de error
+    → src/components/pago/MedioDePago.tsx — a partir de
+      datos_cobro_pendiente (Fase WP.0): QR con qrcode.react si hay
+      qr_string, imagen si hay qr_image_base64, botón "Pagar en el
+      navegador" (window.open) si hay checkout_url.
 
 [ ] Implementar el polling de estado
-    → useEffect con setInterval cada 5 segundos
-    → Consultar GET /public/solicitudes-reserva/:codigo/estado
-    → Si estado === 'confirmada': navegar a /comprobante/:codigo
-    → Si estado === 'expirada': mostrar vista de expiración
-    → Si estado === 'rechazada': mostrar "Tu pago no pudo procesarse, intenta nuevamente"
-    → Limpiar intervalo en cleanup
-
-[ ] Prevenir navegación atrás
-    → window.history.pushState para evitar que el botón atrás del navegador devuelva al formulario con el carrito vacío
-    → Botón "Volver al inicio" que navega a / (no atrás)
+    → setInterval cada 5 segundos sobre el mismo endpoint del montaje
+      inicial. 'confirmada' → navegar a /comprobante/:codigo.
+      'expirada' → vista de expiración. 'rechazada' → "Tu pago no pudo
+      procesarse, intenta nuevamente". Limpiar intervalo en cleanup.
 
 [ ] Tests
-    → Verificar que la cuenta regresiva decrece correctamente
-    → Verificar que el QR se renderiza cuando qr_string está presente
-    → Verificar que el botón de checkout abre la URL en nueva pestaña
-    → Verificar que el polling detecta cambio a 'confirmada' y navega al comprobante
-    → Verificar que el polling detecta cambio a 'expirada' y muestra vista de expiración
-    → Verificar que el botón "Volver al inicio" navega a /
+    → La cuenta regresiva decrece correctamente.
+    → Recargar la página muestra el mismo QR/checkout que antes de
+      recargar (confirma que la Fase WP.0 funciona de punta a punta).
+    → El polling detecta 'confirmada' y navega al comprobante.
+    → El polling detecta 'expirada' y muestra la vista correspondiente.
 
 [ ] Commit de la fase
     → Mensaje: "feat(web-public): pantalla de pago con QR, cuenta regresiva y detección automática de confirmación"
@@ -396,113 +558,109 @@ Replicar `pago_qr_screen.dart` del móvil: pantalla de pago con cuenta regresiva
 
 ## Objetivo
 
-Crear dos páginas finales: el comprobante digital (que muestra las reservas confirmadas con sus códigos) y la consulta manual de estado (para ciudadanos que cerraron la pantalla de pago y quieren ver el estado de su solicitud).
+Comprobante digital (reservas confirmadas con sus códigos) y consulta
+manual de estado.
 
 ---
 
 ## Tareas de la Fase WP.7
 
 ```
+[ ] Instalar react-to-print
+    → Se usa por primera vez en esta fase. Nota de alcance: genera un
+      diálogo de impresión del navegador (donde el usuario elige
+      "Guardar como PDF"), no un archivo PDF generado en servidor —
+      suficiente para el caso de uso, pero vale dejarlo claro en la UI
+      ("Imprimir / Guardar como PDF" en vez de solo "Descargar PDF").
+
 [ ] Crear src/pages/Comprobante.tsx
     → Ruta: /comprobante/:codigo_seguimiento
-    → Consumir GET /public/solicitudes-reserva/:codigo/estado
-    → Mostrar: código de seguimiento, monto total pagado, fecha de confirmación
-    → Lista de reservas confirmadas con:
-        • Código de reserva (RSV-YYYYMMDD-XXXXXX)
-        • Nombre del campo, fecha, hora inicio, hora fin
-    → Botón "Descargar comprobante" (genera PDF con react-to-print)
-    → Botón "Volver al inicio"
+    → Consumir GET /public/solicitudes-reserva/:codigo/estado.
+    → Código de seguimiento, monto total, fecha de confirmación, lista
+      de reservas (codigo_reserva, campo, fecha, hora_inicio, hora_fin).
+    → Botón "Imprimir / Guardar como PDF" y botón "Volver al inicio".
 
-[ ] Implementar el generador de PDF
-    → src/components/comprobante/ComprobantePDF.tsx
-    → Layout imprimible con logo del GAD, datos de la reserva, códigos
-    → react-to-print para convertir el componente a PDF
+[ ] Implementar el componente imprimible
+    → src/components/comprobante/ComprobantePDF.tsx — layout con logo
+      del GAD, datos de la reserva, códigos. Usado por react-to-print.
 
 [ ] Crear src/pages/ConsultarEstado.tsx
-    → Ruta: /estado
-    → Campo de texto para ingresar código de seguimiento
-    → Botón "Consultar"
-    → Si el código existe: mostrar el mismo layout que Comprobante.tsx
-    → Si el código no existe: mostrar "No se encontró ninguna reserva con ese código"
+    → Ruta: /estado — campo de texto para el código, botón "Consultar".
+    → Código existente: mismo layout que Comprobante.tsx. Código
+      inexistente: "No se encontró ninguna reserva con ese código".
 
 [ ] Reutilizar componentes
-    → src/components/comprobante/EstadoReserva.tsx (usado en ambas páginas)
-    → Muestra el estado actual de la solicitud (pendiente/confirmada/expirada/rechazada)
-    → Si está confirmada, muestra las reservas
-    → Si está pendiente, muestra tiempo restante
-    → Si está expirada/rechazada, muestra mensaje de error
+    → src/components/comprobante/EstadoReserva.tsx (usado en ambas
+      páginas), mostrando el estado actual y su información
+      correspondiente según pendiente/confirmada/expirada/rechazada.
 
 [ ] Tests
-    → Verificar que /comprobante/:codigo muestra las reservas correctamente
-    → Verificar que el PDF se genera correctamente
-    → Verificar que /estado permite consultar un código válido
-    → Verificar que /estado muestra error para código inexistente
-    → Verificar que la respuesta del endpoint no incluye datos sensibles (nombre_pagador, telefono_pagador, referencia_recaudaciones)
+    → /comprobante/:codigo muestra las reservas correctamente.
+    → El PDF (vía impresión) se genera correctamente.
+    → /estado consulta un código válido y muestra error para uno
+      inexistente.
+    → La respuesta del endpoint no incluye nombre_pagador,
+      telefono_pagador, ni referencia_recaudaciones.
 
 [ ] Commit de la fase
-    → Mensaje: "feat(web-public): comprobante digital con PDF y consulta manual de estado"
+    → Mensaje: "feat(web-public): comprobante digital imprimible y consulta manual de estado"
 ```
 
 ---
 
 # FASE WP.8 — Smoke Test Final, Optimización y Commit de Cierre
 
-## Objetivo
-
-Verificar que todo el flujo web funciona de punta a punta, optimizar el bundle para producción, y cerrar el módulo con un tag.
-
 ---
 
 ## Checklist de cierre
 
 ```
-[ ] Flujo feliz completo en web
-    → Landing → Listado → Detalle → Seleccionar 2 franjas → Carrito → Datos solicitante → Pago → Comprobante
-    → Verificar que el comprobante muestra las reservas correctas
-    → Verificar que el PDF se descarga correctamente
+[ ] Flujo feliz completo: Landing → Listado → Detalle → Seleccionar 2
+    franjas → Carrito → Datos solicitante → Pago → Comprobante.
 
-[ ] Flujo de expiración
-    → Crear una solicitud y dejarla expirar (sin confirmar)
-    → Verificar que la pantalla de pago muestra "El tiempo para pagar expiró"
-    → Verificar que /estado muestra el estado "expirada"
+[ ] Recargar /pago/:codigo a mitad del flujo muestra el mismo
+    QR/checkout que antes de recargar (Fase WP.0 funcionando en
+    conjunto con esta pantalla).
 
-[ ] Flujo de error 409
-    → Crear una solicitud, simular que otra persona reserva la misma franja
-    → Verificar que el web quita la franja del carrito y muestra toast
+[ ] Flujo de expiración: crear una solicitud, dejarla expirar, verificar
+    el mensaje en /pago y el estado 'expirada' en /estado.
 
-[ ] SEO de la landing
-    → Verificar que Google indexa la página (Google Search Console)
-    → Verificar que los meta tags se renderizan correctamente
-    → Verificar que el sitemap.xml se genera y es accesible
+[ ] Flujo de error 409: crear una solicitud, simular que otra persona
+    reserva la misma franja, verificar que el web quita la franja del
+    carrito y muestra el toast.
 
-[ ] Performance (Lighthouse)
-    → Landing: score > 90 en Performance, Accessibility, Best Practices, SEO
-    → Listado: score > 85 en Performance (el mapa es más pesado)
-    → Tiempo de carga inicial < 2 segundos en 4G
+[ ] SEO: Google indexa la landing, el listado y las páginas de detalle
+    de campo (Google Search Console). Meta tags correctos en View
+    Source, sin ejecutar JS, para /, /campos y al menos un /campos/:id.
+    sitemap.xml accesible y correcto.
 
-[ ] Responsive
-    → Verificar que todas las páginas se ven bien en móvil (375px), tablet (768px) y desktop (1440px)
-    → Verificar que el menú hamburguesa funciona en móvil
+[ ] Performance (Lighthouse): landing > 90 en las 4 categorías,
+    listado > 85 (el mapa pesa más), carga inicial < 2s en 4G.
 
-[ ] Accesibilidad (WCAG 2.1 AA)
-    → Verificar que todos los botones tienen aria-labels
-    → Verificar que el contraste de colores es suficiente
-    → Verificar que la navegación por teclado funciona (Tab, Enter, Escape)
-    → Verificar que los lectores de pantalla pueden leer el contenido
+[ ] Responsive en 375px, 768px y 1440px. Menú hamburguesa en móvil.
 
-[ ] Bundle size
-    → npm run build
-    → Verificar que el bundle total < 500KB gzipped
-    → Verificar que el code splitting funciona (chunks separados por ruta)
+[ ] Accesibilidad (WCAG 2.1 AA): correr axe DevTools o el audit de
+    accesibilidad de Lighthouse sobre cada página, no solo una revisión
+    visual. Confirmar con el área legal/institucional del GAD si existe
+    un requisito normativo boliviano de accesibilidad para sitios de
+    gobierno — de ser así, esto deja de ser buena práctica y pasa a ser
+    una obligación a cumplir, no a "verificar si sobra tiempo".
 
-[ ] Deploy de prueba
-    → Desplegar en Vercel/Netlify (gratis para estáticos)
-    → Verificar que todas las rutas funcionan en producción
-    → Verificar que las variables de entorno se configuran correctamente
+[ ] Bundle size: npm run build, bundle total < 500KB gzipped por chunk
+    de ruta (gracias al React.lazy configurado desde la Fase WP.1 —
+    sin eso, esta meta no es alcanzable).
 
-[ ] Documentación
-    → README.md actualizado con instrucciones de deploy
-    → Capturas de pantalla de todas las páginas en docs/screenshots/
+[ ] Deploy de prueba, según lo que resuelva el ADR-006 (Vercel/Netlify o
+    infraestructura propia). Verificar que todas las rutas funcionan en
+    producción y que las variables de entorno se configuran
+    correctamente.
+
+[ ] Actualizar el CORS del backend con el dominio de producción
+    → Agregar el dominio real de web-public a config/cors.php, además
+      del localhost:5174 ya agregado en la Fase WP.1.
+
+[ ] Documentación: README.md actualizado con instrucciones de deploy,
+    capturas de pantalla en docs/screenshots/.
 
 [ ] Commit final de cierre del módulo
     → Mensaje: "chore: cierre Web Pública - canal web completo con SEO, reserva y pago"
@@ -513,44 +671,17 @@ Verificar que todo el flujo web funciona de punta a punta, optimizar el bundle p
 
 ## 🎯 Resultado Final del Módulo
 
-Al completar este módulo, el GAD Beni tiene **tres canales** para que los ciudadanos reserven canchas:
+Al completar este módulo, el GAD Beni tiene **tres canales** para que los
+ciudadanos reserven canchas:
 
-1. **App móvil** (Flutter) — para usuarios frecuentes que quieren notificaciones push
-2. **Web pública** (React) — para adopción masiva, links compartibles por WhatsApp, SEO
-3. **Web admin** (React) — para funcionarios del GAD
+1. **App móvil** (Flutter) — para usuarios frecuentes.
+2. **Web pública** (React) — para adopción masiva, links compartibles por
+   WhatsApp, SEO.
+3. **Web admin** (React) — para funcionarios del GAD.
 
-Los tres canales consumen los mismos endpoints públicos del backend Laravel, garantizando consistencia de datos y reglas de negocio. El ciudadano puede empezar en el móvil y terminar en la web (o viceversa) sin perder su carrito, porque el carrito vive en el navegador local (zustand/provider), no en el backend.
-
----
-
-## 📊 Métricas de Éxito
-
-- **Adopción:** > 50% de las reservas vienen del canal web (vs app móvil) en los primeros 3 meses
-- **SEO:** la landing aparece en la primera página de Google para "reserva canchas Beni"
-- **Performance:** Lighthouse score > 90 en la landing, > 85 en el listado
-- **Conversión:** > 30% de los visitantes de la landing llegan hasta la pantalla de pago
-
----
-
-## 🔮 Próximos Pasos (Fuera de este Roadmap)
-
-- **PWA (Progressive Web App):** agregar manifest.json y service worker para que la web se pueda "instalar" en el celular sin pasar por la app store
-- **Notificaciones push web:** cuando el ciudadano confirma una reserva, enviar notificación al navegador (Web Push API)
-- **Integración con Google Calendar:** botón "Agregar a mi calendario" en el comprobante
-- **Chat de soporte:** widget de chat en vivo (Tawk.to o similar) para ayudar a ciudadanos con problemas
-- **Analytics:** integración con Google Analytics 4 para medir conversión y abandono del carrito
-
----
-
-## 💡 Notas para guardar el roadmap
-
-Guardá este contenido como `docs/roadmap/ROADMAP_WEB_PUBLICA.md` en tu proyecto. Cuando quieras empezar, avisame y arrancamos con la **Fase WP.1** (scaffold del proyecto).
-
-
-
-
-1. **(E) Limpieza + roles** primero (30-60 min): dejás el repo sano y el sidebar coherente. Es rápido y no compite con nada.
-2. Después elegí según tu apetito:
-   - **Si querés seguir empujando el núcleo del producto:** **(A) Módulo 4 Parte 1 con cobro mockeado**. No es doble trabajo y es lo que más desbloquea (sin solicitudes reales no podés probar bien ni la pantalla Reservas del panel ni el dashboard).
-   - **Si querés algo visible para mostrar al jefe/SEDEDE ya:** **(B) landing React de consulta**.
-   - **Si querés cerrar el panel:** **(C) pantalla Reservas del Módulo 6**.
+Los tres consumen los mismos endpoints públicos del backend Laravel. El
+carrito vive en el navegador/dispositivo de cada canal por separado (no en
+el backend), así que no hay continuidad de carrito entre app y web — el
+ciudadano que empieza en una y quiere terminar en la otra vuelve a
+seleccionar sus franjas, lo cual es una limitación razonable de aceptar,
+no algo que este módulo intente resolver.
