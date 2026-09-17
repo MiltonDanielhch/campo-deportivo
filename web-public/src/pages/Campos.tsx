@@ -3,9 +3,9 @@ import { Helmet } from 'react-helmet-async';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
-import FiltrosCampos from '@/components/campos/FiltrosCampos';
-import CampoCard from '@/components/campos/CampoCard';
-import MapaCampos from '@/components/campos/MapaCampos';
+import FiltrosCampos from '@/components/campo/FiltrosCampos';
+import CampoCard from '@/components/campo/CampoCard';
+import MapaCampos from '@/components/campo/MapaCampos';
 
 interface Campo {
   id: string;
