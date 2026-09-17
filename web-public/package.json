@@ -19,6 +19,7 @@
     "cn": "^0.3.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.46.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-helmet-async": "^3.0.0",
