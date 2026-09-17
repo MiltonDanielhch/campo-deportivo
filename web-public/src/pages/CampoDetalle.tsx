@@ -26,7 +26,7 @@ interface Disponibilidad {
   bloques: Array<{
     hora_inicio: string;
     hora_fin: string;
-    estado: 'libre' | 'ocupado' | 'bloqueada_temporal';
+    estado: 'libre' | 'ocupada' | 'bloqueada_temporal';
   }>;
 }
 

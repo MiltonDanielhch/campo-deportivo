@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
+import LayoutPublico from '@/components/layout/LayoutPublico';
 
 const Landing = lazy(() => import('./pages/Landing'));
 const Campos = lazy(() => import('./pages/Campos'));
@@ -24,11 +25,16 @@ function SuspenseWrapper({ children }: { children: ReactNode }) {
 }
 
 export const router = createBrowserRouter([
-  { path: '/', element: <SuspenseWrapper><Landing /></SuspenseWrapper> },
-  { path: '/campos', element: <SuspenseWrapper><Campos /></SuspenseWrapper> },
-  { path: '/campos/:id', element: <SuspenseWrapper><CampoDetalle /></SuspenseWrapper> },
-  { path: '/reserva', element: <SuspenseWrapper><Reserva /></SuspenseWrapper> },
-  { path: '/pago/:codigo', element: <SuspenseWrapper><Pago /></SuspenseWrapper> },
-  { path: '/comprobante/:codigo', element: <SuspenseWrapper><Comprobante /></SuspenseWrapper> },
-  { path: '/estado', element: <SuspenseWrapper><ConsultarEstado /></SuspenseWrapper> },
+  {
+    element: <LayoutPublico />,
+    children: [
+      { path: '/', element: <SuspenseWrapper><Landing /></SuspenseWrapper> },
+      { path: '/campos', element: <SuspenseWrapper><Campos /></SuspenseWrapper> },
+      { path: '/campos/:id', element: <SuspenseWrapper><CampoDetalle /></SuspenseWrapper> },
+      { path: '/reserva', element: <SuspenseWrapper><Reserva /></SuspenseWrapper> },
+      { path: '/pago/:codigo', element: <SuspenseWrapper><Pago /></SuspenseWrapper> },
+      { path: '/comprobante/:codigo', element: <SuspenseWrapper><Comprobante /></SuspenseWrapper> },
+      { path: '/estado', element: <SuspenseWrapper><ConsultarEstado /></SuspenseWrapper> },
+    ],
+  },
 ]);

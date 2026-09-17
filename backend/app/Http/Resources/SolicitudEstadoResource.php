@@ -35,6 +35,7 @@ class SolicitudEstadoResource extends JsonResource
                     'fecha' => $reserva->fecha_reserva->format('Y-m-d'),
                     'hora_inicio' => substr($reserva->hora_inicio, 0, 5),
                     'hora_fin' => substr($reserva->hora_fin, 0, 5),
+                    'confirmado_en' => $reserva->confirmado_en?->toIso8601String(), // NUEVO
                 ]),
             ),
         ];
