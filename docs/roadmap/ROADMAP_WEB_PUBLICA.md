@@ -276,17 +276,17 @@ llamadas a la acción claras. Debe indexar bien en Google y cargar rápido.
 ## Tareas de la Fase WP.2
 
 ```
-[ ] Instalar react-helmet-async y vite-plugin-sitemap
+[x] Instalar react-helmet-async y vite-plugin-sitemap
     → Se usan por primera vez en esta fase.
 
-[ ] Crear src/pages/Landing.tsx
+[x] Crear src/pages/Landing.tsx
     → Hero con título, subtítulo y CTA "Ver canchas disponibles"
     → Sección "Cómo funciona" (3 pasos)
     → Sección de campos destacados (últimos 3 campos activos)
     → Sección institucional (GAD Beni, contacto, horarios)
     → Footer con links legales y redes sociales
 
-[ ] Implementar componentes de la landing
+[x] Implementar componentes de la landing
     → src/components/landing/Hero.tsx
     → src/components/landing/ComoFunciona.tsx
     → src/components/landing/CamposDestacados.tsx (consume
@@ -294,7 +294,7 @@ llamadas a la acción claras. Debe indexar bien en Google y cargar rápido.
     → src/components/landing/InfoInstitucional.tsx
     → src/components/landing/Footer.tsx
 
-[ ] Optimizar SEO de la landing
+[x] Optimizar SEO de la landing
     → react-helmet-async para meta tags dinámicos.
     → Título y descripción institucional. Open Graph tags para
       compartir en redes.
@@ -303,15 +303,15 @@ llamadas a la acción claras. Debe indexar bien en Google y cargar rápido.
       WP.4). No cubre rutas transaccionales (/reserva, /pago/:codigo),
       que no tiene sentido indexar.
 
-[ ] Responsive mobile-first
+[x] Responsive mobile-first
     → Verse bien en celular (375px). Menú hamburguesa en móvil.
 
-[ ] Tests visuales manuales
+[x] Tests visuales manuales
     → Lighthouse score > 90 en la landing.
     → Meta tags correctos en View Source (sin ejecutar JS).
     → Los links "Ver canchas" navegan a /campos.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(web-public): landing institucional con SEO optimizado y campos destacados"
 ```
 
@@ -329,37 +329,37 @@ React-Leaflet.
 ## Tareas de la Fase WP.3
 
 ```
-[ ] Crear src/pages/Campos.tsx
+[x] Crear src/pages/Campos.tsx
     → Toggle "Lista" / "Mapa". Filtros: tipo de campo, estado.
     → Vista lista: cards. Vista mapa: React-Leaflet con marcadores.
 
-[ ] Instalar react-leaflet y leaflet
+[x] Instalar react-leaflet y leaflet
     → Se usan por primera vez en esta fase.
 
-[ ] Implementar el listado
+[x] Implementar el listado
     → src/components/campos/CampoCard.tsx
     → src/components/campos/FiltrosCampos.tsx
     → Consumir GET /public/campos. Skeleton loaders mientras carga.
 
-[ ] Implementar el mapa
+[x] Implementar el mapa
     → src/components/campos/MapaCampos.tsx
     → Tiles OSM, un marcador por campo (verde activo, naranja
       mantenimiento). Click → navegar a /campos/:id.
     → Atribución OSM visible (obligatorio por licencia ODbL).
     → Centrar en Trinidad, Beni (lat: -14.84, lng: -64.90, zoom: 13).
 
-[ ] Responsive
+[x] Responsive
     → Móvil: mapa 100% del viewport, lista debajo. Desktop: lista 40% /
       mapa 60%.
 
-[ ] Tests
+[x] Tests
     → El listado carga los campos del backend.
     → El toggle lista/mapa funciona.
     → Click en un campo navega a /campos/:id.
     → El mapa muestra marcadores en las coordenadas correctas.
     → Los campos en mantenimiento aparecen deshabilitados.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(web-public): listado de campos con filtros y mapa interactivo"
 ```
 

@@ -128,3 +128,6 @@
     @apply font-sans;
     }
 }
+
+/* Leaflet map styles */
+@import 'leaflet/dist/leaflet.css';
