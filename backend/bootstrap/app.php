@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Alias del middleware de rol (registrado en Módulo 0.8, creado ahora)
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
+            'auth.oauth' => \App\Http\Middleware\VerificaTokenOAuth::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

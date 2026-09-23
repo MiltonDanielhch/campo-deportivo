@@ -43,4 +43,11 @@ return [
         'webhook_secret' => env('RECAUDACIONES_WEBHOOK_SECRET'),
     ],
 
+    'ibare' => [
+        'base_url' => env('IBARE_BASE_URL'),
+        'jwks_url' => env('IBARE_JWKS_URL'),
+        'issuer' => env('IBARE_ISSUER'),
+        'audience' => env('IBARE_AUDIENCE'),
+    ],
+
 ];

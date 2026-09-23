@@ -25,6 +25,7 @@ class Funcionario extends Authenticatable
         'password_hash',
         'rol_id',
         'estado',
+        'mamore_id',
     ];
 
     protected $hidden = [

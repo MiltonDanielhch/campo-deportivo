@@ -43,7 +43,8 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
 });
 
 // ─── Endpoints protegidos ───────────────────────────────────────────────
-Route::middleware('auth:sanctum')->group(function () {
+// Route::middleware('auth:sanctum')->group(function () {
+   Route::middleware('auth.oauth:canchas:admin')->group(function () {
     // Auth
     Route::get('/v1/auth/me', [AuthController::class, 'me']);
     Route::post('/v1/auth/logout', [AuthController::class, 'logout']);
@@ -95,4 +96,8 @@ Route::middleware('auth:sanctum')->group(function () {
         // Roles (para selects de alta de funcionarios)
         Route::get('/v1/roles', [RolController::class, 'index']);
     });
+});
+
+Route::middleware('auth.oauth')->get('/v1/oauth/me', function (\Illuminate\Http\Request $request) {
+    return response()->json(['data' => $request->attributes->get('funcionario')]);
 });

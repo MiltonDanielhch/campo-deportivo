@@ -6,7 +6,7 @@ export default function Hero() {
     <section className="bg-gradient-to-br from-teal-600 to-teal-700 text-white py-20">
       <div className="container mx-auto px-4 text-center">
         <h1 className="text-4xl md:text-6xl font-bold mb-6">
-          Reserva Canchas Deportivas en Trinidad
+          Reserva Canchas Deportivas en el Beni
         </h1>
         <p className="text-xl md:text-2xl mb-8 text-teal-100">
           El sistema oficial del GAD Beni para reservar campos deportivos
