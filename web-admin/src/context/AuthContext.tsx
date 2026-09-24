@@ -24,14 +24,12 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login: (usuario: string, password: string) => Promise<void>;
+  loginWithIbare: () => void; // Cambiado: ahora es una redirección
   logout: () => Promise<void>;
   tienePermiso: (permiso: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-const TOKEN_KEY = 'auth_token';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -39,43 +37,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cargando: true,
   });
 
-  // Al montar: si hay token guardado, restaurar sesión
+  // Al montar: intentar obtener la sesión desde la cookie
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) {
-      setState({ funcionario: null, cargando: false });
-      return;
-    }
-
     apiClient
-      .get<{ funcionario: Funcionario }>('/auth/me')
+      .get<{ data: Funcionario }>('/v1/auth/me') // ✅ CORREGIDO: agregado /v1 al inicio
       .then((res) => {
-        setState({ funcionario: res.data.funcionario, cargando: false });
+        setState({ funcionario: res.data.data, cargando: false });
       })
       .catch(() => {
-        // Token inválido/expirado: limpiar y dejar sin sesión
-        localStorage.removeItem(TOKEN_KEY);
+        // No hay sesión válida (401), limpiar estado y dejar de cargar
         setState({ funcionario: null, cargando: false });
       });
   }, []);
 
-  const login = async (usuario: string, password: string) => {
-    const res = await apiClient.post<{
-      token: string;
-      funcionario: Funcionario;
-    }>('/auth/login', { usuario, password });
-
-    localStorage.setItem(TOKEN_KEY, res.data.token);
-    setState({ funcionario: res.data.funcionario, cargando: false });
+  // Redirige al backend de Laravel, que a su vez redirige a Ibare
+  const loginWithIbare = () => {
+    window.location.href = 'http://localhost:8000/auth/login-redirect';
   };
 
   const logout = async () => {
     try {
-      await apiClient.post('/auth/logout');
+      // Llama al backend para limpiar la sesión
+      await apiClient.post('/v1/auth/logout');
+    } catch (error) {
+      console.error('Error al cerrar sesión en el backend', error);
     } finally {
-      localStorage.removeItem(TOKEN_KEY);
+      // Limpiamos el estado local y redirigimos
       setState({ funcionario: null, cargando: false });
-      // Redirige al login tras logout
       window.location.href = '/login';
     }
   };
@@ -86,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, tienePermiso }}>
+    <AuthContext.Provider value={{ ...state, loginWithIbare, logout, tienePermiso }}>
       {children}
     </AuthContext.Provider>
   );

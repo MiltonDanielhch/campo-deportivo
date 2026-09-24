@@ -6,7 +6,7 @@ import type {
 } from '@/types/parametricas';
 
 /**
- * Endpoints de tarifas, anidados bajo /campos-deportivos/{id}/tarifas.
+ * Endpoints de tarifas, anidados bajo /v1/campos-deportivos/{id}/tarifas.
  */
 export const tarifasService = {
   /**
@@ -17,7 +17,7 @@ export const tarifasService = {
     const { data } = await apiClient.post<{
       message: string;
       data: TarifaCampo;
-    }>(`/campos-deportivos/${campoId}/tarifas`, payload);
+    }>(`/v1/campos-deportivos/${campoId}/tarifas`, payload); // ✅ CORREGIDO: agregado /v1
     return data.data;
   },
 
@@ -27,7 +27,7 @@ export const tarifasService = {
    */
   async historial(campoId: string): Promise<HistorialTarifas> {
     const { data } = await apiClient.get<{ data: HistorialTarifas }>(
-      `/campos-deportivos/${campoId}/tarifas`,
+      `/v1/campos-deportivos/${campoId}/tarifas`, // ✅ CORREGIDO: agregado /v1
     );
     return data.data;
   },

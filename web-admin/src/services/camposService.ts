@@ -6,7 +6,8 @@ import type {
   PaginatedResponse,
 } from '@/types/parametricas';
 
-const BASE = '/campos-deportivos';
+// ✅ CORREGIDO: agregado /v1 al inicio
+const BASE = '/v1/campos-deportivos';
 
 export const camposService = {
   /**

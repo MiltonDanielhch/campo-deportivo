@@ -48,6 +48,10 @@ return [
         'jwks_url' => env('IBARE_JWKS_URL'),
         'issuer' => env('IBARE_ISSUER'),
         'audience' => env('IBARE_AUDIENCE'),
+        'client_id' => env('IBARE_CLIENT_ID'),
+        'client_secret' => env('IBARE_CLIENT_SECRET'),
+        'redirect_uri' => env('IBARE_REDIRECT_URI'),
+        'spa_url' => env('IBARE_SPA_URL'),
     ],
 
 ];

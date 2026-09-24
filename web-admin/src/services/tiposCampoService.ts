@@ -5,7 +5,8 @@ import type {
   TipoCampoPayload,
 } from '@/types/parametricas';
 
-const BASE = '/tipos-campo';
+// ✅ CORREGIDO: agregado /v1 al inicio
+const BASE = '/v1/tipos-campo';
 
 export const tiposCampoService = {
   /**

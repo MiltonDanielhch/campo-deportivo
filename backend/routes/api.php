@@ -23,7 +23,7 @@ use App\Http\Controllers\Api\V1\Public\SolicitudEstadoController;
 
 // ─── Endpoints públicos ─────────────────────────────────────────────────
 Route::get('/v1/health', [HealthController::class, 'index']);
-Route::post('/v1/auth/login', [AuthController::class, 'login']);
+// Route::post('/v1/auth/login', [AuthController::class, 'login']);
 
 // Webhook servidor-a-servidor del Core de Recaudaciones (HU-D4).
 // Fuera del grupo público (sin throttle: no debe bloquear reintentos
@@ -43,21 +43,20 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
 });
 
 // ─── Endpoints protegidos ───────────────────────────────────────────────
-// Route::middleware('auth:sanctum')->group(function () {
-   Route::middleware('auth.oauth:canchas:admin')->group(function () {
+Route::middleware('auth.oauth')->group(function () {
     // Auth
     Route::get('/v1/auth/me', [AuthController::class, 'me']);
     Route::post('/v1/auth/logout', [AuthController::class, 'logout']);
 
-    // Rutas de admin_parametricas
-    Route::middleware('role:admin_parametricas')->group(function (){
+    // Rutas de admin_parametricas (requieren rol específico)
+    Route::middleware('role:admin_parametricas')->group(function () {
         // Tipos de campo
         Route::prefix('v1/tipos-campo')->group(function () {
             Route::get('/', [TipoCampoController::class, 'index']);
             Route::get('/activos', [TipoCampoController::class, 'activos']);
             Route::post('/', [TipoCampoController::class, 'store']);
-            Route::get('/{tipoCampo}', [TipoCampoController::class,'show']);
-            Route::put('/{tipoCampo}', [TipoCampoController::class,'update']);
+            Route::get('/{tipoCampo}', [TipoCampoController::class, 'show']);
+            Route::put('/{tipoCampo}', [TipoCampoController::class, 'update']);
             Route::patch('/{tipoCampo}/inhabilitar', [TipoCampoController::class, 'inhabilitar']);
             Route::patch('/{tipoCampo}/reactivar', [TipoCampoController::class, 'reactivar']);
         });
@@ -96,8 +95,4 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
         // Roles (para selects de alta de funcionarios)
         Route::get('/v1/roles', [RolController::class, 'index']);
     });
-});
-
-Route::middleware('auth.oauth')->get('/v1/oauth/me', function (\Illuminate\Http\Request $request) {
-    return response()->json(['data' => $request->attributes->get('funcionario')]);
 });

@@ -9,7 +9,8 @@ import type {
 } from '@/types/usuarios';
 
 
-const BASE = '/funcionarios';
+// ✅ CORREGIDO: agregado /v1 al inicio
+const BASE = '/v1/funcionarios';
 
 export const funcionariosService = {
   /**
@@ -75,8 +76,8 @@ export const funcionariosService = {
    * (Endpoint auxiliar necesario para la pantalla de Funcionarios.)
    */
   async listarRoles(): Promise<Rol[]> {
-    const { data } = await apiClient.get<{ data: Rol[] }>('/roles');
+    // ✅ CORREGIDO: agregado /v1 al inicio
+    const { data } = await apiClient.get<{ data: Rol[] }>('/v1/roles');
     return data.data;
   },
 };
-

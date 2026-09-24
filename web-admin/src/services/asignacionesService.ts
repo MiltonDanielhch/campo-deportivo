@@ -7,7 +7,7 @@ import type {
 
 /**
  * Endpoints de asignación de campos a funcionarios (HU-B3).
- * Anidados bajo /funcionarios/{id}/campos, más el listado global.
+ * Anidados bajo /v1/funcionarios/{id}/campos, más el listado global.
  */
 export const asignacionesService = {
   /**
@@ -15,7 +15,7 @@ export const asignacionesService = {
    */
   async porFuncionario(funcionarioId: string): Promise<CampoDeportivo[]> {
     const { data } = await apiClient.get<{ data: CampoDeportivo[] }>(
-      `/funcionarios/${funcionarioId}/campos`,
+      `/v1/funcionarios/${funcionarioId}/campos`, // ✅ CORREGIDO: agregado /v1
     );
     return data.data;
   },
@@ -31,7 +31,7 @@ export const asignacionesService = {
     const { data } = await apiClient.post<{
       message: string;
       data: AsignacionFuncionario;
-    }>(`/funcionarios/${funcionarioId}/campos/${campoId}`);
+    }>(`/v1/funcionarios/${funcionarioId}/campos/${campoId}`); // ✅ CORREGIDO: agregado /v1
     return data.data;
   },
 
@@ -39,7 +39,7 @@ export const asignacionesService = {
    * Desasignar un campo de un funcionario.
    */
   async desasignar(funcionarioId: string, campoId: string): Promise<void> {
-    await apiClient.delete(`/funcionarios/${funcionarioId}/campos/${campoId}`);
+    await apiClient.delete(`/v1/funcionarios/${funcionarioId}/campos/${campoId}`); // ✅ CORREGIDO: agregado /v1
   },
 
   /**
@@ -48,7 +48,7 @@ export const asignacionesService = {
   async todas(): Promise<FuncionarioConAsignaciones[]> {
     const { data } = await apiClient.get<{
       data: FuncionarioConAsignaciones[];
-    }>('/asignaciones');
+    }>('/v1/asignaciones'); // ✅ CORREGIDO: agregado /v1
     return data.data;
   },
 };
