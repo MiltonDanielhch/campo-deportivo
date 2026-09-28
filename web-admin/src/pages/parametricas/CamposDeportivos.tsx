@@ -2,6 +2,21 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
+  AlertTriangle,
+  Banknote,
+  CheckCircle2,
+  Filter,
+  ImageIcon,
+  LayoutGrid,
+  MapPin,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Power,
+  Search,
+  XCircle,
+} from 'lucide-react';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -13,17 +28,14 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -39,83 +51,65 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import CampoFormDialog from '@/components/parametricas/CampoFormDialog';
 import { camposService } from '@/services/camposService';
-import { tiposCampoService } from '@/services/tiposCampoService';
-import type {
-  CampoDeportivo,
-  EstadoCampo,
-  TipoCampo,
-} from '@/types/parametricas';
-
-const DIAS_SEMANA = [
-  'Lunes',
-  'Martes',
-  'Miércoles',
-  'Jueves',
-  'Viernes',
-  'Sábado',
-  'Domingo',
-];
+import type { CampoDeportivo, EstadoCampo } from '@/types/parametricas';
 
 const TODOS = 'todos';
 
-/** Fila editable de la grilla de horarios del formulario */
-interface FilaHorario {
-  dia: number; // 1-7
-  habilitado: boolean;
-  apertura: string;
-  cierre: string;
-}
-
-const horariosIniciales = (): FilaHorario[] =>
-  DIAS_SEMANA.map((_, i) => ({
-    dia: i + 1,
-    habilitado: true,
-    apertura: '08:00',
-    cierre: '20:00',
-  }));
-
-const ESTADO_VARIANT: Record<EstadoCampo, 'default' | 'secondary' | 'destructive'> = {
-  activo: 'default',
-  mantenimiento: 'secondary',
-  inactivo: 'destructive',
-};
-
-const ESTADO_DESCRIPCION: Record<EstadoCampo, string> = {
-  activo: 'El campo puede recibir reservas normalmente.',
-  mantenimiento: 'El campo queda bloqueado para reservas futuras hasta reactivarlo.',
-  inactivo: 'El campo queda fuera de operación de forma indefinida.',
+const ESTADO_CONFIG: Record<
+  EstadoCampo,
+  {
+    variant: 'default' | 'secondary' | 'destructive';
+    className: string;
+    icon: typeof CheckCircle2;
+    descripcion: string;
+  }
+> = {
+  activo: {
+    variant: 'default',
+    className:
+      'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30',
+    icon: CheckCircle2,
+    descripcion: 'El campo puede recibir reservas normalmente.',
+  },
+  mantenimiento: {
+    variant: 'secondary',
+    className:
+      'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30',
+    icon: AlertTriangle,
+    descripcion: 'El campo queda bloqueado para reservas futuras hasta reactivarlo.',
+  },
+  inactivo: {
+    variant: 'destructive',
+    className:
+      'bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-500/30',
+    icon: XCircle,
+    descripcion: 'El campo queda fuera de operación de forma indefinida.',
+  },
 };
 
 export default function CamposDeportivos() {
   const navigate = useNavigate();
 
-  // ─── Estado de la lista ────────────────────────────────────────────────
+  // ─── Lista ───
   const [campos, setCampos] = useState<CampoDeportivo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState<string>(TODOS);
+  const [busqueda, setBusqueda] = useState('');
   const [pagina, setPagina] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState(1);
 
-  // ─── Dialog de alta ────────────────────────────────────────────────────
+  // ─── Dialog crear/editar (delegado a CampoFormDialog) ───
   const [dialogAbierto, setDialogAbierto] = useState(false);
-  const [tiposActivos, setTiposActivos] = useState<TipoCampo[]>([]);
-  const [tipoCampoId, setTipoCampoId] = useState('');
-  const [codigo, setCodigo] = useState('');
-  const [nombre, setNombre] = useState('');
-  const [direccion, setDireccion] = useState('');
-  const [latitud, setLatitud] = useState('-14.8432');
-  const [longitud, setLongitud] = useState('-64.9012');
-  const [horarios, setHorarios] = useState<FilaHorario[]>(horariosIniciales());
-  const [guardando, setGuardando] = useState(false);
-  const [errores, setErrores] = useState<Record<string, string[]>>({});
+  const [modo, setModo] = useState<'crear' | 'editar'>('crear');
+  const [campoEditando, setCampoEditando] = useState<CampoDeportivo | null>(null);
 
-  // ─── AlertDialog de cambio de estado ───────────────────────────────────
+  // ─── Cambio de estado ───
   const [campoEstado, setCampoEstado] = useState<CampoDeportivo | null>(null);
   const [nuevoEstado, setNuevoEstado] = useState<EstadoCampo>('activo');
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
 
-  // ─── Carga de datos ────────────────────────────────────────────────────
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
@@ -141,81 +135,18 @@ export default function CamposDeportivos() {
     setPagina(1);
   };
 
-  // ─── Dialog de alta ────────────────────────────────────────────────────
-  const abrirNuevo = async () => {
-    setErrores({});
-    setTipoCampoId('');
-    setCodigo('');
-    setNombre('');
-    setDireccion('');
-    setLatitud('-14.8432');
-    setLongitud('-64.9012');
-    setHorarios(horariosIniciales());
-    try {
-      setTiposActivos(await tiposCampoService.listarActivos());
-    } catch {
-      toast.error('No se pudieron cargar los tipos de campo');
-    }
+  const abrirNuevo = () => {
+    setModo('crear');
+    setCampoEditando(null);
     setDialogAbierto(true);
   };
 
-  const actualizarHorario = (dia: number, cambios: Partial<FilaHorario>) => {
-    setHorarios((prev) =>
-      prev.map((h) => (h.dia === dia ? { ...h, ...cambios } : h)),
-    );
+  const abrirEditar = (campo: CampoDeportivo) => {
+    setModo('editar');
+    setCampoEditando(campo);
+    setDialogAbierto(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrores({});
-
-    // Validación cliente de la grilla de horarios
-    const habilitados = horarios.filter((h) => h.habilitado);
-    if (habilitados.length === 0) {
-      toast.error('Habilita al menos un día de atención');
-      return;
-    }
-    const horarioInvalido = habilitados.find((h) => h.cierre <= h.apertura);
-    if (horarioInvalido) {
-      toast.error(
-        `Horario inválido el ${DIAS_SEMANA[horarioInvalido.dia - 1]}: el cierre debe ser posterior a la apertura`,
-      );
-      return;
-    }
-
-    setGuardando(true);
-    try {
-      await camposService.crear({
-        tipo_campo_id: tipoCampoId,
-        codigo: codigo.trim().toUpperCase(),
-        nombre: nombre.trim(),
-        direccion: direccion.trim(),
-        latitud: parseFloat(latitud),
-        longitud: parseFloat(longitud),
-        horarios: habilitados.map((h) => ({
-          dia_semana: h.dia,
-          hora_apertura: h.apertura,
-          hora_cierre: h.cierre,
-        })),
-      });
-      toast.success('Campo deportivo creado con sus horarios de atención');
-      setDialogAbierto(false);
-      cargar();
-    } catch (error: any) {
-      if (error.response?.status === 422) {
-        const errs = error.response.data.errors ?? {};
-        setErrores(errs);
-        // Errores de horarios van a toast (son de la grilla completa)
-        if (errs.horarios) toast.error(errs.horarios[0]);
-      } else {
-        toast.error('Ocurrió un error al guardar el campo');
-      }
-    } finally {
-      setGuardando(false);
-    }
-  };
-
-  // ─── Cambio de estado con confirmación ─────────────────────────────────
   const abrirCambioEstado = (campo: CampoDeportivo) => {
     setCampoEstado(campo);
     setNuevoEstado(campo.estado === 'activo' ? 'mantenimiento' : 'activo');
@@ -236,104 +167,213 @@ export default function CamposDeportivos() {
     }
   };
 
-  // ─── Render ────────────────────────────────────────────────────────────
+  // ─── Filtro local por búsqueda ───
+  const camposFiltrados = campos.filter((c) => {
+    if (!busqueda.trim()) return true;
+    const q = busqueda.toLowerCase();
+    return (
+      c.nombre.toLowerCase().includes(q) ||
+      c.codigo.toLowerCase().includes(q) ||
+      c.direccion.toLowerCase().includes(q) ||
+      (c.tipo_campo?.nombre ?? '').toLowerCase().includes(q)
+    );
+  });
+
+  const stats = {
+    total: campos.length,
+    activos: campos.filter((c) => c.estado === 'activo').length,
+    mantenimiento: campos.filter((c) => c.estado === 'mantenimiento').length,
+  };
+
   return (
-    <div className="space-y-6 p-6">
-      {/* Encabezado */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 p-6 max-w-[1600px] mx-auto">
+      {/* ─── Header ─── */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Campos Deportivos</h1>
-          <p className="text-sm text-muted-foreground">
-            Alta de campos con sus horarios de atención y control de estado
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
+            Paramétricas
+          </p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+            Campos Deportivos
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Alta, edición y control de estado de los campos del sistema
           </p>
         </div>
-        <Button onClick={abrirNuevo}>Nuevo campo deportivo</Button>
+        <Button onClick={abrirNuevo} className="rounded-full shadow-md">
+          <Plus className="mr-2 h-4 w-4" />
+          Nuevo campo
+        </Button>
       </div>
 
-      {/* Filtro por estado */}
-      <div className="flex items-center gap-2">
-        <Label className="text-sm">Estado:</Label>
-        <Select value={filtroEstado} onValueChange={cambiarFiltro}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filtrar por estado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TODOS}>Todos</SelectItem>
-            <SelectItem value="activo">Activos</SelectItem>
-            <SelectItem value="mantenimiento">En mantenimiento</SelectItem>
-            <SelectItem value="inactivo">Inactivos</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* ─── Stats ─── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <LayoutGrid className="size-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="text-xl font-bold">{stats.total}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="size-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Activos</p>
+            <p className="text-xl font-bold">{stats.activos}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="size-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">En mantenimiento</p>
+            <p className="text-xl font-bold">{stats.mantenimiento}</p>
+          </div>
+        </div>
       </div>
 
-      {/* Tabla */}
-      <div className="rounded-md border">
+      {/* ─── Toolbar ─── */}
+      <div className="flex flex-col sm:flex-row gap-3 rounded-xl border bg-card p-3">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre, código o dirección..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="pl-9 bg-muted/50"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Filter className="size-4 text-muted-foreground" />
+          <Select value={filtroEstado} onValueChange={cambiarFiltro}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS}>Todos los estados</SelectItem>
+              <SelectItem value="activo">Activos</SelectItem>
+              <SelectItem value="mantenimiento">En mantenimiento</SelectItem>
+              <SelectItem value="inactivo">Inactivos</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* ─── Tabla ─── */}
+      <div className="rounded-xl border bg-card overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="bg-muted/30 hover:bg-muted/30">
+              <TableHead className="w-20">Foto</TableHead>
               <TableHead>Código</TableHead>
               <TableHead>Nombre</TableHead>
               <TableHead>Tipo</TableHead>
-              <TableHead>Dirección</TableHead>
-              <TableHead className="w-32">Estado</TableHead>
-              <TableHead className="w-52 text-right">Acciones</TableHead>
+              <TableHead className="hidden lg:table-cell">Dirección</TableHead>
+              <TableHead className="w-36">Estado</TableHead>
+              <TableHead className="w-14 text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {cargando ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                   Cargando…
                 </TableCell>
               </TableRow>
-            ) : campos.length === 0 ? (
+            ) : camposFiltrados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
-                  No hay campos deportivos registrados
+                <TableCell colSpan={7} className="h-32 text-center">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <MapPin className="size-8" />
+                    <p className="font-medium">
+                      {campos.length === 0
+                        ? 'No hay campos registrados'
+                        : 'Ningún campo coincide con tu búsqueda'}
+                    </p>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
-              campos.map((campo) => (
-                <TableRow key={campo.id}>
-                  <TableCell className="font-mono text-sm">{campo.codigo}</TableCell>
-                  <TableCell className="font-medium">{campo.nombre}</TableCell>
-                  <TableCell>{campo.tipo_campo?.nombre ?? '—'}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {campo.direccion}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={ESTADO_VARIANT[campo.estado]}>
-                      {campo.estado}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          navigate(`/panel/parametricas/campos/${campo.id}/tarifas`)
-                        }
+              camposFiltrados.map((campo) => {
+                const config = ESTADO_CONFIG[campo.estado];
+                const IconoEstado = config.icon;
+                return (
+                  <TableRow key={campo.id} className="hover:bg-muted/20 transition-colors">
+                    <TableCell>
+                      {campo.imagen_url ? (
+                        <img
+                          src={campo.imagen_url}
+                          alt={campo.nombre}
+                          className="h-12 w-12 rounded-lg object-cover border"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                          <ImageIcon className="h-5 w-5" />
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {campo.codigo}
+                    </TableCell>
+                    <TableCell className="font-semibold">{campo.nombre}</TableCell>
+                    <TableCell className="text-sm">
+                      {campo.tipo_campo?.nombre ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground hidden lg:table-cell max-w-xs truncate">
+                      {campo.direccion}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={config.variant}
+                        className={`gap-1.5 px-2.5 py-1 ${config.className}`}
                       >
-                        Tarifas
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => abrirCambioEstado(campo)}
-                      >
-                        Cambiar estado
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                        <IconoEstado className="size-3" />
+                        <span className="capitalize">{campo.estado}</span>
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="size-8">
+                            <MoreVertical className="size-4" />
+                            <span className="sr-only">Acciones</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem onClick={() => abrirEditar(campo)}>
+                            <Pencil className="mr-2 size-4" />
+                            Editar campo
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              navigate(`/panel/parametricas/campos/${campo.id}/tarifas`)
+                            }
+                          >
+                            <Banknote className="mr-2 size-4" />
+                            Gestionar tarifas
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => abrirCambioEstado(campo)}>
+                            <Power className="mr-2 size-4" />
+                            Cambiar estado
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </div>
 
-      {/* Paginación */}
+      {/* ─── Paginación ─── */}
       {totalPaginas > 1 && (
         <div className="flex items-center justify-end gap-2">
           <Button
@@ -344,8 +384,9 @@ export default function CamposDeportivos() {
           >
             Anterior
           </Button>
-          <span className="text-sm text-muted-foreground">
-            Página {pagina} de {totalPaginas}
+          <span className="text-sm text-muted-foreground px-2">
+            Página <strong className="text-foreground">{pagina}</strong> de{' '}
+            <strong className="text-foreground">{totalPaginas}</strong>
           </span>
           <Button
             variant="outline"
@@ -358,178 +399,16 @@ export default function CamposDeportivos() {
         </div>
       )}
 
-      {/* Dialog de alta con grilla de horarios */}
-      <Dialog open={dialogAbierto} onOpenChange={setDialogAbierto}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Nuevo campo deportivo</DialogTitle>
-            <DialogDescription>
-              El campo y sus horarios se crean en una única transacción: si algo
-              falla, nada queda guardado.
-            </DialogDescription>
-          </DialogHeader>
+      {/* ─── Dialog crear/editar (componente extraído) ─── */}
+      <CampoFormDialog
+        open={dialogAbierto}
+        onOpenChange={setDialogAbierto}
+        modo={modo}
+        campo={campoEditando}
+        onGuardado={cargar}
+      />
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Datos generales */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Tipo de campo *</Label>
-                <Select value={tipoCampoId} onValueChange={setTipoCampoId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiposActivos.map((tipo) => (
-                      <SelectItem key={tipo.id} value={tipo.id}>
-                        {tipo.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errores.tipo_campo_id && (
-                  <p className="text-sm text-destructive">{errores.tipo_campo_id[0]}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="codigo">Código *</Label>
-                <Input
-                  id="codigo"
-                  value={codigo}
-                  onChange={(e) => setCodigo(e.target.value)}
-                  placeholder="CD-001"
-                  required
-                />
-                {errores.codigo && (
-                  <p className="text-sm text-destructive">{errores.codigo[0]}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre *</Label>
-                <Input
-                  id="nombre"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  placeholder="Cancha Central"
-                  required
-                />
-                {errores.nombre && (
-                  <p className="text-sm text-destructive">{errores.nombre[0]}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="direccion">Dirección *</Label>
-                <Input
-                  id="direccion"
-                  value={direccion}
-                  onChange={(e) => setDireccion(e.target.value)}
-                  placeholder="Av. Principal #123, Trinidad"
-                  required
-                />
-                {errores.direccion && (
-                  <p className="text-sm text-destructive">{errores.direccion[0]}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="latitud">Latitud * (Beni: -18.0 a -9.6)</Label>
-                <Input
-                  id="latitud"
-                  type="number"
-                  step="0.00000001"
-                  value={latitud}
-                  onChange={(e) => setLatitud(e.target.value)}
-                  required
-                />
-                {errores.latitud && (
-                  <p className="text-sm text-destructive">{errores.latitud[0]}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="longitud">Longitud * (Beni: -67.5 a -57.4)</Label>
-                <Input
-                  id="longitud"
-                  type="number"
-                  step="0.00000001"
-                  value={longitud}
-                  onChange={(e) => setLongitud(e.target.value)}
-                  required
-                />
-                {errores.longitud && (
-                  <p className="text-sm text-destructive">{errores.longitud[0]}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Grilla de horarios */}
-            <div className="space-y-2">
-              <Label>Horarios de atención (desmarca los días sin servicio)</Label>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">Habilitado</TableHead>
-                      <TableHead>Día</TableHead>
-                      <TableHead>Apertura</TableHead>
-                      <TableHead>Cierre</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {horarios.map((h) => (
-                      <TableRow key={h.dia}>
-                        <TableCell>
-                          <Checkbox
-                            checked={h.habilitado}
-                            onCheckedChange={(v) =>
-                              actualizarHorario(h.dia, { habilitado: v === true })
-                            }
-                          />
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {DIAS_SEMANA[h.dia - 1]}
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="time"
-                            value={h.apertura}
-                            disabled={!h.habilitado}
-                            onChange={(e) =>
-                              actualizarHorario(h.dia, { apertura: e.target.value })
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="time"
-                            value={h.cierre}
-                            disabled={!h.habilitado}
-                            onChange={(e) =>
-                              actualizarHorario(h.dia, { cierre: e.target.value })
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogAbierto(false)}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={guardando}>
-                {guardando ? 'Guardando…' : 'Crear campo con horarios'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* AlertDialog de cambio de estado */}
+      {/* ─── Alert dialog cambio de estado ─── */}
       <AlertDialog open={campoEstado !== null} onOpenChange={() => setCampoEstado(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -537,8 +416,14 @@ export default function CamposDeportivos() {
               Cambiar estado de "{campoEstado?.nombre}"
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Estado actual: <strong>{campoEstado?.estado}</strong>.{' '}
-              {ESTADO_DESCRIPCION[nuevoEstado]}
+              Estado actual:{' '}
+              <Badge
+                variant={ESTADO_CONFIG[campoEstado?.estado ?? 'activo'].variant}
+                className="ml-1"
+              >
+                {campoEstado?.estado}
+              </Badge>
+              <p className="mt-3">{ESTADO_CONFIG[nuevoEstado].descripcion}</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -551,9 +436,9 @@ export default function CamposDeportivos() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="activo">activo</SelectItem>
-                <SelectItem value="mantenimiento">mantenimiento</SelectItem>
-                <SelectItem value="inactivo">inactivo</SelectItem>
+                <SelectItem value="activo">Activo</SelectItem>
+                <SelectItem value="mantenimiento">En mantenimiento</SelectItem>
+                <SelectItem value="inactivo">Inactivo</SelectItem>
               </SelectContent>
             </Select>
           </div>

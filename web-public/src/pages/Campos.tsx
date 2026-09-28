@@ -1,9 +1,9 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { MapPin, SearchX, Trophy } from 'lucide-react';
 import { api } from '@/lib/api';
-import FiltrosCampos from '@/components/campo/FiltrosCampos';
+import FiltrosCampos, { type FiltrosEstado } from '@/components/campo/FiltrosCampos';
 import CampoCard from '@/components/campo/CampoCard';
 import MapaCampos from '@/components/campo/MapaCampos';
 
@@ -15,44 +15,62 @@ interface Campo {
   estado: string;
   latitud: number;
   longitud: number;
+  imagen_url: string | null;
+  tarifas: {
+    diurna: { precio_por_hora: number } | null;
+    nocturna: { precio_por_hora: number } | null;
+  };
 }
 
 type VistaModo = 'lista' | 'mapa';
 
+const FILTROS_INICIALES: FiltrosEstado = {
+  tipoCampoId: null,
+  estado: null,
+  buscar: '',
+};
+
 export default function Campos() {
   const [campos, setCampos] = useState<Campo[]>([]);
-  const [camposFiltrados, setCamposFiltrados] = useState<Campo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [vista, setVista] = useState<VistaModo>('lista');
-  const [filtros, setFiltros] = useState<{ tipoCampoId: string | null; estado: string | null }>({
-    tipoCampoId: null,
-    estado: null,
-  });
+  const [filtros, setFiltros] = useState<FiltrosEstado>(FILTROS_INICIALES);
+
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
+
+    setCargando(true);
+
+    const params: Record<string, string> = {};
+    if (filtros.tipoCampoId) params.tipo_campo_id = filtros.tipoCampoId;
+    if (filtros.estado) params.estado = filtros.estado;
+    if (filtros.buscar.trim()) params.buscar = filtros.buscar.trim();
+
     api
-      .get('/public/campos')
-      .then((res) => {
-        setCampos(res.data.data);
-        setCamposFiltrados(res.data.data);
+      .get('/public/campos', {
+        params,
+        signal: abortRef.current.signal,
       })
-      .catch((err) => console.error('Error al cargar campos:', err))
-      .finally(() => setCargando(false));
-  }, []);
+      .then((res) => setCampos(res.data.data))
+      .catch((err) => {
+        if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
+          console.error('Error al cargar campos:', err);
+        }
+      })
+      .finally(() => {
+        if (!abortRef.current?.signal.aborted) {
+          setCargando(false);
+        }
+      });
 
-  useEffect(() => {
-    let filtrados = campos;
+    return () => abortRef.current?.abort();
+  }, [filtros]);
 
-    if (filtros.tipoCampoId) {
-      filtrados = filtrados.filter((c) => c.tipo_campo.id === filtros.tipoCampoId);
-    }
-
-    if (filtros.estado) {
-      filtrados = filtrados.filter((c) => c.estado === filtros.estado);
-    }
-
-    setCamposFiltrados(filtrados);
-  }, [campos, filtros]);
+  // Estadísticas de resultados
+  const totalActivos = campos.filter((c) => c.estado === 'activo').length;
 
   return (
     <>
@@ -60,57 +78,98 @@ export default function Campos() {
         <title>Campos Deportivos Disponibles - GAD Beni</title>
         <meta
           name="description"
-          content="Explora todos los campos deportivos disponibles en Trinidad, Beni. Filtrá por tipo de deporte y ubicación."
+          content="Explora todos los campos deportivos disponibles en Trinidad, Beni. Buscá por nombre, filtrá por tipo de deporte y ubicación."
         />
       </Helmet>
 
-      <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-8">
-          <h1 className="text-3xl font-bold mb-6">Campos Deportivos</h1>
-
-          <FiltrosCampos onFiltrosChange={setFiltros} />
-
-          <div className="flex gap-2 mb-6">
-            <Button
-              variant={vista === 'lista' ? 'default' : 'outline'}
-              onClick={() => setVista('lista')}
-            >
-              Lista
-            </Button>
-            <Button
-              variant={vista === 'mapa' ? 'default' : 'outline'}
-              onClick={() => setVista('mapa')}
-            >
-              Mapa
-            </Button>
+      <div className="min-h-screen bg-slate-50">
+        <div className="container mx-auto px-4 py-10 md:py-14 max-w-6xl">
+          {/* ─── Encabezado con jerarquía ─── */}
+          <div className="mb-10">
+            <p className="text-teal-600 font-semibold uppercase tracking-widest text-xs mb-3 flex items-center gap-2">
+              <Trophy className="w-3.5 h-3.5" />
+              Catálogo público
+            </p>
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+              <div>
+                <h1 className="text-3xl md:text-5xl font-bold tracking-tight mb-2">
+                  Campos deportivos
+                </h1>
+                <p className="text-slate-600 text-lg max-w-2xl">
+                  Encontrá y reservá tu cancha en Trinidad, Beni.
+                </p>
+              </div>
+              {!cargando && campos.length > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-sm font-semibold">
+                    {campos.length} {campos.length === 1 ? 'cancha' : 'canchas'}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    · {totalActivos} disponibles
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
+          {/* ─── Barra de filtros + toggle ─── */}
+          <FiltrosCampos
+            filtros={filtros}
+            onFiltrosChange={setFiltros}
+            vista={vista}
+            onVistaChange={setVista}
+          />
+
+          {/* ─── Contenido ─── */}
           {cargando ? (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3, 4, 5, 6].map((i) => (
-                <Card key={i} className="animate-pulse">
-                  <CardContent className="pt-6">
-                    <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
-                    <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-                    <div className="h-4 bg-gray-200 rounded w-2/3 mb-4"></div>
-                    <div className="h-10 bg-gray-200 rounded"></div>
+                <Card
+                  key={i}
+                  className="overflow-hidden animate-pulse border-slate-100"
+                >
+                  <div className="aspect-video bg-slate-200" />
+                  <CardContent className="pt-4 space-y-3">
+                    <div className="h-5 bg-slate-200 rounded w-1/3" />
+                    <div className="h-5 bg-slate-200 rounded w-3/4" />
+                    <div className="h-4 bg-slate-200 rounded w-full" />
+                    <div className="h-4 bg-slate-200 rounded w-2/3" />
+                    <div className="h-10 bg-slate-200 rounded-full mt-4" />
                   </CardContent>
                 </Card>
               ))}
             </div>
           ) : vista === 'lista' ? (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {camposFiltrados.map((campo) => (
-                <CampoCard key={campo.id} campo={campo} />
-              ))}
-            </div>
+            campos.length > 0 ? (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {campos.map((campo) => (
+                  <CampoCard key={campo.id} campo={campo} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-24 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-5">
+                  <SearchX className="w-7 h-7 text-slate-400" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">
+                  No encontramos canchas
+                </h3>
+                <p className="text-slate-500 max-w-md mx-auto mb-6">
+                  No hay canchas que coincidan con tu búsqueda. Probá limpiar
+                  los filtros o buscar con otros términos.
+                </p>
+                <button
+                  onClick={() => setFiltros(FILTROS_INICIALES)}
+                  className="text-teal-600 font-semibold hover:text-teal-700 underline underline-offset-4"
+                >
+                  Limpiar todos los filtros
+                </button>
+              </div>
+            )
           ) : (
-            <MapaCampos campos={camposFiltrados} />
-          )}
-
-          {camposFiltrados.length === 0 && !cargando && (
-            <div className="text-center py-12">
-              <p className="text-gray-600 text-lg">No se encontraron campos con esos filtros.</p>
+            <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+              <MapaCampos campos={campos} />
             </div>
           )}
         </div>

@@ -59,19 +59,17 @@ export interface CampoDeportivo {
   codigo: string;
   nombre: string;
   direccion: string;
-  /** DECIMAL(10,8) — viene como string desde Laravel */
   latitud: string;
-  /** DECIMAL(11,8) — viene como string desde Laravel */
   longitud: string;
   estado: EstadoCampo;
+  imagen_url: string | null;
+  /** Hora (HH:MM:SS) a partir de la cual se aplica la tarifa nocturna */
+  hora_inicio_noche: string;
   creado_en: string;
-  /** Relación cargada con with('tipoCampo') */
   tipo_campo?: TipoCampo;
-  /** Relación cargada en el detalle */
   horarios_atencion?: HorarioAtencion[];
 }
 
-/** Payload para crear un campo con sus horarios en una transacción. */
 export interface CampoDeportivoPayload {
   tipo_campo_id: string;
   codigo: string;
@@ -80,45 +78,53 @@ export interface CampoDeportivoPayload {
   latitud: number;
   longitud: number;
   horarios: HorarioAtencionPayload[];
-}
-
-/** Payload para cambiar el estado de un campo. */
-export interface CambioEstadoCampoPayload {
-  estado: EstadoCampo;
+  imagen?: File | null;
+  quitar_imagen?: boolean;
 }
 
 // ─── TarifaCampo ─────────────────────────────────────────────────────────
 
-/** Resumen de funcionario (relación cargada) */
+export type TipoTarifa = 'diurna' | 'nocturna';
+
+// ─── Resumen de funcionario (usado en auditorías de tarifas) ─────────
+
 export interface FuncionarioResumen {
   id: string;
   nombre_completo: string;
+  mamore_id?: string | null;
 }
 
 export interface TarifaCampo {
   id: string;
   campo_id: string;
-  /** DECIMAL(10,2) — viene como string desde Laravel */
+  tipo_tarifa: TipoTarifa;
   precio_por_hora: string;
   vigente_desde: string;
-  /** null si es la tarifa activa actual */
   vigente_hasta: string | null;
-  /**
-   * UUID string si la relación NO está cargada.
-   * Objeto FuncionarioResumen si el backend la carga con load('creadoPor'),
-   * porque Laravel serializa la relación con el mismo nombre que la FK.
-   */
+  creado_por: string | FuncionarioResumen;
+}
+export interface TarifaCampo {
+  id: string;
+  campo_id: string;
+  tipo_tarifa: TipoTarifa;
+  precio_por_hora: string;
+  vigente_desde: string;
+  vigente_hasta: string | null;
   creado_por: string | FuncionarioResumen;
 }
 
-/** Payload para fijar una nueva tarifa. */
 export interface TarifaCampoPayload {
+  tipo_tarifa: TipoTarifa;
   precio_por_hora: number;
 }
 
 /** Respuesta del endpoint GET /campos-deportivos/{id}/tarifas */
 export interface HistorialTarifas {
-  activa: TarifaCampo | null;
+  hora_inicio_noche: string;
+  activas: {
+    diurna: TarifaCampo | null;
+    nocturna: TarifaCampo | null;
+  };
   historial: TarifaCampo[];
 }
 

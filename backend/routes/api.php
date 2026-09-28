@@ -30,6 +30,26 @@ Route::get('/v1/health', [HealthController::class, 'index']);
 // del Core) y fuera de auth:sanctum (se autentica por firma HMAC).
 Route::post('/v1/webhooks/recaudaciones', [WebhookRecaudacionesController::class, 'handle']);
 
+// ─── Proxy público de imágenes (CORS) ───────────────────────────────────
+// Los archivos de /storage los sirve el web server sin cabeceras CORS,
+// lo que rompe Image.network en Flutter Web. Esta ruta los sirve vía
+// Laravel para que el middleware CORS aplique. Uso: /api/v1/public/storage/campos/x.jpg
+Route::get('/v1/public/storage/{path}', function (string $path) {
+    // Bloquear path traversal (../)
+    if (str_contains($path, '..')) {
+        abort(400);
+    }
+
+    $base = realpath(storage_path('app/public'));
+    $fullPath = realpath(storage_path('app/public/' . $path));
+
+    if (! $base || ! $fullPath || ! str_starts_with($fullPath, $base . DIRECTORY_SEPARATOR)) {
+        abort(404);
+    }
+
+    return response()->file($fullPath);
+})->where('path', '.+');
+
 // Consulta ciudadana (Épica C, HU-C1): sin autenticación
 // throttle:60,1 = salvaguarda mínima; el rate-limiting robusto por IP/
 // dispositivo llega con la Épica G (HU-G1).
@@ -68,6 +88,7 @@ Route::middleware('auth.oauth')->group(function () {
             Route::get('/{campoDeportivo}', [CampoDeportivoController::class, 'show']);
             Route::put('/{campoDeportivo}', [CampoDeportivoController::class, 'update']);
             Route::patch('/{campoDeportivo}/estado', [CampoDeportivoController::class, 'cambiarEstado']);
+            Route::patch('/{campoDeportivo}/hora-noche', [CampoDeportivoController::class, 'actualizarHoraNoche']); // ← AGREGADA AQUÍ
 
             // Tarifas del campo (HU-A3)
             Route::post('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'store']);

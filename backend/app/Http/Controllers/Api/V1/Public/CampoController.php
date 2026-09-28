@@ -40,7 +40,9 @@ class CampoController extends Controller
 
     /**
      * GET /api/v1/public/campos
-     * Listado público con filtro opcional por tipo_campo_id.
+     * Listado público con filtros opcionales:
+     *   ?tipo_campo_id=...     filtra por tipo
+     *   ?buscar=...            busca (case-insensitive) en nombre y dirección
      */
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -48,6 +50,19 @@ class CampoController extends Controller
 
         if ($request->filled('tipo_campo_id')) {
             $query->where('tipo_campo_id', $request->input('tipo_campo_id'));
+        }
+
+        if ($request->filled('buscar')) {
+            $termino = trim((string) $request->input('buscar'));
+
+            if ($termino !== '') {
+                // Búsqueda case-insensitive en nombre O dirección.
+                // PostgreSQL: ILIKE. MySQL/MariaDB: LIKE (ya es case-insensitive con collation default).
+                $query->where(function (Builder $q) use ($termino): void {
+                    $q->whereRaw('LOWER(nombre) LIKE ?', ['%' . mb_strtolower($termino) . '%'])
+                      ->orWhereRaw('LOWER(direccion) LIKE ?', ['%' . mb_strtolower($termino) . '%']);
+                });
+            }
         }
 
         return CampoPublicoResource::collection(

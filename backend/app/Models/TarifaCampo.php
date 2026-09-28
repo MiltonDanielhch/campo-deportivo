@@ -16,7 +16,7 @@ class TarifaCampo extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'campo_id', 'precio_por_hora', 'vigente_desde', 'vigente_hasta', 'creado_por',
+        'campo_id', 'tipo_tarifa', 'precio_por_hora', 'vigente_desde', 'vigente_hasta', 'creado_por',
     ];
 
     protected function casts(): array
@@ -36,5 +36,10 @@ class TarifaCampo extends Model
     public function creadoPor(): BelongsTo
     {
         return $this->belongsTo(Funcionario::class, 'creado_por');
+    }
+
+    public function esActiva(): bool
+    {
+        return $this->vigente_hasta === null;
     }
 }

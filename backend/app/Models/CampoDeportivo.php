@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+    use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+
 
 class CampoDeportivo extends Model
 {
@@ -18,7 +21,7 @@ class CampoDeportivo extends Model
 
     protected $fillable = [
         'tipo_campo_id', 'codigo', 'nombre', 'direccion',
-        'latitud', 'longitud', 'estado',
+        'latitud', 'longitud', 'estado', 'imagen_url', 'hora_inicio_noche',
     ];
 
     protected function casts(): array
@@ -27,7 +30,20 @@ class CampoDeportivo extends Model
             'latitud' => 'decimal:8',
             'longitud' => 'decimal:8',
             'creado_en' => 'datetime',
+            'hora_inicio_noche' => 'string', // 'HH:MM:SS' sin parsear como datetime
         ];
+    }
+
+
+    /**
+     * La URL pública de la foto se calcula en runtime desde el path guardado.
+     * Así cambiar el driver del disco (local → s3 → gcs) no requiere migrar la BD.
+     */
+    protected function imagenUrl(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => $value ? Storage::disk('public')->url($value) : null,
+        );
     }
 
     public function tipoCampo(): BelongsTo

@@ -5,19 +5,14 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/**
- * JSON público de un campo deportivo para ciudadanos anónimos.
- * Expone SOLO lo que un ciudadano necesita ver; nunca creado_en
- * ni campos de auditoría interna.
- */
 class CampoPublicoResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $tarifaVigente = $this->whenLoaded(
-            'tarifas',
-            fn () => $this->tarifas->first(),
-        );
+        $tarifas = $this->whenLoaded('tarifas', fn () => $this->tarifas);
+
+        $tarifaDiurna = $tarifas?->firstWhere('tipo_tarifa', 'diurna');
+        $tarifaNocturna = $tarifas?->firstWhere('tipo_tarifa', 'nocturna');
 
         return [
             'id' => $this->id,
@@ -27,14 +22,21 @@ class CampoPublicoResource extends JsonResource
                 'nombre' => $this->tipoCampo->nombre,
             ]),
             'direccion' => $this->direccion,
-            // DECIMAL viene como string de PostgreSQL; el mapa necesita float
+            'imagen_url' => $this->imagen_url,
             'latitud' => (float) $this->latitud,
             'longitud' => (float) $this->longitud,
             'estado' => $this->estado,
-            'tarifa_vigente' => $tarifaVigente ? [
-                'precio_por_hora' => (float) $tarifaVigente->precio_por_hora,
-                'vigente_desde' => $tarifaVigente->vigente_desde->toIso8601String(),
-            ] : null,
+            'hora_inicio_noche' => $this->hora_inicio_noche,
+            'tarifas' => [
+                'diurna' => $tarifaDiurna ? [
+                    'precio_por_hora' => (float) $tarifaDiurna->precio_por_hora,
+                    'vigente_desde' => $tarifaDiurna->vigente_desde->toIso8601String(),
+                ] : null,
+                'nocturna' => $tarifaNocturna ? [
+                    'precio_por_hora' => (float) $tarifaNocturna->precio_por_hora,
+                    'vigente_desde' => $tarifaNocturna->vigente_desde->toIso8601String(),
+                ] : null,
+            ],
             'horarios_atencion' => $this->whenLoaded(
                 'horariosAtencion',
                 fn () => $this->horariosAtencion

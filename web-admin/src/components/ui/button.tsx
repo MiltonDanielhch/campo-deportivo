@@ -1,3 +1,4 @@
+import * as React from "react"
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 
@@ -40,18 +41,49 @@ const buttonVariants = cva(
   }
 )
 
+interface ButtonProps
+  extends Omit<ButtonPrimitive.Props, "render">,
+    VariantProps<typeof buttonVariants> {
+  /**
+   * Compatibilidad con la API de Radix UI (usada en componentes shadcn).
+   * Si es true, el hijo (ej: un <Link>) se renderiza como el elemento del botón,
+   * heredando los estilos y comportamiento de este.
+   */
+  asChild?: boolean
+}
+
 function Button({
   className,
   variant = "default",
   size = "default",
+  asChild = false,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonProps) {
+  const classes = cn(buttonVariants({ variant, size, className }))
+
+  // Base UI usa la prop "render" en lugar de "asChild" (Radix).
+  // Transformamos asChild → render para mantener compatibilidad con
+  // código como <Button asChild><Link to="/x">...</Link></Button>.
+  if (asChild && React.isValidElement(children)) {
+    return (
+      <ButtonPrimitive
+        render={children}
+        data-slot="button"
+        className={classes}
+        {...(props as Record<string, unknown>)}
+      />
+    )
+  }
+
   return (
     <ButtonPrimitive
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={classes}
       {...props}
-    />
+    >
+      {children}
+    </ButtonPrimitive>
   )
 }
 

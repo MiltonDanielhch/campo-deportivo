@@ -152,6 +152,7 @@ class _CampoTarjeta extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: esMantenimiento ? 1 : 2,
       color: esMantenimiento ? Colors.grey[100] : null,
+      clipBehavior: Clip.antiAlias, // ← para que la foto respete las esquinas redondeadas
       child: InkWell(
         onTap: esMantenimiento
             ? null
@@ -163,82 +164,177 @@ class _CampoTarjeta extends StatelessWidget {
                   ),
                 );
               },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ─── Foto del campo o placeholder ───
+            _ImagenCampo(campo: campo),
+
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      campo.nombre,
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          campo.nombre,
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (esMantenimiento)
+                        const Chip(
+                          label: Text('Mantenimiento'),
+                          backgroundColor: Colors.orange,
+                          labelStyle:
+                              TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                    ],
                   ),
-                  if (esMantenimiento)
-                    const Chip(
-                      label: Text('Mantenimiento'),
-                      backgroundColor: Colors.orange,
-                      labelStyle:
-                          TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                campo.tipoCampo.nombre,
-                style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                    fontStyle: FontStyle.italic),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(campo.direccion,
-                        style: const TextStyle(fontSize: 14)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(
-                    Icons.payments,
-                    size: 20,
-                    color: campo.tarifaVigente != null ? Colors.green : Colors.grey,
-                  ),
-                  const SizedBox(width: 4),
+                  const SizedBox(height: 8),
                   Text(
-                    campo.tarifaVigente != null
-                        ? 'Bs ${campo.tarifaVigente!.precioPorHora.toStringAsFixed(2)} por hora'
-                        : 'Sin tarifa definida',
+                    campo.tipoCampo.nombre,
                     style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: campo.tarifaVigente != null
-                            ? Colors.green[700]
-                            : Colors.grey),
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic),
                   ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(campo.direccion,
+                            style: const TextStyle(fontSize: 14)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // ─── Tarifas: regular (☀️) y con iluminación (💡) ───
+                  if (campo.tarifas.diurna != null ||
+                      campo.tarifas.nocturna != null) ...[
+                    if (campo.tarifas.diurna != null)
+                      Row(
+                        children: [
+                          const Icon(Icons.wb_sunny,
+                              size: 16, color: Colors.amber),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Bs ${campo.tarifas.diurna!.precioPorHora.toStringAsFixed(2)}/h · Regular',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.amber,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (campo.tarifas.nocturna != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.lightbulb,
+                              size: 16, color: Colors.indigo),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Bs ${campo.tarifas.nocturna!.precioPorHora.toStringAsFixed(2)}/h · Con iluminación',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.indigo,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ] else
+                    Row(
+                      children: [
+                        Icon(Icons.payments, size: 20, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Sin tarifa definida',
+                          style:
+                              TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  if (esMantenimiento) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Este campo no está disponible temporalmente',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange[700],
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ],
                 ],
               ),
-              if (esMantenimiento) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Este campo no está disponible temporalmente',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.orange[700],
-                      fontStyle: FontStyle.italic),
-                ),
-              ],
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Foto del campo en la parte superior de la tarjeta (16:9 aprox).
+/// Muestra spinner mientras carga y placeholder si no hay foto o falla.
+class _ImagenCampo extends StatelessWidget {
+  final CampoDeportivo campo;
+
+  const _ImagenCampo({required this.campo});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 150,
+      width: double.infinity,
+      child: campo.imagenUrl != null
+          ? Image.network(
+              campo.imagenUrlProxy!,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(
+                  color: Colors.grey[200],
+                  child: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) =>
+                  const _PlaceholderImagen(),
+            )
+          : const _PlaceholderImagen(),
+    );
+  }
+}
+
+/// Placeholder gris con icono cuando el campo no tiene foto.
+class _PlaceholderImagen extends StatelessWidget {
+  const _PlaceholderImagen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.grey[200],
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.image_outlined, size: 40, color: Colors.grey[400]),
+            const SizedBox(height: 4),
+            Text(
+              'Sin foto',
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            ),
+          ],
         ),
       ),
     );

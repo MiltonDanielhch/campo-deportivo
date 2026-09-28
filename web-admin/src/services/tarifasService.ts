@@ -5,29 +5,27 @@ import type {
   TarifaCampoPayload,
 } from '@/types/parametricas';
 
-/**
- * Endpoints de tarifas, anidados bajo /v1/campos-deportivos/{id}/tarifas.
- */
+const BASE = '/v1/campos-deportivos';
+
 export const tarifasService = {
   /**
-   * Fijar una nueva tarifa para un campo.
-   * La tarifa anterior se cierra automáticamente.
+   * Fijar una nueva tarifa (diurna o nocturna) para un campo.
+   * Solo se cierra la tarifa anterior del MISMO tipo.
    */
   async crear(campoId: string, payload: TarifaCampoPayload): Promise<TarifaCampo> {
     const { data } = await apiClient.post<{
       message: string;
       data: TarifaCampo;
-    }>(`/v1/campos-deportivos/${campoId}/tarifas`, payload); // ✅ CORREGIDO: agregado /v1
+    }>(`${BASE}/${campoId}/tarifas`, payload);
     return data.data;
   },
 
   /**
-   * Historial completo de tarifas de un campo:
-   * la tarifa activa actual + todas las anteriores.
+   * Historial completo + tarifas activas (diurna y nocturna) + hora de corte.
    */
   async historial(campoId: string): Promise<HistorialTarifas> {
     const { data } = await apiClient.get<{ data: HistorialTarifas }>(
-      `/v1/campos-deportivos/${campoId}/tarifas`, // ✅ CORREGIDO: agregado /v1
+      `${BASE}/${campoId}/tarifas`,
     );
     return data.data;
   },

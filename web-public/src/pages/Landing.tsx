@@ -3,7 +3,7 @@ import Hero from '@/components/landing/Hero';
 import ComoFunciona from '@/components/landing/ComoFunciona';
 import CamposDestacados from '@/components/landing/CamposDestacados';
 import InfoInstitucional from '@/components/landing/InfoInstitucional';
-import Footer from '@/components/landing/Footer';
+import BandaCTA from '@/components/landing/BandaCTA';
 
 export default function Landing() {
   return (
@@ -23,12 +23,13 @@ export default function Landing() {
         <meta property="og:url" content="https://canchas.gadbeni.bo" />
       </Helmet>
 
-      <div className="min-h-screen flex flex-col">
+      {/* ⚠️ Footer NO va aquí: ya lo renderiza LayoutPublico.tsx */}
+      <div>
         <Hero />
         <ComoFunciona />
         <CamposDestacados />
+        <BandaCTA />
         <InfoInstitucional />
-        <Footer />
       </div>
     </>
   );

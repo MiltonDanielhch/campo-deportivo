@@ -8,11 +8,6 @@ use App\Models\CampoDeportivo;
 use App\Services\TarifaCampoService;
 use Illuminate\Http\JsonResponse;
 
-/**
- * Endpoints para el versionado de tarifas de un campo (HU-A3).
- * Cada campo tiene una sola tarifa activa a la vez; al crear una nueva,
- * la anterior se cierra automáticamente con vigente_hasta = now().
- */
 class TarifaCampoController extends Controller
 {
     public function __construct(
@@ -21,33 +16,46 @@ class TarifaCampoController extends Controller
 
     /**
      * POST /api/v1/campos-deportivos/{campoDeportivo}/tarifas
-     * Crea una nueva tarifa para el campo. Cierra automáticamente la anterior.
+     * Crea una nueva tarifa (diurna o nocturna) cerrando la activa del mismo tipo.
      */
     public function store(StoreTarifaRequest $request, CampoDeportivo $campoDeportivo): JsonResponse
     {
         $tarifa = $this->service->actualizarTarifa(
             $campoDeportivo,
-            $request->validated('precio_por_hora')
+            $request->validated('tipo_tarifa'),
+            (float) $request->validated('precio_por_hora'),
         );
 
         return response()->json([
-            'message' => 'Tarifa creada exitosamente. La tarifa anterior fue cerrada automáticamente.',
+            'message' => sprintf(
+                'Tarifa %s creada. La anterior del mismo tipo fue cerrada automáticamente.',
+                $tarifa->tipo_tarifa,
+            ),
             'data' => $tarifa->load('creadoPor:id,nombre_completo'),
         ], 201);
     }
 
     /**
      * GET /api/v1/campos-deportivos/{campoDeportivo}/tarifas
-     * Historial completo de tarifas del campo, ordenadas por vigencia descendente.
+     * Historial + tarifas activas (diurna y nocturna) + hora de corte.
      */
     public function historial(CampoDeportivo $campoDeportivo): JsonResponse
     {
+        $activas = $this->service->tarifasActivas($campoDeportivo);
         $historial = $this->service->historial($campoDeportivo);
-        $tarifaActiva = $this->service->tarifaActiva($campoDeportivo);
+
+        // Cargar la relación en ambas activas (si existen)
+        foreach ($activas as $tarifa) {
+            $tarifa?->load('creadoPor:id,nombre_completo');
+        }
 
         return response()->json([
             'data' => [
-                'activa' => $tarifaActiva?->load('creadoPor:id,nombre_completo'),
+                'hora_inicio_noche' => $campoDeportivo->hora_inicio_noche,
+                'activas' => [
+                    'diurna' => $activas['diurna'],
+                    'nocturna' => $activas['nocturna'],
+                ],
                 'historial' => $historial,
             ],
         ]);

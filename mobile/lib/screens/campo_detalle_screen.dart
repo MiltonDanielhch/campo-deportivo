@@ -11,10 +11,6 @@ import 'carrito_resumen_screen.dart';
 
 /// Pantalla de detalle de un campo con selector de fecha (HU-C2) y
 /// selección de franjas hacia el carrito global (HU-D1).
-///
-/// La grilla se refresca cada 45s. El carrito NO se limpia al cambiar
-/// de fecha ni al refrescar: las franjas pueden ser de fechas y campos
-/// distintos (multi-franja).
 class CampoDetalleScreen extends StatefulWidget {
   final CampoDeportivo campo;
 
@@ -121,6 +117,121 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
     }
   }
 
+    /// Abre el selector de calendario completo (fechas fuera de los 14 días).
+  Future<void> _abrirCalendario() async {
+    final hoy = DateTime.now();
+    final hoySinHora = DateTime(hoy.year, hoy.month, hoy.day);
+
+    // Si la fecha actual es anterior a hoy (no debería pasar), usamos hoy
+    final inicial = _fechaSeleccionada.isBefore(hoySinHora)
+        ? hoySinHora
+        : _fechaSeleccionada;
+
+    final seleccion = await showDatePicker(
+      context: context,
+      initialDate: inicial,
+      firstDate: hoySinHora,
+      lastDate: DateTime(hoy.year + 1, hoy.month, hoy.day),
+      helpText: 'Elegí una fecha',
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
+      fieldLabelText: 'Fecha de reserva',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: Colors.teal,
+                  onPrimary: Colors.white,
+                ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (seleccion != null) {
+      _seleccionarFecha(seleccion);
+    }
+  }
+
+  /// Último elemento de la fila de fechas:
+  /// - Si la fecha activa está dentro de los 14 días: botón outline "Más fechas".
+  /// - Si está fuera: chip teal con la fecha elegida (click reabre el calendario).
+  Widget _buildBotonCalendario(List<DateTime> fechas) {
+    final estaEnRango = fechas.any((f) => f == _fechaSeleccionada);
+
+    if (!estaEnRango) {
+      return InkWell(
+        onTap: _abrirCalendario,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 70,
+          decoration: BoxDecoration(
+            color: Colors.teal,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.teal, width: 2),
+          ),
+          child: Stack(
+            children: [
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _formatearFecha(_fechaSeleccionada),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_fechaSeleccionada.day}/${_fechaSeleccionada.month}',
+                      style: const TextStyle(fontSize: 10, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+              const Positioned(
+                top: 4,
+                right: 4,
+                child: Icon(Icons.calendar_month, size: 12, color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: _abrirCalendario,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 70,
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.calendar_month, size: 20, color: Colors.grey[700]),
+            const SizedBox(height: 2),
+            const Text(
+              'Más',
+              style: TextStyle(fontSize: 10, color: Colors.black87),
+            ),
+            const Text(
+              'fechas',
+              style: TextStyle(fontSize: 10, color: Colors.black87),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final fechas = _generarFechas(14);
@@ -133,58 +244,71 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
         children: [
           _InfoCampo(campo: widget.campo),
 
-          // ─── Selector de fechas ───
+          // ─── Selector de fechas (scroll) + calendario FIJO a la derecha ───
           Container(
             height: 80,
             padding: const EdgeInsets.symmetric(vertical: 8),
             color: Colors.white,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              itemCount: fechas.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                final fecha = fechas[index];
-                final esSeleccionada = fecha == _fechaSeleccionada;
+            child: Row(
+              children: [
+                // Lista deslizable de 14 días
+                Expanded(
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    itemCount: fechas.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 4),
+                    itemBuilder: (context, index) {
+                      final fecha = fechas[index];
+                      final esSeleccionada = fecha == _fechaSeleccionada;
 
-                return InkWell(
-                  onTap: () => _seleccionarFecha(fecha),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    width: 70,
-                    decoration: BoxDecoration(
-                      color: esSeleccionada ? Colors.teal : Colors.grey[200],
-                      borderRadius: BorderRadius.circular(12),
-                      border: esSeleccionada
-                          ? Border.all(color: Colors.teal, width: 2)
-                          : null,
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _formatearFecha(fecha),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: esSeleccionada ? Colors.white : Colors.black,
+                      return InkWell(
+                        onTap: () => _seleccionarFecha(fecha),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: 70,
+                          decoration: BoxDecoration(
+                            color: esSeleccionada ? Colors.teal : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(12),
+                            border: esSeleccionada
+                                ? Border.all(color: Colors.teal, width: 2)
+                                : null,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _formatearFecha(fecha),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: esSeleccionada ? Colors.white : Colors.black,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${fecha.day}/${fecha.month}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: esSeleccionada
+                                      ? Colors.white70
+                                      : Colors.grey[600],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${fecha.day}/${fecha.month}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: esSeleccionada
-                                ? Colors.white70
-                                : Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+
+                // Botón de calendario FIJO: siempre visible, fuera del scroll
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, right: 8),
+                  child: _buildBotonCalendario(fechas),
+                ),
+              ],
             ),
           ),
 
@@ -284,8 +408,16 @@ class _InfoCampo extends StatelessWidget {
 
   const _InfoCampo({required this.campo});
 
+  /// Formatea "18:00:00" a "18:00"
+  String _formatHora(String hhmmss) {
+    return hhmmss.length >= 5 ? hhmmss.substring(0, 5) : hhmmss;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final tieneAlgunaTarifa =
+        campo.tarifas.diurna != null || campo.tarifas.nocturna != null;
+
     return Container(
       color: Colors.grey[100],
       padding: const EdgeInsets.all(16),
@@ -308,17 +440,123 @@ class _InfoCampo extends StatelessWidget {
               Expanded(child: Text(campo.direccion)),
             ],
           ),
-          if (campo.tarifaVigente != null) ...[
-            const SizedBox(height: 8),
+          if (tieneAlgunaTarifa) ...[
+            const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.payments, size: 20, color: Colors.green),
-                Text(
-                  'Bs ${campo.tarifaVigente!.precioPorHora.toStringAsFixed(2)} por hora',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
+                // Tarifa regular (diurna)
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber[50],
+                      border: Border.all(color: Colors.amber[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.wb_sunny,
+                                size: 16, color: Colors.amber),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Regular',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        if (campo.tarifas.diurna != null) ...[
+                          Text(
+                            'Bs ${campo.tarifas.diurna!.precioPorHora.toStringAsFixed(2)}/h',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber,
+                            ),
+                          ),
+                          Text(
+                            'Antes ${_formatHora(campo.horaInicioNoche)}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.amber[700],
+                            ),
+                          ),
+                        ] else
+                          const Text(
+                            'Sin definir',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Tarifa con iluminación (nocturna)
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.indigo[50],
+                      border: Border.all(color: Colors.indigo[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.lightbulb,
+                                size: 16, color: Colors.indigo),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Con luces',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.indigo,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        if (campo.tarifas.nocturna != null) ...[
+                          Text(
+                            'Bs ${campo.tarifas.nocturna!.precioPorHora.toStringAsFixed(2)}/h',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo,
+                            ),
+                          ),
+                          Text(
+                            'Desde ${_formatHora(campo.horaInicioNoche)}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.indigo[700],
+                            ),
+                          ),
+                        ] else
+                          const Text(
+                            'Sin definir',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -342,28 +580,31 @@ class _GrillaHoraria extends StatelessWidget {
     required this.campo,
   });
 
-  Color _colorEstado(BloqueDisponibilidad bloque, bool seleccionado) {
+  Color _colorEstado(BloqueDisponibilidad bloque, bool seleccionado, bool esNocturno) {
     if (bloque.estaOcupada) return Colors.red[100]!;
     if (bloque.estaBloqueadaTemporal) return Colors.orange[100]!;
-    return seleccionado ? Colors.teal[100]! : Colors.green[100]!;
+    if (seleccionado) return Colors.teal[100]!;
+    return esNocturno ? Colors.indigo[50]! : Colors.amber[50]!;
   }
 
-  Color _colorBorde(BloqueDisponibilidad bloque, bool seleccionado) {
+  Color _colorBorde(BloqueDisponibilidad bloque, bool seleccionado, bool esNocturno) {
     if (bloque.estaOcupada) return Colors.red;
     if (bloque.estaBloqueadaTemporal) return Colors.orange;
-    return seleccionado ? Colors.teal : Colors.green;
+    if (seleccionado) return Colors.teal;
+    return esNocturno ? Colors.indigo : Colors.amber;
   }
 
-  IconData _iconoEstado(BloqueDisponibilidad bloque) {
+  IconData _iconoEstado(BloqueDisponibilidad bloque, bool esNocturno) {
     if (bloque.estaOcupada) return Icons.lock;
     if (bloque.estaBloqueadaTemporal) return Icons.hourglass_empty;
-    return Icons.check_circle;
+    return esNocturno ? Icons.lightbulb : Icons.wb_sunny;
   }
 
-  String _textoEstado(BloqueDisponibilidad bloque) {
+  String _textoEstado(BloqueDisponibilidad bloque, bool esNocturno, double? precio) {
     if (bloque.estaOcupada) return 'Ocupada';
-    if (bloque.estaBloqueadaTemporal) return 'En proceso de cobro';
-    return 'Libre';
+    if (bloque.estaBloqueadaTemporal) return 'En proceso';
+    if (precio == null) return 'Sin tarifa';
+    return 'Bs ${precio.toStringAsFixed(2)}';
   }
 
   @override
@@ -382,27 +623,31 @@ class _GrillaHoraria extends StatelessWidget {
       itemBuilder: (context, index) {
         final bloque = bloques[index];
 
+        // Calcular si es nocturno y el precio
+        final esNocturno = campo.esHoraNocturna(bloque.horaInicio);
+        final precio = campo.precioParaBloque(bloque.horaInicio);
+
         final franja = FranjaCarrito(
           campoId: campo.id,
           campoNombre: campo.nombre,
           fecha: fecha,
           horaInicio: bloque.horaInicio,
           horaFin: bloque.horaFin,
-          precio: bloque.precio,
+          precio: precio,
         );
 
         final seleccionado = carrito.esta(franja);
-        final esLibre = bloque.estaLibre;
+        final esLibre = bloque.estaLibre && precio != null;
 
         return InkWell(
           onTap: esLibre ? () => carrito.toggle(franja) : null,
           borderRadius: BorderRadius.circular(8),
           child: Container(
             decoration: BoxDecoration(
-              color: _colorEstado(bloque, seleccionado),
+              color: _colorEstado(bloque, seleccionado, esNocturno),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: _colorBorde(bloque, seleccionado),
+                color: _colorBorde(bloque, seleccionado, esNocturno),
                 width: 2,
               ),
             ),
@@ -413,8 +658,8 @@ class _GrillaHoraria extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(_iconoEstado(bloque),
-                        size: 16, color: _colorBorde(bloque, seleccionado)),
+                    Icon(_iconoEstado(bloque, esNocturno),
+                        size: 16, color: _colorBorde(bloque, seleccionado, esNocturno)),
                     const SizedBox(width: 4),
                     Text(
                       '${bloque.horaInicio.substring(0, 5)} - ${bloque.horaFin.substring(0, 5)}',
@@ -427,10 +672,10 @@ class _GrillaHoraria extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _textoEstado(bloque),
+                  _textoEstado(bloque, esNocturno, precio),
                   style: TextStyle(
                     fontSize: 11,
-                    color: _colorBorde(bloque, seleccionado),
+                    color: _colorBorde(bloque, seleccionado, esNocturno),
                     fontWeight: FontWeight.w500,
                   ),
                 ),

@@ -6,13 +6,44 @@ import type {
   PaginatedResponse,
 } from '@/types/parametricas';
 
-// ✅ CORREGIDO: agregado /v1 al inicio
 const BASE = '/v1/campos-deportivos';
 
+/**
+ * Construye un FormData a partir del payload.
+ * Los horarios se serializan con la convención que Laravel espera:
+ *   horarios[0][dia_semana]=1
+ *   horarios[0][hora_apertura]=08:00
+ *   horarios[0][hora_cierre]=20:00
+ *   horarios[1][...]
+ */
+function construirFormData(payload: CampoDeportivoPayload): FormData {
+  const fd = new FormData();
+
+  fd.append('tipo_campo_id', payload.tipo_campo_id);
+  fd.append('codigo', payload.codigo);
+  fd.append('nombre', payload.nombre);
+  fd.append('direccion', payload.direccion);
+  fd.append('latitud', String(payload.latitud));
+  fd.append('longitud', String(payload.longitud));
+
+  payload.horarios.forEach((h, i) => {
+    fd.append(`horarios[${i}][dia_semana]`, String(h.dia_semana));
+    fd.append(`horarios[${i}][hora_apertura]`, h.hora_apertura);
+    fd.append(`horarios[${i}][hora_cierre]`, h.hora_cierre);
+  });
+
+  if (payload.imagen) {
+    fd.append('imagen', payload.imagen);
+  }
+
+  if (payload.quitar_imagen) {
+    fd.append('quitar_imagen', '1');
+  }
+
+  return fd;
+}
+
 export const camposService = {
-  /**
-   * Listado paginado con filtros opcionales por tipo_campo_id y estado.
-   */
   async listar(params?: {
     tipo_campo_id?: string;
     estado?: string;
@@ -25,9 +56,6 @@ export const camposService = {
     return data;
   },
 
-  /**
-   * Detalle de un campo con sus horarios y tipo_campo.
-   */
   async obtener(id: string): Promise<CampoDeportivo> {
     const { data } = await apiClient.get<{ data: CampoDeportivo }>(
       `${BASE}/${id}`,
@@ -36,18 +64,20 @@ export const camposService = {
   },
 
   /**
-   * Crear un campo deportivo con sus horarios en una transacción atómica.
+   * Crear campo con sus horarios. Envía multipart/form-data para soportar imagen opcional.
    */
   async crear(payload: CampoDeportivoPayload): Promise<CampoDeportivo> {
     const { data } = await apiClient.post<{
       message: string;
       data: CampoDeportivo;
-    }>(BASE, payload);
+    }>(BASE, construirFormData(payload), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return data.data;
   },
 
   /**
-   * Actualizar datos generales del campo (NO el estado).
+   * Actualizar datos generales del campo. Envía multipart/form-data.
    */
   async actualizar(
     id: string,
@@ -56,13 +86,23 @@ export const camposService = {
     const { data } = await apiClient.put<{
       message: string;
       data: CampoDeportivo;
-    }>(`${BASE}/${id}`, payload);
+    }>(`${BASE}/${id}`, construirFormData(payload), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return data.data;
   },
 
-  /**
-   * Cambiar el estado del campo (activo/mantenimiento/inactivo).
+    /**
+   * Actualiza SOLO la hora de inicio nocturno (hora de corte diurna/nocturna).
    */
+  async actualizarHoraNoche(id: string, hora: string): Promise<CampoDeportivo> {
+    const { data } = await apiClient.patch<{
+      message: string;
+      data: CampoDeportivo;
+    }>(`${BASE}/${id}/hora-noche`, { hora_inicio_noche: hora });
+    return data.data;
+  },
+
   async cambiarEstado(
     id: string,
     payload: CambioEstadoCampoPayload,
@@ -74,10 +114,6 @@ export const camposService = {
     return data.data;
   },
 
-  /**
-   * Lista todos los campos activos (para poblar listas de selección).
-   * Usa un per_page alto para traer todos en una sola petición.
-   */
   async listarTodos(): Promise<CampoDeportivo[]> {
     const { data } = await apiClient.get<PaginatedResponse<CampoDeportivo>>(
       BASE,

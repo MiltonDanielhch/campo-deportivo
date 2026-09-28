@@ -1,12 +1,20 @@
 ﻿import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { TimerOff, AlertTriangle, CheckCircle } from 'lucide-react';
+import {
+  TimerOff,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  Wifi,
+  ArrowRight,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import CuentaRegresiva from '@/components/pago/CuentaRegresiva';
 import MedioDePago from '@/components/pago/MedioDePago';
+import StepsReserva from '@/components/layout/StepsReserva';
 
 interface EstadoPago {
   codigo_seguimiento: string;
@@ -20,7 +28,12 @@ interface EstadoPago {
   } | null;
 }
 
-type Vista = 'cargando' | 'pendiente' | 'expirada' | 'rechazada' | 'no_encontrada';
+type Vista =
+  | 'cargando'
+  | 'pendiente'
+  | 'expirada'
+  | 'rechazada'
+  | 'no_encontrada';
 
 export default function Pago() {
   const { codigo } = useParams<{ codigo: string }>();
@@ -46,16 +59,13 @@ export default function Pago() {
       if (err.response?.status === 404) {
         setVista('no_encontrada');
       }
-      // Otros errores: se reintenta en el siguiente tick del polling
     }
   }, [codigo, navigate]);
 
-  // GET inicial al montar: la página se autoabastece desde la URL
   useEffect(() => {
     consultarEstado();
   }, [consultarEstado]);
 
-  // Polling cada 5 segundos
   useEffect(() => {
     if (vista !== 'pendiente') return;
     const interval = setInterval(consultarEstado, 5000);
@@ -73,87 +83,157 @@ export default function Pago() {
         <meta name="robots" content="noindex" />
       </Helmet>
 
-      <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-8 max-w-xl">
+      <div className="min-h-screen bg-slate-50">
+        <div className="container mx-auto px-4 py-6 md:py-10 max-w-3xl">
+          {/* ─── Header ─── */}
+          {vista === 'pendiente' && (
+            <div className="mb-6">
+              <p className="text-teal-600 font-semibold uppercase tracking-widest text-xs mb-2">
+                Paso 3 de 3
+              </p>
+              <h1 className="text-2xl md:text-4xl font-bold tracking-tight mb-2">
+                Escaneá el QR para pagar
+              </h1>
+              <p className="text-slate-600">
+                Usá la app de tu banco para completar la reserva. Detectamos el pago automáticamente.
+              </p>
+            </div>
+          )}
+
+          {/* ─── Stepper (solo en vista pendiente) ─── */}
+          {vista === 'pendiente' && <StepsReserva pasoActual={3} />}
+
+          {/* ─── Cargando ─── */}
           {vista === 'cargando' && (
-            <Card>
-              <CardContent className="py-12 text-center text-gray-600">
-                Cargando tu reserva...
+            <Card className="border-slate-200">
+              <CardContent className="py-16 text-center">
+                <Loader2 className="w-10 h-10 animate-spin text-teal-600 mx-auto mb-4" />
+                <p className="text-slate-600">Cargando tu reserva…</p>
               </CardContent>
             </Card>
           )}
 
+          {/* ─── Pendiente ─── */}
           {vista === 'pendiente' && estado && (
-            <Card>
-              <CardContent className="py-8">
+            <div className="space-y-5">
+              {/* Countdown */}
+              {estado.expira_en && (
                 <CuentaRegresiva
-                  expiraEn={estado.expira_en!}
+                  expiraEn={estado.expira_en}
                   onExpirar={handleExpirarLocal}
                 />
-                <div className="text-center mb-6">
-                  <p className="text-3xl font-bold text-green-700">
-                    Bs {estado.monto_total.toFixed(2)}
-                  </p>
-                  <p className="text-sm text-gray-600 mt-2 font-mono">
-                    Código: {estado.codigo_seguimiento}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Guardalo por si necesitás soporte
-                  </p>
-                </div>
-                <MedioDePago datos={estado.datos_cobro_pendiente} />
-                <p className="text-xs text-gray-500 text-center mt-6">
-                  Esta página detecta automáticamente cuando el Core confirma
-                  tu pago y te muestra el comprobante.
-                </p>
-              </CardContent>
-            </Card>
+              )}
+
+              {/* Card QR */}
+              <Card className="border-slate-200 shadow-sm">
+                <CardContent className="p-6">
+                  {/* Código de seguimiento */}
+                  <div className="text-center mb-5 pb-5 border-b border-slate-100">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                      Código de seguimiento
+                    </p>
+                    <p className="text-lg font-mono font-bold text-slate-900">
+                      {estado.codigo_seguimiento}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Guardalo por si necesitás soporte
+                    </p>
+                  </div>
+
+                  {/* Monto destacado */}
+                  <div className="text-center mb-6">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                      Monto a pagar
+                    </p>
+                    <p className="text-4xl md:text-5xl font-bold text-slate-900 tabular-nums">
+                      Bs {estado.monto_total.toFixed(2)}
+                    </p>
+                  </div>
+
+                  {/* QR + instrucciones */}
+                  <MedioDePago
+                    datos={estado.datos_cobro_pendiente}
+                    monto={estado.monto_total}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Pill de estado vivo (polling) */}
+              <div className="flex items-center justify-center gap-2 py-3 px-4 bg-white/60 backdrop-blur rounded-full border border-slate-200 mx-auto w-fit">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-500" />
+                </span>
+                <Wifi className="w-3.5 h-3.5 text-teal-600" />
+                <span className="text-xs font-medium text-slate-700">
+                  Esperando confirmación del pago…
+                </span>
+              </div>
+            </div>
           )}
 
+          {/* ─── Expirada ─── */}
           {vista === 'expirada' && (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <TimerOff className="w-16 h-16 text-red-500 mx-auto mb-4" />
-                <h1 className="text-2xl font-bold mb-2">
+            <Card className="border-red-200">
+              <CardContent className="py-16 text-center">
+                <div className="w-20 h-20 mx-auto rounded-full bg-red-50 flex items-center justify-center mb-5">
+                  <TimerOff className="w-10 h-10 text-red-500" />
+                </div>
+                <h1 className="text-2xl font-bold mb-2 tracking-tight">
                   El tiempo para pagar expiró
                 </h1>
-                <p className="text-gray-600 mb-6">
-                  Tu solicitud quedó sin pago. Podés volver a elegir tus franjas.
+                <p className="text-slate-600 mb-6 max-w-md mx-auto">
+                  Tu solicitud quedó sin pago. Las franjas que habías reservado
+                  vuelven a estar disponibles.
                 </p>
-                <Button asChild>
-                  <Link to="/campos">Volver a elegir franjas</Link>
+                <Button asChild className="rounded-full">
+                  <Link to="/campos" className="flex items-center gap-2">
+                    Volver a elegir franjas
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
           )}
 
+          {/* ─── Rechazada ─── */}
           {vista === 'rechazada' && (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
-                <h1 className="text-2xl font-bold mb-2">
+            <Card className="border-orange-200">
+              <CardContent className="py-16 text-center">
+                <div className="w-20 h-20 mx-auto rounded-full bg-orange-50 flex items-center justify-center mb-5">
+                  <AlertTriangle className="w-10 h-10 text-orange-500" />
+                </div>
+                <h1 className="text-2xl font-bold mb-2 tracking-tight">
                   Tu pago no pudo procesarse
                 </h1>
-                <p className="text-gray-600 mb-6">
+                <p className="text-slate-600 mb-6 max-w-md mx-auto">
                   El sistema de recaudaciones rechazó el intento de cobro.
                   Intentá nuevamente con otro medio de pago.
                 </p>
-                <Button asChild>
-                  <Link to="/campos">Volver a elegir franjas</Link>
+                <Button asChild className="rounded-full">
+                  <Link to="/campos" className="flex items-center gap-2">
+                    Volver a elegir franjas
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
           )}
 
+          {/* ─── No encontrada ─── */}
           {vista === 'no_encontrada' && (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <CheckCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h1 className="text-2xl font-bold mb-2">Reserva no encontrada</h1>
-                <p className="text-gray-600 mb-6">
+            <Card className="border-slate-200">
+              <CardContent className="py-16 text-center">
+                <div className="w-20 h-20 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-5">
+                  <CheckCircle2 className="w-10 h-10 text-slate-400" />
+                </div>
+                <h1 className="text-2xl font-bold mb-2 tracking-tight">
+                  Reserva no encontrada
+                </h1>
+                <p className="text-slate-600 mb-6 max-w-md mx-auto">
                   El código de seguimiento no existe o ya fue procesado.
                 </p>
-                <Button asChild>
+                <Button asChild variant="outline" className="rounded-full">
                   <Link to="/campos">Ir al inicio</Link>
                 </Button>
               </CardContent>

@@ -38,6 +38,10 @@ class StoreCampoDeportivoRequest extends FormRequest
             'horarios.*.dia_semana' => ['required', 'integer', 'between:1,7'],
             'horarios.*.hora_apertura' => ['required', 'date_format:H:i'],
             'horarios.*.hora_cierre' => ['required', 'date_format:H:i', 'after:horarios.*.hora_apertura'],
+            // Foto del campo (multipart): archivo opcional
+            'imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            // Flag para eliminar la foto actual sin subir otra
+            'quitar_imagen' => ['nullable', 'boolean'],
         ];
     }
 
@@ -69,6 +73,9 @@ class StoreCampoDeportivoRequest extends FormRequest
             'longitud.between' => 'La longitud debe estar dentro del departamento del Beni (-67.5 a -57.4).',
             'horarios.required' => 'Debe proporcionar al menos un horario de atención.',
             'horarios.*.hora_cierre.after' => 'La hora de cierre debe ser posterior a la de apertura.',
+            'imagen.image' => 'El archivo debe ser una imagen (jpg, jpeg, png o webp).',
+            'imagen.mimes' => 'Formatos permitidos: jpg, jpeg, png o webp.',
+            'imagen.max' => 'La imagen no debe pesar más de 4 MB.',
         ];
     }
 
