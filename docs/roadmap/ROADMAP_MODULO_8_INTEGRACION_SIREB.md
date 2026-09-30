@@ -185,37 +185,73 @@ duración: debe confiar en el campo `expires_in` de la respuesta y restarle
 un margen de seguridad (ej. 60 segundos) para evitar usar un token en el
 último segundo de vida.
 
+## TTL confirmado en pruebas
+
+El token de Ibare para el sistema `sedede` tiene un TTL de **600 segundos
+(10 minutos)**, más corto que el típico de 3600. Nuestro cache usa
+`TTL = expires_in - 60 = 540 segundos`, lo cual da margen suficiente.
+El cliente lee el `expires_in` de la respuesta dinámicamente, así que
+si Ibare cambia el TTL en el futuro, no hay que tocar el código.
+
 ## Dependencia crítica
 
-Antes de arrancar esta fase, necesitamos que el equipo de Ibare nos
-confirme la URL exacta del endpoint de emisión de tokens (probablemente
-`https://ibare.beni.gob.bo/oauth/token` o similar). Sin eso, no se puede
-implementar `obtenerToken()`.
+- Antes de arrancar esta fase, necesitamos que el equipo de Ibare nos
+- confirme la URL exacta del endpoint de emisión de tokens (probablemente
+- `https://ibare.beni.gob.bo/oauth/token` o similar). Sin eso, no se puede
+- implementar `obtenerToken()`.
++ ✅ **Confirmado:** el endpoint de emisión de tokens es
++ `https://test.ibare.beni.gob.bo/oauth/token` en entorno de pruebas y
++ `https://ibare.beni.gob.bo/oauth/token` en producción.
+
+## ⚠️ Dos clientes OAuth distintos (no confundir)
+
+El sistema Canchas tiene **dos clientes OAuth** en Ibare, con propósitos
+distintos y credenciales distintas:
+
+| Cliente | Propósito | Grant | Variables .env |
+|---|---|---|---|
+| `canchas-web-admin` | Login de funcionarios humanos (Módulo 0.9) | `authorization_code` | `IBARE_CLIENT_ID`, `IBARE_CLIENT_SECRET`, `IBARE_BASE_URL` |
+| `sedede` | Llamadas server-to-server a SIREB (Módulo 8) | `client_credentials` | `SIREB_CLIENT_ID`, `SIREB_CLIENT_SECRET`, `SIREB_TOKEN_URL` |
+
+**Error común detectado en la Fase 8.1:** al intentar usar las
+credenciales de `canchas-web-admin` para pedir un token con
+`grant_type=client_credentials`, Ibare responde `unsupported_grant_type`
+porque ese cliente solo tiene habilitado `authorization_code`.
+
+Las variables del bloque `ibare` en `config/services.php` pertenecen al
+login de funcionarios y **no deben reutilizarse** para la integración
+con SIREB. Por eso creamos un sub-bloque `recaudaciones.oauth` separado.
 
 ---
 
 ## Tareas de la Fase 8.1
 
 ```
-[ ] Variables de entorno
-    → backend/.env:
-        RECAUDACIONES_API_URL=https://test.sireb.beni.gob.bo
-        RECAUDACIONES_API_CLIENT_ID=sedede
-        RECAUDACIONES_API_CLIENT_SECRET=<secreto-real>
-        RECAUDACIONES_API_TOKEN_URL=<url-confirmada-de-ibare>
-        RECAUDACIONES_API_SUCURSAL_ID=<uuid-sucursal-sedede>
-        RECAUDACIONES_WEBHOOK_SECRET=<secreto-para-verificar-firmas>
-        RECAUDACIONES_TIMEOUT_SEGUNDOS=10
-    → backend/.env.example: agregar las mismas variables con
-      placeholders para que el siguiente dev sepa qué configurar.
++ [x] Variables de entorno
++     → backend/.env (separadas del bloque 'ibare' del login humano):
++         # URL base de SIREB test
++         RECAUDACIONES_API_URL=https://test.sireb.beni.gob.bo
++         
++         # Credenciales del SISTEMA sedede (client_credentials)
++         SIREB_TOKEN_URL=https://test.ibare.beni.gob.bo/oauth/token
++         SIREB_CLIENT_ID=sedede
++         SIREB_CLIENT_SECRET=<secreto-real>
++         
++         # Modo del cliente (true = simulador, false = real)
++         RECAUDACIONES_SIMULADOR_HABILITADO=false
++         RECAUDACIONES_TIMEOUT_SEGUNDOS=10
++     
++     En config/services.php se lee del sub-bloque 'recaudaciones.oauth'
++     para mantener separación clara con el bloque 'ibare' (login humano).
 
-[ ] Configurar el bloque en config/services.php
+[x] Configurar el bloque en config/services.php
     → Agregar entrada 'recaudaciones' con todas las variables.
 
-[ ] Implementar obtenerToken() en RecaudacionesApiClient
+[x] Implementar obtenerToken() en RecaudacionesApiClient
     → POST a RECAUDACIONES_API_TOKEN_URL con grant_type=client_credentials,
       client_id, client_secret (form-encoded, estándar OAuth2).
-    → Cachear el token en Redis (ya disponible desde el Módulo 0) con
+    → Cachear el token vía Laravel Cache (actualmente con driver
+     'database' en PostgreSQL, migrable a Redis sin tocar código) con
       clave 'sireb:access_token' y TTL = expires_in - 60.
     → Método auxiliar tokenValido() que revisa si hay token en cache y
       no está a punto de expirar.
@@ -223,7 +259,7 @@ implementar `obtenerToken()`.
       llamar a obtenerToken() de nuevo. Ningún otro método del cliente
       debe preocuparse por esto.
 
-[ ] Implementar el cliente HTTP base
+[x] Implementar el cliente HTTP base
     → Usar el HTTP client de Laravel (Http::withToken(...)) con:
       - base_uri = RECAUDACIONES_API_URL
       - headers estándar: Accept: application/json, Content-Type:
@@ -232,12 +268,12 @@ implementar `obtenerToken()`.
       - retry(3, 100) solo para errores 5xx transitorios (no para 4xx,
         esos son errores de contrato y no se reintentan).
 
-[ ] Manejo específico del error TOKEN_INVALIDO (401)
+[x] Manejo específico del error TOKEN_INVALIDO (401)
     → Si una llamada devuelve 401 con codigo='TOKEN_INVALIDO', invalidar
       el token cacheado y reintentar UNA vez con token nuevo. Si vuelve
       a fallar, propagar excepción (no reintentar en loop infinito).
 
-[ ] Logging específico de SIREB
+[x] Logging específico de SIREB
     → Configurar un canal 'sireb' en config/logging.php que escriba en
       storage/logs/sireb.log con formato que incluya: timestamp, método
       HTTP, URL, status code, tiempo de respuesta, referencia externa.
@@ -246,7 +282,7 @@ implementar `obtenerToken()`.
       webhook_secret; el token sí se puede loguear truncado (primeros
       8 chars + "...") para debugging.
 
-[ ] Tests unitarios del manejo de token
+[x] Tests unitarios del manejo de token
     → obtenerToken() cachea el token en Redis con el TTL correcto.
     → Segunda llamada dentro del TTL no llama de nuevo a Ibare.
     → Llamada con token a 30 segundos de expirar sí pide uno nuevo.
@@ -255,7 +291,7 @@ implementar `obtenerToken()`.
     → Si una llamada protegida devuelve TOKEN_INVALIDO, se refresca el
       token y se reintenta una vez.
 
-[ ] Commit de la fase
+[x] Commit de la fase
     → Mensaje: "feat(sireb): cliente HTTP con OAuth2 client_credentials y cache de token"
 ```
 

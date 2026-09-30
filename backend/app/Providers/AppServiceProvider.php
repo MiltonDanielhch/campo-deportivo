@@ -11,8 +11,12 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // El simulado SOLO en local/testing; en producción el cliente real.
-        if ($this->app->environment('local', 'testing')) {
+        // Binding condicional por flag de config (no por env)
+        // Si simulador_habilitado=true → inyecta Simulado
+        // Si simulador_habilitado=false → inyecta cliente real
+        $usarSimulador = config('services.recaudaciones.simulador_habilitado', true);
+
+        if ($usarSimulador) {
             $this->app->singleton(
                 RecaudacionesApiClientInterface::class,
                 RecaudacionesApiClientSimulado::class,
