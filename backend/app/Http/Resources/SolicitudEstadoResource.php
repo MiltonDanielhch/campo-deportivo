@@ -7,12 +7,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * Estado público de una solicitud de reserva (HU-D7).
- * NO expone: nombre_pagador, telefono_pagador, referencia_recaudaciones
- * (son datos internos o del solicitante, no públicos).
+ * NO expone: nombre_pagador, telefono_pagador (son datos internos o del solicitante, no públicos).
  *
- * datos_cobro_pendiente (Fase WP.0) solo viaja mientras el estado es
- * 'pendiente': es lo que permite reabrir el link de pago y ver el mismo
- * QR/checkout. Una vez resuelta la solicitud, ya no tiene sentido.
+ * datos_cobro_pendiente solo viaja mientras el estado es 'pendiente':
+ * permite reabrir el link de pago y ver el mismo QR/código.
+ * Una vez resuelta la solicitud, ya no tiene sentido.
+ *
+ * SIREB v1: El QR se genera localmente a partir del código público (referencia_recaudaciones).
+ * No hay checkout_url ni imágenes QR pre-renderizadas.
  */
 class SolicitudEstadoResource extends JsonResource
 {
@@ -23,10 +25,17 @@ class SolicitudEstadoResource extends JsonResource
             'estado' => $this->estado->value,
             'monto_total' => (float) $this->monto_total,
             'expira_en' => $this->expira_en?->toIso8601String(),
+
+            // SIREB v1: Construimos el objeto de cobro solo si está pendiente Y hay referencia_recaudaciones
             'datos_cobro_pendiente' => $this->when(
-                $this->estado->value === 'pendiente',
-                fn () => $this->datos_cobro_pendiente,
+                $this->estado->value === 'pendiente' && $this->referencia_recaudaciones,
+                fn () => [
+                    'qr_string' => "SIREB:{$this->referencia_recaudaciones}",
+                    'codigo_publico' => $this->referencia_recaudaciones,
+                    'checkout_url' => null, // SIREB v1 no usa checkout
+                ],
             ),
+
             'reservas' => $this->when(
                 $this->estado->value === 'confirmada',
                 fn () => $this->reservas->map(fn ($reserva) => [
@@ -35,7 +44,7 @@ class SolicitudEstadoResource extends JsonResource
                     'fecha' => $reserva->fecha_reserva->format('Y-m-d'),
                     'hora_inicio' => substr($reserva->hora_inicio, 0, 5),
                     'hora_fin' => substr($reserva->hora_fin, 0, 5),
-                    'confirmado_en' => $reserva->confirmado_en?->toIso8601String(), // NUEVO
+                    'confirmado_en' => $reserva->confirmado_en?->toIso8601String(),
                 ]),
             ),
         ];

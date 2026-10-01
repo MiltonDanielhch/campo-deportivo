@@ -238,7 +238,7 @@ feat(sireb): Fase 8.3 - confirmación por polling y sincronización de tarifas
 
 ## ⏳ FASE 8.4 — Frontend Web Pública (Pago.tsx con QR del código público)
 
-**Estado:** ⏳ Pendiente
+**Estado:** ✅ **COMPLETADA** (con tareas adicionales surgidas durante la implementación)
 **Depende de:** Fase 8.3 ✅
 
 ### Decisión de UX
@@ -273,15 +273,15 @@ frontend genera la imagen QR del string usando una librería como
 ### Tareas
 
 ```
-[ ] Generar qr_string en SolicitudReservaService
+[✅] Generar qr_string en SolicitudReservaService
     → Al guardar datos_cobro_pendiente, construir:
       "SIREB:{codigo_publico}"
     → El frontend lo convierte en imagen QR con librería cliente
 ```
 
 ```
-[ ] Actualizar Pago.tsx
-    → Renderizar QR con qr_string (usando qrcode.react o similar)
+[✅] Actualizar Pago.tsx
+    → Renderizar QR con qr_string (usando qrcode.react)
     → Mostrar codigo_publico en grande al lado del QR (con botón Copiar)
     → Mensaje claro: "Presentá este código o escaneá el QR en ventanilla
       del Banco Unión junto con tu CI para pagar tu reserva"
@@ -294,7 +294,41 @@ frontend genera la imagen QR del string usando una librería como
 ```
 
 ```
-[ ] Mensajes específicos por motivo_rechazo
+[✅] SolicitudEstadoResource expone datos_cobro_pendiente correctamente
+    → Construye el objeto inline solo si estado=pendiente Y hay referencia_recaudaciones
+    → Incluye qr_string, codigo_publico, checkout_url:null
+```
+
+```
+[✅] FIX: RecaudacionesApiClient retry() closure
+    → El closure de retry recibe RequestException, no PendingRequest
+    → El status de la respuesta fallida se lee de $exception->response
+    → Import agregado: use Illuminate\Http\Client\RequestException
+```
+
+```
+[✅] FIX: CI/NIT obligatorio en StoreSolicitudReservaRequest
+    → Cambiado de nullable a required
+    → Regex: /^[\d\-\.]+$/ (solo dígitos, guiones y puntos)
+    → Mensaje de error personalizado
+```
+
+```
+[✅] FIX: Validación defensiva en ReintentarSolicitudJob
+    → Si ci_nit_pagador o nombre_pagador están vacíos, rechaza con motivo
+      'datos_pagador_incompletos' en lugar de tirar TypeError
+    → Log de error con detalles de la solicitud
+```
+
+```
+[✅] FIX: FormularioSolicitante.tsx (frontend)
+    → CI/NIT marcado como obligatorio (asterisco rojo)
+    → Validación Zod: min 6 caracteres, regex numérico
+    → Mensaje de ayuda: "Necesario para emitir la orden de cobro en el banco"
+```
+
+```
+[❌] Mensajes específicos por motivo_rechazo
     → 'error_cobro_inicial' (SIREB caído al crear liquidación)
       → "No pudimos conectar con el sistema de pagos. Intentá nuevamente
         en unos minutos o contactá a soporte"
@@ -305,19 +339,25 @@ frontend genera la imagen QR del string usando una librería como
       → "La liquidación fue anulada. Por favor generá una nueva reserva"
     → 'expirada_sin_pago' (timer venció)
       → "El tiempo para pagar expiró. Generá una nueva reserva"
+    
+    NOTA: Actualmente Pago.tsx muestra mensajes genéricos para expirada/rechazada.
+    Falta mapear motivo_rechazo a mensajes específicos.
 ```
 
 ```
-[ ] Página /estado/{codigo_seguimiento}
+[❌] Página /estado/{codigo_seguimiento} (separada de /pago)
     → Consultar SolicitudReservaService::consultar()
     → Mostrar estado actual + código de seguimiento
     → Si estado=pending: countdown + botón "Refrescar" + QR
     → Si estado=confirmada: link al comprobante
     → Si estado=expirada/rechazada: mensaje + botón "Nueva reserva"
+    
+    NOTA: Actualmente Pago.tsx maneja todos los estados. Podría separarse
+    en una ruta /estado para consultas posteriores al flujo de pago.
 ```
 
 ```
-[ ] Tests manuales / Playwright
+[❌] Tests manuales / Playwright
     → Flujo completo desde web pública hasta comprobante
     → Verificar que el QR se renderiza correctamente
     → Verificar que Copiar funciona
@@ -325,9 +365,26 @@ frontend genera la imagen QR del string usando una librería como
     → Verificar que el link a SIREB abre la liquidación correcta
 ```
 
+### Tareas adicionales completadas (no previstas inicialmente)
+
+```
+[✅] Recuperación de solicitud rota
+    → Script tinker para actualizar ci_nit_pagador de reserva legacy
+    → queue:retry para re-dispatch de jobs fallidos
+    → Validación end-to-end del flujo completo
+```
+
+```
+[✅] Gotchas operativas documentadas
+    → queue:work obligatorio en local (sin worker, solicitudes quedan sin liquidación)
+    → ci_nit_pagador es REQUIRED (SIREB exige cliente para liquidar)
+    → retry() de Http client usa $exception->response, no $request->response
+    → SolicitudEstadoResource construye datos_cobro_pendiente inline
+```
+
 ### Commit sugerido
 ```
-feat(web-public): Pago.tsx con QR del codigo_publico de SIREB
+feat(web-public): Pago.tsx con QR del codigo_publico de SIREB + fixes: retry ApiClient, CI/NIT obligatorio, Resource estado expone cobro SIREB
 ```
 
 ---

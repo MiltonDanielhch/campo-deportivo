@@ -11,7 +11,11 @@ const schema = z.object({
   telefono_pagador: z
     .string()
     .regex(/^[0-9]{8}$/, 'El teléfono debe tener 8 dígitos'),
-  ci_nit_pagador: z.string().optional(),
+  // SIREB v1: CI/NIT obligatorio para crear liquidaciones
+  ci_nit_pagador: z
+    .string()
+    .min(6, 'El CI/NIT debe tener al menos 6 caracteres')
+    .regex(/^[\d\-\.]+$/, 'El CI/NIT solo puede contener números, guiones y puntos'),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -102,14 +106,26 @@ export default function FormularioSolicitante({
         <div>
           <Label htmlFor="ci_nit_pagador" className="flex items-center gap-1.5 mb-2">
             <IdCard className="w-3.5 h-3.5 text-slate-400" />
-            CI/NIT <span className="text-slate-400 text-xs">(opcional)</span>
+            <span>
+              CI/NIT <span className="text-red-500">*</span>
+            </span>
           </Label>
           <Input
             id="ci_nit_pagador"
             {...register('ci_nit_pagador')}
             placeholder="1234567"
             disabled={cargando}
+            className={errors.ci_nit_pagador ? 'border-red-300' : ''}
           />
+          {errors.ci_nit_pagador && (
+            <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-red-500" />
+              {errors.ci_nit_pagador.message}
+            </p>
+          )}
+          <p className="text-xs text-slate-500 mt-1.5">
+            Necesario para emitir la orden de cobro en el banco
+          </p>
         </div>
 
         <Button

@@ -56,6 +56,18 @@ class ReintentarSolicitudJob implements ShouldQueue
             return;
         }
 
+        // ─── Validación defensiva: datos del pagador completos ───
+        if (blank($solicitud->ci_nit_pagador) || blank($solicitud->nombre_pagador)) {
+            Log::channel('sireb')->error('Solicitud sin datos de pagador completos, rechazando', [
+                'solicitud_id' => $solicitud->id,
+                'codigo_seguimiento' => $solicitud->codigo_seguimiento,
+                'ci_nit_pagador' => $solicitud->ci_nit_pagador,
+                'nombre_pagador' => $solicitud->nombre_pagador,
+            ]);
+            $this->rechazarPorDatosIncompletos($solicitud, $auditoria);
+            return; // No reintentar, datos incompletos no se arreglan solos
+        }
+
         try {
             $this->crearLiquidacionEnSireb($solicitud, $client, $catalogo);
 
@@ -145,6 +157,29 @@ class ReintentarSolicitudJob implements ShouldQueue
             null,
             ['intentos_realizados' => $this->tries],
             ['motivo_rechazo' => 'error_cobro_inicial', 'error' => $e->getMessage()],
+        );
+    }
+
+    private function rechazarPorDatosIncompletos(
+        SolicitudReserva $solicitud,
+        AuditoriaService $auditoria,
+    ): void {
+        $solicitud->update([
+            'estado' => EstadoSolicitudReserva::Rechazada,
+            'motivo_rechazo' => 'datos_pagador_incompletos',
+        ]);
+
+        $auditoria->registrar(
+            'solicitudes_reserva',
+            $solicitud->id,
+            'rechazada_datos_incompletos',
+            null,
+            [],
+            [
+                'motivo_rechazo' => 'datos_pagador_incompletos',
+                'ci_nit_pagador' => $solicitud->ci_nit_pagador,
+                'nombre_pagador' => $solicitud->nombre_pagador,
+            ],
         );
     }
 }

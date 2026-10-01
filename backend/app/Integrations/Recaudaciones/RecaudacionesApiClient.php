@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Client\RequestException;
 
 /**
  * Cliente HTTP real para SIREB (Gateway de Recaudaciones GAD Beni).
@@ -192,10 +193,17 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
                 ->acceptJson()
                 ->timeout($this->timeoutSeconds)
                 ->connectTimeout(min(5, $this->timeoutSeconds))
-                ->retry(3, 100, function ($exception, $request) {
+                // ✅ DESPUÉS
+                ->retry(3, 100, function (\Exception $exception, $request) {
                     // Solo reintentar en errores de conexión o 5xx
-                    return $exception instanceof ConnectionException
-                        || ($request->response && $request->response->status() >= 500);
+                    if ($exception instanceof ConnectionException) {
+                        return true;
+                    }
+                    // RequestException envuelve la respuesta HTTP fallida
+                    if ($exception instanceof \Illuminate\Http\Client\RequestException) {
+                        return $exception->response->status() >= 500;
+                    }
+                    return false;
                 })
                 ->{$method}($path, $payload ?: null);
         } catch (ConnectionException $e) {
