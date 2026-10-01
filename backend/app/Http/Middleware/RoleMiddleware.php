@@ -11,13 +11,18 @@ class RoleMiddleware
     /**
      * Verifica que el funcionario autenticado tenga el rol requerido.
      * Uso: ->middleware('role:admin_parametricas')
-     *       ->middleware('role:admin_parametricas|gerencia')  (cualquiera de los dos)
+     *       ->middleware('role:admin_parametricas|gerencia')   (cualquiera de los dos)
+     *       ->middleware('role:admin_parametricas,gerencia')   (coma también vale)
+     *
+     * Laravel separa los argumentos de middleware por COMA, por lo que un
+     * string tipo "a|b" llega como UN solo argumento. Aquí normalizamos
+     * tanto `|` como `,` a una lista plana de roles antes de comparar.
      */
     public function handle(Request $request, Closure $next, string ...$rolesPermitidos): Response
     {
-        $funcionario = $request->user();
+        $funcionario = $request->user() ?? $request->attributes->get('funcionario');
 
-        // Sin usuario autenticado → 401 (aunque auth:sanctum ya debería haberlo rechazado antes)
+        // Sin usuario autenticado → 401
         if (! $funcionario) {
             return response()->json([
                 'message' => 'No autenticado',
@@ -30,6 +35,16 @@ class RoleMiddleware
                 'message' => 'Usuario inactivo. Contacta al administrador.',
             ], 403);
         }
+
+        // Normalizar separadores: cada argumento puede traer "a|b" o "a,b".
+        $rolesPermitidos = collect($rolesPermitidos)
+            ->flatMap(
+                fn (string $r) => preg_split('/[,|]/', $r, -1, PREG_SPLIT_NO_EMPTY)
+            )
+            ->map(fn (string $r) => trim($r))
+            ->filter()
+            ->values()
+            ->all();
 
         // Validar rol (el helper tienePermiso acepta wildcard '*')
         $tienePermiso = false;

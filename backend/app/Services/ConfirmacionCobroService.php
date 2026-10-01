@@ -7,6 +7,7 @@ use App\Models\Reserva;
 use App\Models\SolicitudReserva;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use App\Events\SolicitudConfirmada;
 
 /**
  * Servicio compartido de confirmación de cobro.
@@ -67,6 +68,9 @@ class ConfirmacionCobroService
                     ]);
                 }
             });
+
+            // ─── NUEVO: Disparar evento de confirmación ───
+            event(new SolicitudConfirmada($solicitud));
         } catch (QueryException $e) {
             // 23505 = unique_violation: ya se procesó (idempotencia por restricción de BD)
             if ($e->getCode() === '23505') {

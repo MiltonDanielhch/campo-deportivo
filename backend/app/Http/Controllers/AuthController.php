@@ -63,35 +63,81 @@ class AuthController extends Controller
             return redirect(config('services.ibare.spa_url').'/?auth_error=state');
         }
 
-        \Log::info('Canjeando código con Ibare', [
-            'client_id' => config('services.ibare.client_id'),
-            'redirect_uri' => config('services.ibare.redirect_uri'),
+        $tokenUrl = config('services.ibare.base_url').'/oauth/token';
+        $clientId = config('services.ibare.client_id');
+        $clientSecret = config('services.ibare.client_secret');
+        $redirectUri = config('services.ibare.redirect_uri');
+        $codeVerifier = Session::get('oauth_code_verifier');
+
+        \Log::info('=== INICIO diagnóstico OAuth2 Ibare ===', [
+            'token_url' => $tokenUrl,
+            'client_id' => $clientId,
+            'redirect_uri' => $redirectUri,
         ]);
 
-        $response = Http::asForm()->post(config('services.ibare.base_url').'/oauth/token', [
+        $payloadBase = [
             'grant_type' => 'authorization_code',
-            'client_id' => config('services.ibare.client_id'),
-            'client_secret' => config('services.ibare.client_secret'),
-            'redirect_uri' => config('services.ibare.redirect_uri'),
+            'redirect_uri' => $redirectUri,
             'code' => $request->code,
-            'code_verifier' => Session::get('oauth_code_verifier'),
+            'code_verifier' => $codeVerifier,
+        ];
+
+        // ─── Variante 1: POST body con client_id y client_secret ───
+        \Log::info('Variante 1: POST body con credenciales');
+        $response1 = Http::timeout(10)->asForm()->post($tokenUrl, array_merge($payloadBase, [
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+        ]));
+        \Log::info('Respuesta Variante 1', [
+            'status' => $response1->status(),
+            'body' => $response1->json(),
         ]);
 
-        \Log::info('Respuesta de Ibare', [
-            'status' => $response->status(),
-            'body' => $response->json(),
+        // ─── Variante 2: Basic Auth (credentials en header) ───
+        \Log::info('Variante 2: Basic Auth');
+        $response2 = Http::timeout(10)
+            ->withBasicAuth($clientId, $clientSecret)
+            ->asForm()
+            ->post($tokenUrl, $payloadBase);
+        \Log::info('Respuesta Variante 2', [
+            'status' => $response2->status(),
+            'body' => $response2->json(),
         ]);
+
+        // ─── Variante 3: Solo client_id en body (cliente público) ───
+        \Log::info('Variante 3: Solo client_id (cliente público)');
+        $response3 = Http::timeout(10)->asForm()->post($tokenUrl, array_merge($payloadBase, [
+            'client_id' => $clientId,
+        ]));
+        \Log::info('Respuesta Variante 3', [
+            'status' => $response3->status(),
+            'body' => $response3->json(),
+        ]);
+
+        // Tomar la primera que funcione
+        $response = null;
+        $varianteGanadora = null;
+        foreach ([$response1, $response2, $response3] as $i => $r) {
+            if ($r->successful()) {
+                $response = $r;
+                $varianteGanadora = $i + 1;
+                break;
+            }
+        }
 
         Session::forget(['oauth_state', 'oauth_code_verifier']);
 
-        if (! $response->successful()) {
-            \Log::error('Error al canjear código en Ibare', [
-                'status' => $response->status(),
-                'body' => $response->json(),
+        if (!$response || $response->failed()) {
+            \Log::error('=== FIN diagnóstico: ninguna variante funcionó ===', [
+                'variante1_status' => $response1->status(),
+                'variante2_status' => $response2->status(),
+                'variante3_status' => $response3->status(),
             ]);
 
             return redirect(config('services.ibare.spa_url').'/?auth_error=canje');
         }
+
+        \Log::info("=== FIN diagnóstico: Variante {$varianteGanadora} funcionó ===");
 
         $this->guardarTokens($response->json());
 
@@ -102,7 +148,7 @@ class AuthController extends Controller
 
         return redirect(config('services.ibare.spa_url'));
     }
-
+    
     public function me(Request $request)
     {
         $funcionario = $request->attributes->get('funcionario');

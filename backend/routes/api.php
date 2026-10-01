@@ -88,7 +88,7 @@ Route::middleware('auth.oauth')->group(function () {
             Route::get('/{campoDeportivo}', [CampoDeportivoController::class, 'show']);
             Route::put('/{campoDeportivo}', [CampoDeportivoController::class, 'update']);
             Route::patch('/{campoDeportivo}/estado', [CampoDeportivoController::class, 'cambiarEstado']);
-            Route::patch('/{campoDeportivo}/hora-noche', [CampoDeportivoController::class, 'actualizarHoraNoche']); // ← AGREGADA AQUÍ
+            Route::patch('/{campoDeportivo}/hora-noche', [CampoDeportivoController::class, 'actualizarHoraNoche']);
 
             // Tarifas del campo (HU-A3)
             Route::post('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'store']);
@@ -116,4 +116,17 @@ Route::middleware('auth.oauth')->group(function () {
         // Roles (para selects de alta de funcionarios)
         Route::get('/v1/roles', [RolController::class, 'index']);
     });
+
+    // ─── NUEVO (Fase 8.5): Rutas admin de solicitudes de reserva ───
+    // Gestión operativa: listado, detalle con info SIREB, anulación y refresh.
+    // Accesible para admin_parametricas O admin_reservas.
+    Route::middleware('role:admin_parametricas|admin_reservas')
+        ->prefix('v1/admin/solicitudes-reserva')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\Admin\SolicitudReservaController::class, 'index']);
+            Route::get('/{id}', [\App\Http\Controllers\Api\V1\Admin\SolicitudReservaController::class, 'show']);
+            Route::post('/{id}/anular-liquidacion', [\App\Http\Controllers\Api\V1\Admin\SolicitudReservaController::class, 'anularLiquidacion']);
+            Route::get('/{id}/refrescar-sireb', [\App\Http\Controllers\Api\V1\Admin\SolicitudReservaController::class, 'refrescarSireb']);
+        });
+    // ─── FIN bloque Fase 8.5 ───
 });
