@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1\Public;
 
+use App\Jobs\ReintentarSolicitudJob;
 use App\Models\CampoDeportivo;
 use App\Models\Funcionario;
 use App\Models\HorarioAtencion;
@@ -11,10 +12,15 @@ use App\Models\TarifaCampo;
 use App\Models\TipoCampo;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
- * Integración con el Core de Recaudaciones vía cliente simulado (HU-D3, HU-D8).
+ * Integración con SIREB vía cliente simulado (HU-D3, HU-D8 adaptado a SIREB v1).
+ *
+ * Diseño nuevo: si SIREB falla al crear la liquidación, la solicitud NO se
+ * rechaza de inmediato — queda 'pendiente' y se despacha ReintentarSolicitudJob
+ * (5 intentos × 60s). La franja sigue ocupada mientras esté pendiente.
  */
 class SolicitudReservaCobroTest extends TestCase
 {
@@ -25,6 +31,10 @@ class SolicitudReservaCobroTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Cola fake: los jobs (Expirar/Polling/Reintentar) NO se ejecutan inline.
+        // Así la solicitud queda 'pendiente' y los asserts de estado son fiables.
+        Queue::fake();
 
         $rol = Rol::create(['nombre' => 'admin_test', 'permisos' => ['*']]);
         $admin = Funcionario::create([
@@ -46,6 +56,8 @@ class SolicitudReservaCobroTest extends TestCase
             'latitud' => -14.84,
             'longitud' => -64.90,
             'estado' => 'activo',
+            // UUID del catálogo fake del simulador (SERVICIO_ID)
+            'servicio_sireb_id' => 'aaaaaaaa-0000-4000-8000-000000000001',
         ]);
 
         for ($dia = 1; $dia <= 7; $dia++) {
@@ -59,6 +71,7 @@ class SolicitudReservaCobroTest extends TestCase
 
         TarifaCampo::create([
             'campo_id' => $this->campo->id,
+            'tipo_tarifa' => 'diurna',
             'precio_por_hora' => 150,
             'vigente_desde' => now(),
             'creado_por' => $admin->id,
@@ -70,6 +83,7 @@ class SolicitudReservaCobroTest extends TestCase
         return [
             'nombre_pagador' => 'Juan Pérez',
             'telefono_pagador' => '70000000',
+            'ci_nit_pagador' => '1234567', // requerido por el flujo SIREB (buscarCliente)
             'franjas' => [[
                 'campo_id' => $this->campo->id,
                 'fecha' => Carbon::tomorrow()->toDateString(),
@@ -86,42 +100,56 @@ class SolicitudReservaCobroTest extends TestCase
         $response = $this->postJson('/api/v1/public/solicitudes-reserva', $this->payload());
 
         $response->assertStatus(201);
-        $response->assertJsonPath('cobro.referencia_recaudaciones', fn ($v) => str_starts_with($v, 'CORE-SIM-'));
-        $response->assertJsonPath('cobro.qr_string', fn ($v) => is_string($v) && $v !== '');
-        $response->assertJsonPath('cobro.checkout_url', fn ($v) => is_string($v) && $v !== '');
+        // SIREB v1: referencia = código público (SIM-... en simulado)
+        $response->assertJsonPath('cobro.referencia_recaudaciones', fn ($v) => is_string($v) && str_starts_with($v, 'SIM-'));
+        // El QR se arma localmente con el código público
+        $response->assertJsonPath('cobro.qr_string', fn ($v) => is_string($v) && str_starts_with($v, 'SIREB:'));
+        // SIREB v1 no tiene checkout electrónico
+        $response->assertJsonPath('cobro.checkout_url', null);
 
         $solicitud = SolicitudReserva::first();
         $this->assertNotNull($solicitud->referencia_recaudaciones);
+        $this->assertNotNull($solicitud->liquidacion_id, 'Debe guardar el id de SIREB para poder anular después');
         $this->assertSame('pendiente', $solicitud->estado->value);
+
+        // Éxito → no se despachó job de reintento
+        Queue::assertPushed(ReintentarSolicitudJob::class, 0);
     }
 
-    public function test_fallo_conexion_rechaza_libera_y_audita(): void
+    public function test_fallo_conexion_despacha_reintento_y_queda_pendiente(): void
     {
         config(['services.recaudaciones.simulado_modo' => 'fallo_conexion']);
 
-        $this->postJson('/api/v1/public/solicitudes-reserva', $this->payload())
-            ->assertStatus(503);
-
-        $solicitud = SolicitudReserva::first();
-        $this->assertSame('rechazada', $solicitud->estado->value, 'HU-D8: rechazo inmediato, no a los 15 min');
-
-        $this->assertDatabaseHas('auditoria', ['accion' => 'fallo_conexion_core']);
-
-        // La franja quedó liberada al acto: una nueva solicitud pasa sin chocar
-        config(['services.recaudaciones.simulado_modo' => 'exito']);
+        // Diseño nuevo: NO se rechaza de inmediato ni se responde 503.
+        // La solicitud queda pendiente y el reintento va en background.
         $this->postJson('/api/v1/public/solicitudes-reserva', $this->payload())
             ->assertStatus(201);
 
-        $this->assertSame(2, SolicitudReserva::count());
+        $solicitud = SolicitudReserva::first();
+        $this->assertSame('pendiente', $solicitud->estado->value);
+        $this->assertNull($solicitud->referencia_recaudaciones, 'Sin liquidación todavía');
+        $this->assertNull($solicitud->liquidacion_id);
+
+        Queue::assertPushed(ReintentarSolicitudJob::class, 1);
+
+        // La franja sigue ocupada por la solicitud pendiente (no se libera al acto):
+        // una segunda solicitud de la misma franja choca con el EXCLUDE → 409.
+        config(['services.recaudaciones.simulado_modo' => 'exito']);
+        $this->postJson('/api/v1/public/solicitudes-reserva', $this->payload())
+            ->assertStatus(409);
+
+        $this->assertSame(1, SolicitudReserva::count(), 'La segunda solicitud no debe crearse');
     }
 
-    public function test_fallo_conexion_responde_503_no_500(): void
+    public function test_fallo_conexion_no_revienta_500(): void
     {
         config(['services.recaudaciones.simulado_modo' => 'fallo_conexion']);
 
+        // El espíritu del test original (no 500) se conserva: la caída de SIREB
+        // no rompe la request — responde 201 con la solicitud pendiente.
         $response = $this->postJson('/api/v1/public/solicitudes-reserva', $this->payload());
 
-        $response->assertStatus(503);
-        $response->assertJsonPath('error', 'servicio_cobro_no_disponible');
+        $response->assertStatus(201);
+        $response->assertJsonMissingPath('error');
     }
 }

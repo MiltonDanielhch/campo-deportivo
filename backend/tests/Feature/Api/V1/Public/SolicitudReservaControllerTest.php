@@ -12,6 +12,7 @@ use App\Models\TarifaCampo;
 use App\Models\TipoCampo;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;   // ← facade, no Illuminate\Queue\Queue
 use Tests\TestCase;
 
 /**
@@ -50,6 +51,8 @@ class SolicitudReservaControllerTest extends TestCase
         ]);
 
         $this->campo = $this->crearCampoConHorariosYTarifa();
+
+        Queue::fake(); // ← los jobs no corren inline; la solicitud queda pendiente
     }
 
     /**
@@ -80,9 +83,10 @@ class SolicitudReservaControllerTest extends TestCase
         if ($precio > 0) {
             TarifaCampo::create([
                 'campo_id' => $campo->id,
+                'tipo_tarifa' => 'diurna',
                 'precio_por_hora' => $precio,
                 'vigente_desde' => now(),
-                'creado_por' => $this->adminFicticio->id, // ← NOT NULL
+                'creado_por' => $this->adminFicticio->id,
             ]);
         }
 

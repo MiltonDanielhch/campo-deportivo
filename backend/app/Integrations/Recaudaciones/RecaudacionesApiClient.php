@@ -263,8 +263,11 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
      * Busca un cliente por CI/NIT en SIREB.
      * Devuelve null si no existe (404 o array vacío).
      */
-    public function buscarCliente(string $ciNit): ?array
+    public function buscarCliente(?string $ciNit): ?array
     {
+        if (blank($ciNit)) {
+            return null;
+        }
         try {
             $response = $this->request('get', '/api/v1/clientes', [
                 'ci_nit' => $ciNit,

@@ -3,25 +3,23 @@
 namespace App\Services;
 
 use App\DTOs\FranjaSolicitadaDTO;
-use App\DTOs\SolicitudCobroDTO;
 use App\DTOs\SolicitudCreadaDTO;
 use App\DTOs\SolicitudReservaDTO;
 use App\Enums\EstadoSolicitudReserva;
 use App\Exceptions\FranjaNoDisponibleException;
-use App\Exceptions\RecaudacionesApiException;
-use App\Exceptions\ServicioDeCobroNoDisponibleException;
 use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Jobs\ExpirarSolicitudJob;
 use App\Jobs\PollingSolicitudJob;
+use App\Jobs\ReintentarSolicitudJob;
 use App\Models\CampoDeportivo;
 use App\Models\ParametroSistema;
 use App\Models\SolicitudReserva;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
-use App\Services\CatalogoSirebService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Creación de solicitudes de reserva multi-franja (HU-D1, HU-D2, HU-D3, HU-D8).
@@ -30,9 +28,16 @@ use Illuminate\Support\Facades\Log;
  *   1. Verificación rápida (aplicativa) con la grilla del Módulo 3.
  *   2. Escritura protegida: la restricción EXCLUDE decide en concurrencia.
  *
- * Recién DESPUÉS de que la transacción tiene éxito se llama al Core de
- * Recaudaciones — nunca antes. Si el Core no responde (HU-D8), la
- * solicitud queda 'rechazada' de inmediato y la franja se libera al acto.
+ * Recién DESPUÉS de que la transacción tiene éxito se llama a SIREB.
+ * Si SIREB no responde (HU-D8), la solicitud queda 'pendiente' y se
+ * despacha un ReintentarSolicitudJob (5 reintentos × 60s). Solo si los
+ * 5 fallan, la solicitud pasa a 'rechazada' con motivo 'error_cobro_inicial'
+ * y la franja se libera.
+ *
+ * El monto de la solicitud se calcula localmente como ESTIMACIÓN (según
+ * tipo de tarifa diurna/nocturna de la franja). Al crear la liquidación,
+ * SIREB es la fuente de verdad: monto_total se sobrescribe con el monto
+ * devuelto por el gateway.
  */
 class SolicitudReservaService
 {
@@ -74,7 +79,7 @@ class SolicitudReservaService
                         'fecha_reserva' => $franja->fecha,
                         'hora_inicio' => $franja->horaInicio,
                         'hora_fin' => $franja->horaFin,
-                        'tarifa_aplicada' => $campos[$franja->campoId]['tarifa'],
+                        'tarifa_aplicada' => $this->precioDeFranja($franja, $campos[$franja->campoId]),
                     ]);
                 }
 
@@ -82,6 +87,9 @@ class SolicitudReservaService
             });
         } catch (QueryException $e) {
             if ($e->getCode() === '23P01') {
+                // La restricción EXCLUDE decidió. Re-corremos la verificación
+                // rápida contra datos ya commiteados para identificar CUÁL
+                // franja perdió y devolvérsela estructurada a la app.
                 try {
                     $this->verificarFranjas($datos->franjas);
                 } catch (FranjaNoDisponibleException $especifica) {
@@ -124,8 +132,6 @@ class SolicitudReservaService
             ->delay(now()->addSeconds($intervaloPolling ?: 20));
 
         // ── Devolver respuesta al frontend ──
-        // El cliente real ya no usa SolicitudCobroDTO, devolvemos datos
-        // de la solicitud misma (con o sin liquidación creada).
         return $this->construirRespuesta($solicitud);
     }
 
@@ -163,13 +169,15 @@ class SolicitudReservaService
             referenciaExterna: $solicitud->codigo_seguimiento,
         );
 
-        // 4. Persistir referencias
+        // 4. Persistir referencias (SIREB manda el monto autoritativo)
         $solicitud->update([
             'referencia_recaudaciones' => $liquidacion['codigo_publico'],
             'liquidacion_id' => $liquidacion['id'],
-            'monto_total' => $liquidacion['monto'],   // ← SIREB manda
+            'monto_total' => $liquidacion['monto'],
             'datos_cobro_pendiente' => [
                 'codigo_publico' => $liquidacion['codigo_publico'],
+                'qr_string' => 'SIREB:'.$liquidacion['codigo_publico'],
+                'qr_image_base64' => null,
                 'monto' => $liquidacion['monto'],
                 'fecha_vencimiento' => $liquidacion['fecha_vencimiento'],
                 'items' => $liquidacion['items'],
@@ -196,15 +204,15 @@ class SolicitudReservaService
      */
     private function construirRespuesta(SolicitudReserva $solicitud): SolicitudCreadaDTO
     {
-        // Si la liquidación se creó, usamos sus datos. Si no (reintento en
-        // background), devolvemos la solicitud sin datos de cobro todavía.
         $datosCobro = $solicitud->datos_cobro_pendiente ?? [];
 
-        // RespuestaCobroDTO legacy: los campos QR/checkout ya no aplican
-        // en SIREB v1 (solo pago manual), los dejamos como null.
+        // RespuestaCobroDTO legacy: qr_image_base64 y checkout_url ya no
+        // aplican en SIREB v1 (solo pago manual). El qr_string se arma
+        // localmente con el codigo_publico para que el frontend renderice
+        // un QR escaneable/copiable en ventanilla.
         $respuestaCore = new \App\DTOs\RespuestaCobroDTO(
             referenciaRecaudaciones: $datosCobro['codigo_publico'] ?? $solicitud->codigo_seguimiento,
-            qrString: null,
+            qrString: $datosCobro['qr_string'] ?? null,
             qrImageBase64: null,
             checkoutUrl: null,
         );
@@ -212,24 +220,12 @@ class SolicitudReservaService
         return new SolicitudCreadaDTO($solicitud, $respuestaCore);
     }
 
-    /** Descripción legible del cobro para el Core / comprobante. */
-    private function describirSolicitud(SolicitudReserva $solicitud): string
-    {
-        $detalle = $solicitud->detalles()->with('campo')->first();
-        $campoNombre = $detalle?->campo?->nombre ?? 'Campo';
-        $fecha = $detalle?->fecha_reserva?->format('d/m') ?? '';
-        $total = $solicitud->detalles()->count();
-
-        return "Reserva {$campoNombre} - {$fecha}"
-            . ($total > 1 ? " (+".($total - 1).' franjas)' : '');
-    }
-
     /**
      * Capa 1: valida estado del campo, tarifa vigente, ventana de fechas,
      * horario de atención y disponibilidad de cada franja contra la grilla.
      *
      * @param  FranjaSolicitadaDTO[]  $franjas
-     * @return array<string, array{tarifa: float}>
+     * @return array<string, array{tarifas: Collection<string, \App\Models\TarifaCampo>, inicio_noche: int}>
      */
     private function verificarFranjas(array $franjas): array
     {
@@ -249,14 +245,17 @@ class SolicitudReservaService
                 ]);
             }
 
-            $tarifa = $campo->tarifas()->whereNull('vigente_hasta')->first();
-            if (! $tarifa) {
+            $tarifasActivas = $campo->tarifas()->whereNull('vigente_hasta')->get();
+            if ($tarifasActivas->isEmpty()) {
                 throw ValidationException::withMessages([
                     'franjas' => "El campo {$campo->nombre} no tiene tarifa vigente definida.",
                 ]);
             }
 
-            $campos[$campo->id] = ['tarifa' => (float) $tarifa->precio_por_hora];
+            $campos[$campo->id] = [
+                'tarifas' => $tarifasActivas->keyBy('tipo_tarifa'),
+                'inicio_noche' => self::aSegundos($campo->hora_inicio_noche ?? '18:00:00'),
+            ];
 
             $fecha = Carbon::parse($primera->fecha)->startOfDay();
             $this->validarVentana($fecha);
@@ -352,8 +351,26 @@ class SolicitudReservaService
     private function calcularMontoTotal(array $franjas, array $campos): float
     {
         return (float) collect($franjas)->sum(
-            fn (FranjaSolicitadaDTO $f) => $campos[$f->campoId]['tarifa'],
+            fn (FranjaSolicitadaDTO $f) => $this->precioDeFranja($f, $campos[$f->campoId]),
         );
+    }
+
+    /**
+     * Precio por hora de una franja según su tipo (diurna/nocturna).
+     *
+     * Decide comparando hora_inicio de la franja contra hora_inicio_noche
+     * del campo. Si no existe la tarifa del tipo calculado (ej. un campo
+     * con solo diurna), cae a la primera activa disponible.
+     */
+    private function precioDeFranja(FranjaSolicitadaDTO $franja, array $campoInfo): float
+    {
+        $tipo = self::aSegundos($franja->horaInicio) < $campoInfo['inicio_noche']
+            ? 'diurna'
+            : 'nocturna';
+
+        $tarifa = $campoInfo['tarifas']->get($tipo) ?? $campoInfo['tarifas']->first();
+
+        return (float) $tarifa->precio_por_hora;
     }
 
     private function minutosExpiracion(): int

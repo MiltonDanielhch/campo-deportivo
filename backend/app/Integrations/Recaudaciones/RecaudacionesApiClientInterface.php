@@ -28,7 +28,7 @@ interface RecaudacionesApiClientInterface
      * Busca un cliente por CI/NIT en SIREB.
      * Devuelve null si no existe.
      */
-    public function buscarCliente(string $ciNit): ?array;
+    public function buscarCliente(?string $ciNit): ?array;
 
     /**
      * Registra un cliente nuevo en SIREB.
