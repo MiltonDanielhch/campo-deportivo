@@ -11,20 +11,18 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // Binding condicional por flag de config (no por env)
-        // Si simulador_habilitado=true → inyecta Simulado
-        // Si simulador_habilitado=false → inyecta cliente real
+        // Binding condicional: simulador vs cliente real
         $usarSimulador = config('services.recaudaciones.simulador_habilitado', true);
 
         if ($usarSimulador) {
             $this->app->singleton(
-                RecaudacionesApiClientInterface::class,
-                RecaudacionesApiClientSimulado::class,
+                \App\Integrations\Recaudaciones\RecaudacionesApiClientInterface::class,
+                \App\Integrations\Recaudaciones\RecaudacionesApiClientSimulado::class,
             );
         } else {
             $this->app->singleton(
-                RecaudacionesApiClientInterface::class,
-                RecaudacionesApiClient::class,
+                \App\Integrations\Recaudaciones\RecaudacionesApiClientInterface::class,
+                \App\Integrations\Recaudaciones\RecaudacionesApiClient::class,
             );
         }
     }

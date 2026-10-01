@@ -20,6 +20,8 @@ use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use App\Services\CatalogoSirebService;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Creación de solicitudes de reserva multi-franja (HU-D1, HU-D2, HU-D3, HU-D8).
@@ -42,6 +44,7 @@ class SolicitudReservaService
         private DisponibilidadService $disponibilidad,
         private RecaudacionesApiClientInterface $recaudaciones,
         private AuditoriaService $auditoria,
+        private CatalogoSirebService $catalogo,
     ) {
     }
 
@@ -50,7 +53,7 @@ class SolicitudReservaService
         // ── Capa 1: verificación rápida (aplicativa) ──
         $campos = $this->verificarFranjas($datos->franjas);
 
-        // ── Capa 2: escritura protegida (la garantía real es el EXCLUDE) ──
+        // ── Capa 2: escritura protegida (EXCLUDE) ──
         $expiracionMinutos = $this->minutosExpiracion();
 
         try {
@@ -79,9 +82,6 @@ class SolicitudReservaService
             });
         } catch (QueryException $e) {
             if ($e->getCode() === '23P01') {
-                // La restricción EXCLUDE decidió. Re-corremos la verificación
-                // rápida contra datos ya commiteados para identificar CUÁL
-                // franja perdió y devolvérsela estructurada a la app.
                 try {
                     $this->verificarFranjas($datos->franjas);
                 } catch (FranjaNoDisponibleException $especifica) {
@@ -95,50 +95,119 @@ class SolicitudReservaService
             throw $e;
         }
 
-        // ── Recién aquí, con la transacción exitosa, se llama al Core ──
+        // ── Capa 3: crear liquidación en SIREB ──
         try {
-            $respuestaCore = $this->recaudaciones->solicitarCobro(new SolicitudCobroDTO(
-                referenciaExterna: $solicitud->codigo_seguimiento,
-                monto: (float) $solicitud->monto_total,
-                nombrePagador: $solicitud->nombre_pagador,
-                telefonoPagador: $solicitud->telefono_pagador,
-                ciNitPagador: $solicitud->ci_nit_pagador,
-                descripcion: $this->describirSolicitud($solicitud),
-            ));
-        } catch (RecaudacionesApiException $e) {
-            // HU-D8: resolución inmediata. No se despacha job de expiración:
-            // el estado queda resuelto de forma síncrona y la franja se
-            // libera en el acto (el EXCLUDE deja de verla como activa).
-            $solicitud->update(['estado' => EstadoSolicitudReserva::Rechazada]);
-
-            $this->auditoria->registrar(
-                'solicitudes_reserva',
-                $solicitud->id,
-                'fallo_conexion_core',
-                null,
-                null,
-                ['error' => $e->getMessage()],
+            $this->crearLiquidacionEnSireb($solicitud);
+        } catch (\Throwable $e) {
+            // En vez de rechazar de inmediato, despachamos job de reintento.
+            // La solicitud queda pendiente y libera la franja solo si todos
+            // los reintentos fallan (lo decide el job).
+            Log::channel('sireb')->warning(
+                'Creación de liquidación falló, despachando reintento',
+                [
+                    'solicitud_id' => $solicitud->id,
+                    'error' => $e->getMessage(),
+                ]
             );
 
-            throw new ServicioDeCobroNoDisponibleException(
-                'El sistema de cobro no está disponible en este momento. Intenta nuevamente en unos minutos.',
-            );
+            ReintentarSolicitudJob::dispatch($solicitud->id);
         }
 
+        // ── Despachar jobs de expiración y polling ──
+        ExpirarSolicitudJob::dispatch($solicitud->id)->delay($solicitud->expira_en);
+
+        $intervaloPolling = (int) ParametroSistema::where(
+            'clave',
+            'polling_intervalo_segundos'
+        )->value('valor');
+        PollingSolicitudJob::dispatch($solicitud->id)
+            ->delay(now()->addSeconds($intervaloPolling ?: 20));
+
+        // ── Devolver respuesta al frontend ──
+        // El cliente real ya no usa SolicitudCobroDTO, devolvemos datos
+        // de la solicitud misma (con o sin liquidación creada).
+        return $this->construirRespuesta($solicitud);
+    }
+
+    /**
+     * Crea la liquidación en SIREB (secuencia completa: cliente + items + POST).
+     *
+     * @throws \Throwable si algo falla (lo captura el caller para reintentar)
+     */
+    private function crearLiquidacionEnSireb(SolicitudReserva $solicitud): void
+    {
+        // 1. Buscar o registrar cliente en SIREB
+        $clienteSireb = $this->recaudaciones->buscarCliente($solicitud->ci_nit_pagador);
+        if (! $clienteSireb) {
+            $clienteSireb = $this->recaudaciones->registrarCliente([
+                'ci_nit' => $solicitud->ci_nit_pagador,
+                'nombre_completo' => $solicitud->nombre_pagador,
+                'telefono' => $solicitud->telefono_pagador,
+            ]);
+        }
+
+        // 2. Construir items (uno por franja con tarifa_id resuelto)
+        $items = [];
+        foreach ($solicitud->detalles as $detalle) {
+            $campo = $detalle->campo;
+            $tarifaId = $this->catalogo->resolverTarifaId($campo, $detalle->hora_inicio);
+            $items[] = ['tarifa_id' => $tarifaId, 'cantidad' => 1];
+        }
+
+        // 3. Crear liquidación con idempotencia
+        $idempotencyKey = "sedede:reserva:{$solicitud->id}";
+        $liquidacion = $this->recaudaciones->crearLiquidacion(
+            items: $items,
+            clienteId: $clienteSireb['id'],
+            idempotencyKey: $idempotencyKey,
+            referenciaExterna: $solicitud->codigo_seguimiento,
+        );
+
+        // 4. Persistir referencias
         $solicitud->update([
-            'referencia_recaudaciones' => $respuestaCore->referenciaRecaudaciones,
+            'referencia_recaudaciones' => $liquidacion['codigo_publico'],
+            'liquidacion_id' => $liquidacion['id'],
+            'monto_total' => $liquidacion['monto'],   // ← SIREB manda
             'datos_cobro_pendiente' => [
-                'qr_string' => $respuestaCore->qrString,
-                'qr_image_base64' => $respuestaCore->qrImageBase64,
-                'checkout_url' => $respuestaCore->checkoutUrl,
+                'codigo_publico' => $liquidacion['codigo_publico'],
+                'monto' => $liquidacion['monto'],
+                'fecha_vencimiento' => $liquidacion['fecha_vencimiento'],
+                'items' => $liquidacion['items'],
             ],
         ]);
 
-        // ── NUEVO: Despachar jobs de expiración y polling ──
-        ExpirarSolicitudJob::dispatch($solicitud->id)->delay($solicitud->expira_en);
+        $this->auditoria->registrar(
+            'solicitudes_reserva',
+            $solicitud->id,
+            'liquidacion_creada_sireb',
+            null,
+            ['estado' => 'pendiente'],
+            [
+                'liquidacion_id' => $liquidacion['id'],
+                'codigo_publico' => $liquidacion['codigo_publico'],
+                'monto' => $liquidacion['monto'],
+            ],
+        );
+    }
 
-        $intervaloPolling = (int) ParametroSistema::where('clave', 'polling_intervalo_segundos')->value('valor');
-        PollingSolicitudJob::dispatch($solicitud->id)->delay(now()->addSeconds($intervaloPolling ?: 20));
+    /**
+     * Construye la respuesta al frontend a partir de la solicitud.
+     * Compatible con SolicitudCreadaDTO sin depender del DTO de cobro.
+     */
+    private function construirRespuesta(SolicitudReserva $solicitud): SolicitudCreadaDTO
+    {
+        // Si la liquidación se creó, usamos sus datos. Si no (reintento en
+        // background), devolvemos la solicitud sin datos de cobro todavía.
+        $datosCobro = $solicitud->datos_cobro_pendiente ?? [];
+
+        // RespuestaCobroDTO legacy: los campos QR/checkout ya no aplican
+        // en SIREB v1 (solo pago manual), los dejamos como null.
+        $respuestaCore = new \App\DTOs\RespuestaCobroDTO(
+            referenciaRecaudaciones: $datosCobro['codigo_publico'] ?? $solicitud->codigo_seguimiento,
+            qrString: null,
+            qrImageBase64: null,
+            checkoutUrl: null,
+        );
 
         return new SolicitudCreadaDTO($solicitud, $respuestaCore);
     }

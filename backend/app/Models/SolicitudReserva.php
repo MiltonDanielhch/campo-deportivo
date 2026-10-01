@@ -19,7 +19,8 @@ class SolicitudReserva extends Model
     protected $fillable = [
         'codigo_seguimiento', 'monto_total', 'monto_confirmado',
         'nombre_pagador', 'telefono_pagador', 'ci_nit_pagador',
-        'referencia_recaudaciones', 'datos_cobro_pendiente', 'estado', 'expira_en',
+        'referencia_recaudaciones', 'datos_cobro_pendiente',
+        'liquidacion_id', 'estado', 'expira_en', 'motivo_rechazo',
     ];
 
     protected function casts(): array
