@@ -79,4 +79,37 @@ class OcupacionController extends Controller
             'data' => $resultado,
         ]);
     }
+
+    /**
+     * GET /api/v1/ocupacion/mapa-global?fecha=YYYY-MM-DD
+     *
+     * Devuelve todos los campos activos o en mantenimiento con su ocupación
+     * del día, coordenadas y metadatos administrativos (vínculo SIREB).
+     * Solo accesible para admin_parametricas y gerencia.
+     */
+    public function mapaGlobal(Request $request): JsonResponse
+    {
+        $fechaStr = $request->query('fecha', now()->toDateString());
+
+        try {
+            $fecha = Carbon::createFromFormat('Y-m-d', $fechaStr)->startOfDay();
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Fecha inválida. Use formato YYYY-MM-DD.',
+            ], 422);
+        }
+
+        $campos = $this->ocupacion->mapaGlobal($fecha);
+
+        return response()->json([
+            'data' => $campos,
+            'meta' => [
+                'fecha' => $fecha->toDateString(),
+                'total_campos' => count($campos),
+                'activos' => count(array_filter($campos, fn ($c) => $c['estado_operativo'] === 'activo')),
+                'en_mantenimiento' => count(array_filter($campos, fn ($c) => $c['estado_operativo'] === 'mantenimiento')),
+                'vinculados_sireb' => count(array_filter($campos, fn ($c) => $c['vinculacion_sireb']['vinculado'])),
+            ],
+        ]);
+    }
 }

@@ -27,7 +27,7 @@ class OcupacionTest extends TestCase
         $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
 
         $control = $this->crearFuncionarioControl();
-        $admin = $this->crearFuncionarioAdmin();
+        $admin = $this->crearFuncionarioAdminParametricas();
 
         $campo1 = $this->crearCampo('CAMPO-1', 'Cancha del Control');
         $campo2 = $this->crearCampo('CAMPO-2', 'Cancha del Admin');
@@ -53,7 +53,7 @@ class OcupacionTest extends TestCase
     {
         $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
 
-        $admin = $this->crearFuncionarioAdmin();
+        $admin = $this->crearFuncionarioAdminParametricas();
 
         $campo1 = $this->crearCampo('CAMPO-1', 'Cancha 1');
         $campo2 = $this->crearCampo('CAMPO-2', 'Cancha 2');
@@ -152,7 +152,7 @@ class OcupacionTest extends TestCase
     {
         $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
 
-        $admin = $this->crearFuncionarioAdmin();
+        $admin = $this->crearFuncionarioAdminParametricas();
         $campo = $this->crearCampo('CAMPO-TEST', 'Cancha Test');
 
         [$solicitud, $reserva] = $this->crearReservaConfirmada($campo, '2026-10-03', '18:00:00', '20:00:00');
@@ -221,6 +221,158 @@ class OcupacionTest extends TestCase
 
         $this->getJson('/api/v1/ocupacion/mis-campos?fecha=2026-10-03')
             ->assertForbidden();
+    }
+
+
+    public function test_mapa_global_devuelve_todos_los_campos_visibles(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $admin = $this->crearFuncionarioAdminParametricas();
+
+        $campo1 = $this->crearCampo('CAMPO-1', 'Cancha 1');
+        $campo2 = $this->crearCampo('CAMPO-2', 'Cancha 2');
+        $campo3 = $this->crearCampo('CAMPO-3', 'Cancha 3');
+
+        $campo1->update(['estado' => 'activo']);
+        $campo2->update(['estado' => 'activo']);
+        $campo3->update(['estado' => 'mantenimiento']);
+
+        $this->crearHorarioAtencion($campo1);
+        $this->crearHorarioAtencion($campo2);
+        $this->crearHorarioAtencion($campo3);
+
+        // Campo inactivo NO debe aparecer
+        $campo4 = $this->crearCampo('CAMPO-4', 'Cancha Inactiva');
+        $campo4->update(['estado' => 'inactivo']);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/v1/ocupacion/mapa-global?fecha=2026-10-03');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('meta.total_campos', 3)
+            ->assertJsonPath('meta.activos', 2)
+            ->assertJsonPath('meta.en_mantenimiento', 1);
+    }
+
+    public function test_mapa_global_incluye_coordenadas_y_vinculacion_sireb(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $admin = $this->crearFuncionarioAdminParametricas();
+
+        $campo = $this->crearCampo('CAMPO-TEST', 'Cancha Test');
+        $campo->update([
+            'latitud' => -14.83333333,
+            'longitud' => -64.90000000,
+            'servicio_sireb_id' => '11111111-1111-4111-8111-111111111111',
+            'servicio_sireb_codigo' => 'SEDEDE-CS1',
+        ]);
+
+        $this->crearHorarioAtencion($campo);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/v1/ocupacion/mapa-global?fecha=2026-10-03');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.0.latitud', -14.83333333)
+            ->assertJsonPath('data.0.longitud', -64.90000000)
+            ->assertJsonPath('data.0.vinculacion_sireb.vinculado', true)
+            ->assertJsonPath('data.0.vinculacion_sireb.servicio_sireb_codigo', 'SEDEDE-CS1');
+    }
+
+    public function test_mapa_global_incluye_resumen_de_ocupacion(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $admin = $this->crearFuncionarioAdminParametricas();
+
+        $campo = $this->crearCampo('CAMPO-TEST', 'Cancha Test');
+        $this->crearHorarioAtencion($campo);
+
+        // Crear 2 reservas confirmadas
+        $this->crearReservaConfirmada($campo, '2026-10-03', '18:00:00', '20:00:00');
+        $this->crearReservaConfirmada($campo, '2026-10-03', '20:00:00', '22:00:00');
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/v1/ocupacion/mapa-global?fecha=2026-10-03');
+
+        $response->assertOk();
+
+        $data = $response->json('data.0');
+
+        $this->assertArrayHasKey('resumen_ocupacion', $data);
+        $this->assertEquals(14, $data['resumen_ocupacion']['franjas_totales']); // 08:00-22:00 = 14 franjas
+        $this->assertEquals(4, $data['resumen_ocupacion']['franjas_ocupadas']); // 18-20 y 20-22 = 4 franjas
+        $this->assertEquals(10, $data['resumen_ocupacion']['franjas_libres']);
+        $this->assertGreaterThan(0, $data['resumen_ocupacion']['porcentaje_ocupacion']);
+    }
+
+    public function test_funcionario_control_recibe_403_en_mapa_global(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $control = $this->crearFuncionarioControl();
+
+        Sanctum::actingAs($control);
+
+        $this->getJson('/api/v1/ocupacion/mapa-global?fecha=2026-10-03')
+            ->assertForbidden();
+    }
+
+    public function test_gerencia_puede_acceder_al_mapa_global(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $gerencia = $this->crearFuncionarioGerencia();
+
+        $campo = $this->crearCampo('CAMPO-TEST', 'Cancha Test');
+        $this->crearHorarioAtencion($campo);
+
+        Sanctum::actingAs($gerencia);
+
+        $this->getJson('/api/v1/ocupacion/mapa-global?fecha=2026-10-03')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
+    public function test_mapa_global_fecha_invalida_devuelve_422(): void
+    {
+        $admin = $this->crearFuncionarioAdminParametricas();
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/v1/ocupacion/mapa-global?fecha=invalida')
+            ->assertStatus(422);
+    }
+
+    public function test_mapa_global_detecta_campo_no_vinculado_a_sireb(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $admin = $this->crearFuncionarioAdminParametricas();
+
+        $campo = $this->crearCampo('CAMPO-TEST', 'Cancha Sin SIREB');
+        // No seteamos servicio_sireb_id
+        $this->crearHorarioAtencion($campo);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/v1/ocupacion/mapa-global?fecha=2026-10-03');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.0.vinculacion_sireb.vinculado', false)
+            ->assertJsonPath('data.0.vinculacion_sireb.servicio_sireb_id', null);
+
+        $meta = $response->json('meta');
+        $this->assertEquals(0, $meta['vinculados_sireb']);
     }
 
     // ─────────────────────────────────────────────
@@ -360,5 +512,36 @@ class OcupacionTest extends TestCase
         ]);
 
         return [$solicitud, $reserva];
+    }
+
+    private function crearFuncionarioGerencia(): Funcionario
+    {
+        $rol = $this->crearRol('gerencia');
+        $rol->update(['permisos' => ['*']]);
+
+        return Funcionario::create([
+            'nombre_completo' => 'Gerencia',
+            'ci' => '333333',
+            'usuario' => 'gerencia-'.Str::random(6),
+            'password_hash' => bcrypt('secret'),
+            'rol_id' => $rol->id,
+            'estado' => 'activo',
+            'mamore_id' => random_int(100000, 999999),
+        ]);
+    }
+
+    private function crearFuncionarioAdminParametricas(): Funcionario
+    {
+        $rol = $this->crearRol('admin_parametricas');
+
+        return Funcionario::create([
+            'nombre_completo' => 'Admin Paramétricas',
+            'ci' => '444444',
+            'usuario' => 'admin-param-'.Str::random(6),
+            'password_hash' => bcrypt('secret'),
+            'rol_id' => $rol->id,
+            'estado' => 'activo',
+            'mamore_id' => random_int(100000, 999999),
+        ]);
     }
 }

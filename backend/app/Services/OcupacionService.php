@@ -95,6 +95,103 @@ class OcupacionService
         ];
     }
 
+        /**
+     * Obtiene todos los campos activos o en mantenimiento con su ocupación del día.
+     * Sin filtro por asignación — solo para admin_parametricas y gerencia.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function mapaGlobal(Carbon $fecha): array
+    {
+        $fecha = $fecha->copy()->startOfDay();
+
+        $campos = CampoDeportivo::query()
+            ->whereIn('estado', ['activo', 'mantenimiento'])
+            ->with(['horariosAtencion', 'tarifas' => fn ($q) => $q->whereNull('vigente_hasta')])
+            ->orderBy('nombre')
+            ->get();
+
+        return $campos->map(function (CampoDeportivo $campo) use ($fecha) {
+            $ocupacion = $this->ocupacionDelCampo($campo, $fecha);
+
+            // Agregar coordenadas y metadatos administrativos
+            $franjas = $ocupacion['franjas'];
+
+            $franjasTotales = count($franjas);
+            $franjasOcupadas = count(array_filter($franjas, fn ($f) => $f['estado'] === 'ocupada'));
+            $franjasPendientes = count(array_filter($franjas, fn ($f) => $f['estado'] === 'pendiente'));
+            $franjasLibres = count(array_filter($franjas, fn ($f) => $f['estado'] === 'libre'));
+
+            $porcentajeOcupacion = $franjasTotales > 0
+                ? round(($franjasOcupadas / $franjasTotales) * 100, 1)
+                : 0;
+
+            $ocupadoAhora = $this->estaOcupadoAhora($franjas, $fecha);
+
+            return array_merge($ocupacion, [
+                'latitud' => (float) $campo->latitud,
+                'longitud' => (float) $campo->longitud,
+                'direccion' => $campo->direccion,
+                'estado_operativo' => $campo->estado,
+                'vinculacion_sireb' => [
+                    'vinculado' => $campo->servicio_sireb_id !== null,
+                    'servicio_sireb_id' => $campo->servicio_sireb_id,
+                    'servicio_sireb_codigo' => $campo->servicio_sireb_codigo,
+                ],
+                'resumen_ocupacion' => [
+                    'franjas_totales' => $franjasTotales,
+                    'franjas_ocupadas' => $franjasOcupadas,
+                    'franjas_pendientes' => $franjasPendientes,
+                    'franjas_libres' => $franjasLibres,
+                    'porcentaje_ocupacion' => $porcentajeOcupacion,
+                    'ocupado_ahora' => $ocupadoAhora,
+                ],
+            ]);
+        })->values()->all();
+    }
+
+    /**
+     * Determina si el campo está ocupado en este momento.
+     *
+     * @param array<int, array<string, mixed>> $franjas
+     */
+    private function estaOcupadoAhora(array $franjas, Carbon $fecha): bool
+    {
+        $hoy = now();
+
+        // Solo aplica si la fecha consultada es hoy
+        if (! $hoy->isSameDay($fecha)) {
+            return false;
+        }
+
+        $ahoraSegundos = (int) $hoy->format('H') * 3600
+            + (int) $hoy->format('i') * 60
+            + (int) $hoy->format('s');
+
+        foreach ($franjas as $franja) {
+            if ($franja['estado'] !== 'ocupada') {
+                continue;
+            }
+
+            $inicio = Carbon::createFromFormat('H:i:s', $franja['hora_inicio']);
+            $fin = Carbon::createFromFormat('H:i:s', $franja['hora_fin']);
+
+            $inicioSegundos = (int) $inicio->format('H') * 3600
+                + (int) $inicio->format('i') * 60
+                + (int) $inicio->format('s');
+
+            $finSegundos = (int) $fin->format('H') * 3600
+                + (int) $fin->format('i') * 60
+                + (int) $fin->format('s');
+
+            if ($ahoraSegundos >= $inicioSegundos && $ahoraSegundos < $finSegundos) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Obtiene campos asignados al funcionario.
      * Si es admin, devuelve todos los campos activos.

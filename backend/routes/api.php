@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\Admin\AsistenciaController as AdminAsistenciaCon
 use App\Http\Controllers\Api\V1\Admin\CatalogoSirebController;
 use App\Http\Controllers\Api\V1\Admin\ReservasExportController as AdminReservasExportController;
 use App\Http\Controllers\Api\V1\OcupacionController;
+use App\Http\Controllers\Api\V1\ReportesController;
 
 /*
 |--------------------------------------------------------------------------
@@ -139,14 +140,32 @@ Route::middleware('auth.oauth')->group(function () {
         Route::get('/v1/roles', [RolController::class, 'index']);
     });
 
-    // ─── Fase 6.1: Ocupación en sitio y verificación de código ───
-    Route::middleware('role:admin_parametricas|admin_reservas|funcionario_control')
-        ->prefix('v1/ocupacion')
+    // ─── Fase 6.1/6.2: Ocupación en sitio, verificación y mapa global ───
+    Route::prefix('v1/ocupacion')->group(function () {
+        // Lectura por funcionario: solo sus campos asignados
+        Route::middleware('role:admin_parametricas|admin_reservas|funcionario_control')
+            ->group(function () {
+                Route::get('/mis-campos', [OcupacionController::class, 'misCampos']);
+                Route::get('/verificar/{codigo}', [OcupacionController::class, 'verificar']);
+            });
+
+        // Mapa global: solo admin_parametricas y gerencia (sin filtro por asignación)
+        Route::middleware('role:admin_parametricas|gerencia')
+            ->group(function () {
+                Route::get('/mapa-global', [OcupacionController::class, 'mapaGlobal']);
+            });
+    });
+    // ─── FIN Fase 6.1/6.2 ───
+    // ─── Fase 6.3: Reportes gerenciales ───
+    // Solo admin_parametricas y gerencia. NO incluye funcionario_control ni admin_reservas.
+    Route::middleware('role:admin_parametricas|gerencia')
+        ->prefix('v1/reportes')
         ->group(function () {
-            Route::get('/mis-campos', [OcupacionController::class, 'misCampos']);
-            Route::get('/verificar/{codigo}', [OcupacionController::class, 'verificar']);
+            Route::get('/ingresos', [ReportesController::class, 'ingresos']);
+            Route::get('/horas-pico', [ReportesController::class, 'horasPico']);
+            Route::get('/clientes-frecuentes', [ReportesController::class, 'clientesFrecuentes']);
         });
-    // ─── FIN Fase 6.1 ───
+    // ─── FIN Fase 6.3 ───
 
     // ─── Fase 7.1: Gestión operativa de solicitudes ───
     Route::prefix('v1/admin/solicitudes-reserva')->group(function () {
