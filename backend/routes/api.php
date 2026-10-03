@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\Admin\SolicitudReservaController as AdminSolicit
 use App\Http\Controllers\Api\V1\Admin\AsistenciaController as AdminAsistenciaController;
 use App\Http\Controllers\Api\V1\Admin\CatalogoSirebController;
 use App\Http\Controllers\Api\V1\Admin\ReservasExportController as AdminReservasExportController;
+use App\Http\Controllers\Api\V1\OcupacionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -137,6 +138,15 @@ Route::middleware('auth.oauth')->group(function () {
         // Roles (para selects de alta de funcionarios)
         Route::get('/v1/roles', [RolController::class, 'index']);
     });
+
+    // ─── Fase 6.1: Ocupación en sitio y verificación de código ───
+    Route::middleware('role:admin_parametricas|admin_reservas|funcionario_control')
+        ->prefix('v1/ocupacion')
+        ->group(function () {
+            Route::get('/mis-campos', [OcupacionController::class, 'misCampos']);
+            Route::get('/verificar/{codigo}', [OcupacionController::class, 'verificar']);
+        });
+    // ─── FIN Fase 6.1 ───
 
     // ─── Fase 7.1: Gestión operativa de solicitudes ───
     Route::prefix('v1/admin/solicitudes-reserva')->group(function () {
