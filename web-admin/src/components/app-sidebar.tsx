@@ -6,6 +6,8 @@ import {
   MapPinIcon,
   UsersIcon,
   CalendarRangeIcon,
+  CalendarCheck,
+  LayoutDashboard,
   Link2Icon,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -31,14 +33,30 @@ type NavItem = {
   icon: React.ElementType;
   permiso?: string | null;
   roles?: string[];
+  dividerBefore?: boolean;
+  groupLabel?: string;
 };
 
 const navItems: NavItem[] = [
   { title: 'Dashboard', url: '/panel', icon: HomeIcon, permiso: null },
   {
+    title: 'Ocupación',
+    url: '/panel/ocupacion',
+    icon: CalendarCheck,
+    roles: ['admin_parametricas', 'admin_reservas', 'funcionario_control'],
+  },
+  {
+    title: 'Reservas',
+    url: '/panel/reservas',
+    icon: CalendarRangeIcon,
+    roles: ['admin_parametricas', 'admin_reservas', 'funcionario_control'],
+  },
+
+  // ─── Paramétricas ───
+  {
     title: 'Campos',
     url: '/panel/parametricas/campos',
-    icon: MapIcon,
+    icon: MapPinIcon,
     permiso: 'gestionar-campos',
   },
   {
@@ -47,12 +65,8 @@ const navItems: NavItem[] = [
     icon: MapIcon,
     permiso: 'gestionar-tipos-campo',
   },
-  {
-    title: 'Reservas',
-    url: '/panel/reservas',
-    icon: CalendarRangeIcon,
-    roles: ['admin_parametricas', 'admin_reservas', 'funcionario_control'],
-  },
+
+  // ─── Usuarios ───
   {
     title: 'Funcionarios',
     url: '/panel/funcionarios',
@@ -65,6 +79,20 @@ const navItems: NavItem[] = [
     icon: Link2Icon,
     permiso: 'gestionar-funcionarios',
   },
+
+  // ─── Gerenciales (solo admin_parametricas + gerencia) ───
+  {
+    title: 'Mapa Global',
+    url: '/panel/ocupacion/mapa',
+    icon: MapIcon,
+    roles: ['admin_parametricas', 'gerencia'],
+  },
+  {
+    title: 'Reportes',
+    url: '/panel/reportes',
+    icon: LayoutDashboard,
+    roles: ['admin_parametricas', 'gerencia'],
+  },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -75,7 +103,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const items = navItems.filter((item) => {
     if (item.roles) {
       const rol = (funcionario as any)?.rol?.nombre as string | undefined;
-      return !!rol && item.roles.includes(rol);
+      // Si el rol es gerencia (permisos '*'), también pasa
+      const esGerencia = (funcionario as any)?.rol?.permisos?.includes('*');
+      return (!!rol && item.roles.includes(rol)) || esGerencia;
     }
 
     return !item.permiso || tienePermiso(item.permiso);
