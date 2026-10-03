@@ -14,6 +14,9 @@ use App\Http\Controllers\Api\V1\Public\DisponibilidadController;
 use App\Http\Controllers\Api\V1\Public\SolicitudReservaController;
 use App\Http\Controllers\Api\V1\WebhookRecaudacionesController;
 use App\Http\Controllers\Api\V1\Public\SolicitudEstadoController;
+use App\Http\Controllers\Api\V1\Admin\SolicitudReservaController as AdminSolicitudReservaController;
+use App\Http\Controllers\Api\V1\Admin\AsistenciaController as AdminAsistenciaController;
+use App\Http\Controllers\Api\V1\Admin\ReservasExportController as AdminReservasExportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -117,16 +120,39 @@ Route::middleware('auth.oauth')->group(function () {
         Route::get('/v1/roles', [RolController::class, 'index']);
     });
 
-    // ─── NUEVO (Fase 8.5): Rutas admin de solicitudes de reserva ───
-    // Gestión operativa: listado, detalle con info SIREB, anulación y refresh.
-    // Accesible para admin_parametricas O admin_reservas.
-    Route::middleware('role:admin_parametricas|admin_reservas')
-        ->prefix('v1/admin/solicitudes-reserva')
+    // ─── Fase 7.1: Gestión operativa de solicitudes ───
+    Route::prefix('v1/admin/solicitudes-reserva')->group(function () {
+        // Lectura: admins + funcionario_control.
+        // funcionario_control queda restringido server-side en el service.
+        Route::middleware('role:admin_parametricas|admin_reservas|funcionario_control')
+            ->group(function () {
+                Route::get('/', [AdminSolicitudReservaController::class, 'index']);
+                Route::get('/{id}', [AdminSolicitudReservaController::class, 'show']);
+            });
+
+        // Acciones sensibles: solo admins.
+        Route::middleware('role:admin_parametricas|admin_reservas')
+            ->group(function () {
+                Route::post('/{id}/anular-liquidacion', [AdminSolicitudReservaController::class, 'anularLiquidacion']);
+                Route::get('/{id}/refrescar-sireb', [AdminSolicitudReservaController::class, 'refrescarSireb']);
+            });
+    });
+    // ─── FIN Fase 7.1 ───
+
+        // ─── Fase 7.2: Asistencia en reservas ───
+    Route::middleware('role:admin_parametricas|admin_reservas|funcionario_control')
+        ->prefix('v1/admin/reservas')
         ->group(function () {
-            Route::get('/', [\App\Http\Controllers\Api\V1\Admin\SolicitudReservaController::class, 'index']);
-            Route::get('/{id}', [\App\Http\Controllers\Api\V1\Admin\SolicitudReservaController::class, 'show']);
-            Route::post('/{id}/anular-liquidacion', [\App\Http\Controllers\Api\V1\Admin\SolicitudReservaController::class, 'anularLiquidacion']);
-            Route::get('/{id}/refrescar-sireb', [\App\Http\Controllers\Api\V1\Admin\SolicitudReservaController::class, 'refrescarSireb']);
+            Route::post('/{id}/asistencia', [AdminAsistenciaController::class, 'store']);
         });
-    // ─── FIN bloque Fase 8.5 ───
+    // ─── FIN Fase 7.2 ───
+
+    // ─── Fase 7.3: Exportación CSV de reservas ───
+    // Solo admins. funcionario_control NO puede exportar.
+    Route::middleware('role:admin_parametricas|admin_reservas')
+        ->prefix('v1/admin/reservas')
+        ->group(function () {
+            Route::get('/export', [AdminReservasExportController::class, 'csv']);
+        });
+    // ─── FIN Fase 7.3 ───
 });

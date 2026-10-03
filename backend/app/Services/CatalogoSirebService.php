@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Log;
 class CatalogoSirebService
 {
     private const CACHE_KEY = 'sireb:catalogo';
+    private const CACHE_TS_KEY = 'sireb:catalogo:actualizado_en';
     private const CACHE_TTL_SEGUNDOS = 600;
 
     public function __construct(
@@ -103,15 +104,25 @@ class CatalogoSirebService
     {
         if ($forceRefresh) {
             Cache::forget(self::CACHE_KEY);
+            Cache::forget(self::CACHE_TS_KEY);
         }
 
         return Cache::remember(self::CACHE_KEY, self::CACHE_TTL_SEGUNDOS, function () {
             try {
-                return $this->client->listarCatalogo(pagina: 1, porPagina: 100);
+                $catalogo = $this->client->listarCatalogo(pagina: 1, porPagina: 100);
+
+                Cache::put(
+                    self::CACHE_TS_KEY,
+                    now()->toIso8601String(),
+                    self::CACHE_TTL_SEGUNDOS
+                );
+
+                return $catalogo;
             } catch (RecaudacionesApiException $e) {
                 Log::channel('sireb')->error('Error al obtener catálogo', [
                     'error' => $e->getMessage(),
                 ]);
+
                 throw $e;
             }
         });
@@ -121,5 +132,38 @@ class CatalogoSirebService
     {
         $partes = array_map('intval', explode(':', $hora));
         return ($partes[0] * 3600) + ($partes[1] * 60) + ($partes[2] ?? 0);
+    }
+
+    /**
+     * Devuelve el catálogo SIREB cacheado.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function catalogoCacheado(): array
+    {
+        return $this->obtenerCatalogo();
+    }
+
+    /**
+     * Busca un servicio SIREB por su UUID interno.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function servicioPorId(?string $servicioId): ?array
+    {
+        if (blank($servicioId)) {
+            return null;
+        }
+
+        return collect($this->obtenerCatalogo())
+            ->firstWhere('id', $servicioId);
+    }
+
+    /**
+     * Fecha/hora de la última actualización exitosa del catálogo cacheado.
+     */
+    public function ultimaActualizacion(): ?string
+    {
+        return Cache::get(self::CACHE_TS_KEY);
     }
 }

@@ -25,7 +25,15 @@ import {
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/context/AuthContext';
 
-const navItems = [
+type NavItem = {
+  title: string;
+  url: string;
+  icon: React.ElementType;
+  permiso?: string | null;
+  roles?: string[];
+};
+
+const navItems: NavItem[] = [
   { title: 'Dashboard', url: '/panel', icon: HomeIcon, permiso: null },
   {
     title: 'Campos',
@@ -43,7 +51,7 @@ const navItems = [
     title: 'Reservas',
     url: '/panel/reservas',
     icon: CalendarRangeIcon,
-    permiso: 'ver-reservas',
+    roles: ['admin_parametricas', 'admin_reservas', 'funcionario_control'],
   },
   {
     title: 'Funcionarios',
@@ -64,7 +72,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const items = navItems.filter((i) => !i.permiso || tienePermiso(i.permiso));
+  const items = navItems.filter((item) => {
+    if (item.roles) {
+      const rol = (funcionario as any)?.rol?.nombre as string | undefined;
+      return !!rol && item.roles.includes(rol);
+    }
+
+    return !item.permiso || tienePermiso(item.permiso);
+  });
 
   const handleLogout = async () => {
     await logout();

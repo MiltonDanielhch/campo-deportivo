@@ -16,9 +16,17 @@ class Reserva extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'solicitud_reserva_id', 'solicitud_reserva_detalle_id', 'codigo_reserva',
-        'campo_id', 'fecha_reserva', 'hora_inicio', 'hora_fin',
-        'monto_pagado', 'confirmado_en',
+        'solicitud_reserva_id',
+        'solicitud_reserva_detalle_id',
+        'codigo_reserva',
+        'campo_id',
+        'fecha_reserva',
+        'hora_inicio',
+        'hora_fin',
+        'monto_pagado',
+        'confirmado_en',
+        'asistencia_marcada_en',
+        'asistencia_marcada_por',
     ];
 
     protected function casts(): array
@@ -27,6 +35,7 @@ class Reserva extends Model
             'monto_pagado' => 'decimal:2',
             'fecha_reserva' => 'date',
             'confirmado_en' => 'datetime',
+            'asistencia_marcada_en' => 'datetime',
         ];
     }
 
@@ -43,5 +52,10 @@ class Reserva extends Model
     public function campo(): BelongsTo
     {
         return $this->belongsTo(CampoDeportivo::class, 'campo_id');
+    }
+
+    public function asistenciaMarcadaPor(): BelongsTo
+    {
+        return $this->belongsTo(Funcionario::class, 'asistencia_marcada_por');
     }
 }

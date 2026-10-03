@@ -7,15 +7,28 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 
 const schema = z.object({
-  nombre_pagador: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
+  nombre_pagador: z
+    .string()
+    .trim()
+    .min(3, 'El nombre o razón social debe tener al menos 3 caracteres')
+    .max(150, 'El nombre o razón social no puede superar los 150 caracteres'),
+
   telefono_pagador: z
     .string()
+    .trim()
     .regex(/^[0-9]{8}$/, 'El teléfono debe tener 8 dígitos'),
-  // SIREB v1: CI/NIT obligatorio para crear liquidaciones
+
+  // SIREB v1: CI/NIT obligatorio para crear liquidaciones.
+  // Puede ser CI de persona natural o NIT de asociación/empresa.
   ci_nit_pagador: z
     .string()
+    .trim()
     .min(6, 'El CI/NIT debe tener al menos 6 caracteres')
-    .regex(/^[\d\-\.]+$/, 'El CI/NIT solo puede contener números, guiones y puntos'),
+    .max(20, 'El CI/NIT no puede superar los 20 caracteres')
+    .regex(
+      /^[\d\-\.]+$/,
+      'El CI/NIT solo puede contener números, guiones y puntos',
+    ),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -46,27 +59,27 @@ export default function FormularioSolicitante({
         </div>
         <div>
           <h2 className="text-lg font-bold tracking-tight">
-            Datos del solicitante
+            Datos del pagador
           </h2>
           <p className="text-xs text-slate-500">
-            Necesarios para emitir el comprobante
+            Necesarios para emitir el comprobante y la orden de cobro
           </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-5">
-        {/* Nombre */}
+        {/* Nombre o razón social */}
         <div>
           <Label htmlFor="nombre_pagador" className="flex items-center gap-1.5 mb-2">
             <User className="w-3.5 h-3.5 text-slate-400" />
             <span>
-              Nombre completo <span className="text-red-500">*</span>
+              Nombre o razón social <span className="text-red-500">*</span>
             </span>
           </Label>
           <Input
             id="nombre_pagador"
             {...register('nombre_pagador')}
-            placeholder="Juan Pérez"
+            placeholder="Ej.: Juan Pérez o Asociación Deportiva San José"
             disabled={cargando}
             className={errors.nombre_pagador ? 'border-red-300' : ''}
           />
@@ -77,7 +90,6 @@ export default function FormularioSolicitante({
             </p>
           )}
         </div>
-
         {/* Teléfono */}
         <div>
           <Label htmlFor="telefono_pagador" className="flex items-center gap-1.5 mb-2">
@@ -102,18 +114,19 @@ export default function FormularioSolicitante({
           )}
         </div>
 
-        {/* CI/NIT */}
+        {/* CI / NIT / identificación de la asociación */}
         <div>
           <Label htmlFor="ci_nit_pagador" className="flex items-center gap-1.5 mb-2">
             <IdCard className="w-3.5 h-3.5 text-slate-400" />
             <span>
-              CI/NIT <span className="text-red-500">*</span>
+              CI / NIT / identificación de la asociación{' '}
+              <span className="text-red-500">*</span>
             </span>
           </Label>
           <Input
             id="ci_nit_pagador"
             {...register('ci_nit_pagador')}
-            placeholder="1234567"
+            placeholder="Ej.: 1234567 o 1234567890"
             disabled={cargando}
             className={errors.ci_nit_pagador ? 'border-red-300' : ''}
           />
@@ -124,7 +137,8 @@ export default function FormularioSolicitante({
             </p>
           )}
           <p className="text-xs text-slate-500 mt-1.5">
-            Necesario para emitir la orden de cobro en el banco
+            Necesario para emitir la orden de cobro en el banco. Puede ser CI de
+            persona natural o NIT de asociación/empresa.
           </p>
         </div>
 
