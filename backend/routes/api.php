@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\Admin\CatalogoSirebController;
 use App\Http\Controllers\Api\V1\Admin\ReservasExportController as AdminReservasExportController;
 use App\Http\Controllers\Api\V1\OcupacionController;
 use App\Http\Controllers\Api\V1\ReportesController;
+use App\Http\Controllers\Api\V1\DashboardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -73,6 +74,13 @@ Route::middleware('auth.oauth')->group(function () {
     // Auth
     Route::get('/v1/auth/me', [AuthController::class, 'me']);
     Route::post('/v1/auth/logout', [AuthController::class, 'logout']);
+
+    // ─── Dashboard principal (resumen del día) ───
+    // Accesible para todos los roles autenticados.
+    Route::prefix('v1/dashboard')->group(function () {
+        Route::get('/resumen', [DashboardController::class, 'resumen']);
+    });
+    // ─── FIN Dashboard ───
 
     // Rutas de admin_parametricas (requieren rol específico)
     Route::middleware('role:admin_parametricas')->group(function () {
