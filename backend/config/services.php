@@ -56,6 +56,16 @@ return [
         // true = inyecta el Simulado (comportamiento actual); false = cliente real
         'simulador_habilitado' => env('RECAUDACIONES_SIMULADOR_HABILITADO', true),
 
+        // ─── Paths SIREB configurables (Fase C.1) ───
+        'paths' => [
+            'catalogo_servicios' => env('SIREB_PATH_CATALOGO_SERVICIOS', '/api/v1/catalogo/servicios'),
+            'clientes' => env('SIREB_PATH_CLIENTES', '/api/v1/clientes'),
+            'liquidaciones' => env('SIREB_PATH_LIQUIDACIONES', '/api/v1/liquidaciones'),
+        ],
+
+        // ─── Fallback local para catálogo público ───
+        'catalogo_publico_fallback_local' => env('CATALOGO_PUBLICO_FALLBACK_LOCAL', true),
+
         // Credenciales del SISTEMA para SIREB (client_credentials vía Ibare).
         // Separadas del bloque 'ibare' (que es el login de funcionarios humanos).
         'oauth' => [

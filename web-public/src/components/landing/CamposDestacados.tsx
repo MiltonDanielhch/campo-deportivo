@@ -1,30 +1,31 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Sun, Lightbulb, ArrowRight, ImageIcon } from 'lucide-react';
+import { MapPin, Sun, Lightbulb, ArrowRight, ImageIcon, BadgeCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import type { CampoPublico, CamposResponse } from '@/types/campo';
 
-interface CampoDestacado {
-  id: string;
-  nombre: string;
-  tipo_campo: { nombre: string };
-  direccion: string;
-  estado: string;
-  imagen_url: string | null;
-  tarifas: {
-    diurna: { precio_por_hora: number } | null;
-    nocturna: { precio_por_hora: number } | null;
-  };
+function rangoPreciosOficial(campo: CampoPublico): string | null {
+  const sireb = campo.sireb;
+  if (!sireb || campo.fuente_precios !== 'SIREB') return null;
+
+  if (sireb.precio_min != null && sireb.precio_max != null) {
+    return sireb.precio_min === sireb.precio_max
+      ? `Bs ${sireb.precio_min.toFixed(0)}`
+      : `Bs ${sireb.precio_min.toFixed(0)} – ${sireb.precio_max.toFixed(0)}`;
+  }
+
+  return null;
 }
 
 export default function CamposDestacados() {
-  const [campos, setCampos] = useState<CampoDestacado[]>([]);
+  const [campos, setCampos] = useState<CampoPublico[]>([]);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
     api
-      .get('/public/campos')
+      .get<CamposResponse>('/public/campos')
       .then((res) => setCampos(res.data.data.slice(0, 3)))
       .catch((err) => console.error('Error al cargar campos destacados:', err))
       .finally(() => setCargando(false));
@@ -99,7 +100,13 @@ export default function CamposDestacados() {
                       <span className="text-xs">Sin foto</span>
                     </div>
                   )}
-                  <div className="absolute top-3 right-3">
+                  <div className="absolute top-3 right-3 flex flex-col items-end gap-2">
+                    {campo.fuente_precios === 'SIREB' && campo.sireb && (
+                      <Badge className="gap-1 bg-white/95 text-teal-700 hover:bg-white shadow-sm backdrop-blur">
+                        <BadgeCheck className="w-3 h-3" />
+                        Oficial
+                      </Badge>
+                    )}
                     <Badge
                       variant={campo.estado === 'activo' ? 'default' : 'secondary'}
                       className={
@@ -115,9 +122,16 @@ export default function CamposDestacados() {
 
                 {/* Contenido */}
                 <div className="p-5">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1">
-                    {campo.tipo_campo.nombre}
-                  </p>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      {campo.tipo_campo?.nombre ?? 'Campo deportivo'}
+                    </p>
+                    {campo.servicio_sireb_codigo && (
+                      <span className="font-mono text-[11px] text-slate-400">
+                        {campo.servicio_sireb_codigo}
+                      </span>
+                    )}
+                  </div>
                   <h3 className="text-lg font-bold mb-2 group-hover:text-teal-700 transition-colors">
                     {campo.nombre}
                   </h3>
@@ -128,26 +142,37 @@ export default function CamposDestacados() {
 
                   {/* Tarifas */}
                   <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
-                    {campo.tarifas.diurna ? (
-                      <div className="flex items-center gap-1 text-sm">
-                        <Sun className="w-4 h-4 text-amber-500" />
+                    {rangoPreciosOficial(campo) ? (
+                      <div className="flex items-center gap-1.5 text-sm">
                         <span className="font-semibold">
-                          Bs {campo.tarifas.diurna.precio_por_hora.toFixed(0)}
+                          {rangoPreciosOficial(campo)}
                         </span>
+                        <span className="text-xs text-slate-500">oficial</span>
                       </div>
-                    ) : null}
-                    {campo.tarifas.nocturna ? (
-                      <div className="flex items-center gap-1 text-sm">
-                        <Lightbulb className="w-4 h-4 text-indigo-500" />
-                        <span className="font-semibold">
-                          Bs {campo.tarifas.nocturna.precio_por_hora.toFixed(0)}
-                        </span>
-                      </div>
-                    ) : null}
-                    {!campo.tarifas.diurna && !campo.tarifas.nocturna && (
-                      <span className="text-xs text-slate-400 italic">
-                        Consultar precio
-                      </span>
+                    ) : (
+                      <>
+                        {campo.tarifas?.diurna ? (
+                          <div className="flex items-center gap-1 text-sm">
+                            <Sun className="w-4 h-4 text-amber-500" />
+                            <span className="font-semibold">
+                              Bs {campo.tarifas.diurna.precio_por_hora.toFixed(0)}
+                            </span>
+                          </div>
+                        ) : null}
+                        {campo.tarifas?.nocturna ? (
+                          <div className="flex items-center gap-1 text-sm">
+                            <Lightbulb className="w-4 h-4 text-indigo-500" />
+                            <span className="font-semibold">
+                              Bs {campo.tarifas.nocturna.precio_por_hora.toFixed(0)}
+                            </span>
+                          </div>
+                        ) : null}
+                        {!campo.tarifas?.diurna && !campo.tarifas?.nocturna && (
+                          <span className="text-xs text-slate-400 italic">
+                            Consultar precio
+                          </span>
+                        )}
+                      </>
                     )}
                     <ArrowRight className="w-4 h-4 ml-auto text-slate-400 group-hover:text-teal-600 group-hover:translate-x-1 transition-all" />
                   </div>

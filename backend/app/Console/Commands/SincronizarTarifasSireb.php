@@ -25,7 +25,8 @@ use Illuminate\Support\Facades\Log;
 class SincronizarTarifasSireb extends Command
 {
     protected $signature = 'sireb:sincronizar-tarifas
-        {--dry-run : Solo reporta discrepancias sin escribir nada}';
+        {--dry-run : Solo reporta discrepancias sin escribir nada}
+        {--force : Forzar sincronización incluso si hay errores}';
 
     protected $description = 'Alinea tarifas_campo con el tarifario vigente de SIREB (espejo validado)';
 

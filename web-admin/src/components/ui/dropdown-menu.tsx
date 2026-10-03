@@ -12,8 +12,34 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
   return <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
 }
 
-function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
-  return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
+function DropdownMenuTrigger({
+  asChild = false,
+  children,
+  ...props
+}: MenuPrimitive.Trigger.Props & {
+  /**
+   * Compatibilidad con la API de Radix UI (usada en componentes shadcn).
+   * Base UI usa `render`; sin esta traducción el trigger renderiza un
+   * <button> que envuelve al hijo (otro <button>) y React avisa de
+   * botones anidados.
+   */
+  asChild?: boolean
+}) {
+  if (asChild && React.isValidElement(children)) {
+    return (
+      <MenuPrimitive.Trigger
+        data-slot="dropdown-menu-trigger"
+        render={children}
+        {...props}
+      />
+    )
+  }
+
+  return (
+    <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props}>
+      {children}
+    </MenuPrimitive.Trigger>
+  )
 }
 
 function DropdownMenuContent({

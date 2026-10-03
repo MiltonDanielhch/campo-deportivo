@@ -1,26 +1,12 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, SearchX, Trophy } from 'lucide-react';
+import { MapPin, SearchX, Trophy, AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import FiltrosCampos, { type FiltrosEstado } from '@/components/campo/FiltrosCampos';
 import CampoCard from '@/components/campo/CampoCard';
 import MapaCampos from '@/components/campo/MapaCampos';
-
-interface Campo {
-  id: string;
-  nombre: string;
-  tipo_campo: { id: string; nombre: string };
-  direccion: string;
-  estado: string;
-  latitud: number;
-  longitud: number;
-  imagen_url: string | null;
-  tarifas: {
-    diurna: { precio_por_hora: number } | null;
-    nocturna: { precio_por_hora: number } | null;
-  };
-}
+import type { CampoPublico, CamposResponse } from '@/types/campo';
 
 type VistaModo = 'lista' | 'mapa';
 
@@ -31,10 +17,11 @@ const FILTROS_INICIALES: FiltrosEstado = {
 };
 
 export default function Campos() {
-  const [campos, setCampos] = useState<Campo[]>([]);
+  const [campos, setCampos] = useState<CampoPublico[]>([]);
   const [cargando, setCargando] = useState(true);
   const [vista, setVista] = useState<VistaModo>('lista');
   const [filtros, setFiltros] = useState<FiltrosEstado>(FILTROS_INICIALES);
+  const [meta, setMeta] = useState<CamposResponse['meta'] | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -50,11 +37,14 @@ export default function Campos() {
     if (filtros.buscar.trim()) params.buscar = filtros.buscar.trim();
 
     api
-      .get('/public/campos', {
+      .get<CamposResponse>('/public/campos', {
         params,
         signal: abortRef.current.signal,
       })
-      .then((res) => setCampos(res.data.data))
+      .then((res) => {
+        setCampos(res.data.data);
+        setMeta(res.data.meta);
+      })
       .catch((err) => {
         if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
           console.error('Error al cargar campos:', err);
@@ -170,6 +160,35 @@ export default function Campos() {
           ) : (
             <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
               <MapaCampos campos={campos} />
+            </div>
+          )}
+
+          {/* ─── Footer con información de origen de precios ─── */}
+          {meta && (
+            <div className="mt-8 p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
+              {meta.aviso ? (
+                <div className="flex items-start gap-3 text-amber-700">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-sm">{meta.aviso}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Fuente: {meta.fuente_precios}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <RefreshCw className="w-4 h-4 text-teal-600" />
+                  <p>
+                    Precios oficiales sincronizados desde Paitití / SIREB.
+                    {meta.sincronizado_en && (
+                      <span className="ml-2 text-slate-500">
+                        Última actualización: {new Date(meta.sincronizado_en).toLocaleString('es-BO')}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

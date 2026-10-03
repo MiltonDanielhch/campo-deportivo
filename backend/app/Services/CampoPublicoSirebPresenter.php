@@ -106,7 +106,14 @@ class CampoPublicoSirebPresenter
             $servicio = $servicios->get((string) $campo->servicio_sireb_id);
 
             if (is_array($servicio)) {
-                return array_merge($base, $this->desdeSireb($servicio));
+                // La identidad pública del campo la manda SIREB/Paitití:
+                // nombre y código oficiales del servicio. El código interno
+                // del GAD (CD-001, …) no se publica. Los datos locales
+                // (dirección, foto, horarios, coordenadas) se conservan.
+                return array_merge($base, $this->desdeSireb($servicio), [
+                    'nombre' => $servicio['nombre'] ?? $campo->nombre,
+                    'servicio_sireb_codigo' => $servicio['codigo'] ?? $campo->servicio_sireb_codigo,
+                ]);
             }
 
             return array_merge($base, $this->noVinculado());
@@ -122,6 +129,10 @@ class CampoPublicoSirebPresenter
     {
         return [
             'id' => $campo->id,
+            // El nombre se sobrescribe con el oficial de SIREB cuando el campo
+            // está vinculado; 'nombre_local' guarda el nombre interno del GAD.
+            // El código interno del campo no se expone al público.
+            'nombre_local' => $campo->nombre,
             'nombre' => $campo->nombre,
             'tipo_campo' => $campo->relationLoaded('tipoCampo') && $campo->tipoCampo
                 ? [
@@ -136,6 +147,7 @@ class CampoPublicoSirebPresenter
             'estado' => $campo->estado,
             'hora_inicio_noche' => $campo->hora_inicio_noche,
             'servicio_sireb_id' => $campo->servicio_sireb_id,
+            'servicio_sireb_codigo' => $campo->servicio_sireb_codigo,
             'horarios_atencion' => $campo->relationLoaded('horariosAtencion')
                 ? $campo->horariosAtencion
                     ->sortBy('dia_semana')
@@ -183,9 +195,11 @@ class CampoPublicoSirebPresenter
                 'id' => $servicio['id'] ?? null,
                 'codigo' => $servicio['codigo'] ?? null,
                 'nombre' => $servicio['nombre'] ?? null,
+                'descripcion' => $servicio['descripcion'] ?? null,
                 'rubro' => $servicio['rubro'] ?? null,
                 'estado' => $servicio['estado'] ?? null,
-                'tarifario' => $servicio['tarifario'] ?? ($reservable ? 'liquidable' : 'sin_tarifa'),
+                'modo_tarifa' => $servicio['modo_tarifa'] ?? null,
+                'tarifario' => $this->tarifarioDe($servicio),
                 'unidad_medida' => $servicio['unidad_medida'] ?? 'hora',
                 'precio_min' => $precioMin,
                 'precio_max' => $precioMax,
@@ -319,13 +333,50 @@ class CampoPublicoSirebPresenter
             return false;
         }
 
-        $tarifario = $servicio['tarifario'] ?? null;
-
-        if ($tarifario === 'sin_tarifa') {
+        if (($servicio['tarifario'] ?? null) === 'sin_tarifa') {
             return false;
         }
 
-        return count($tarifas) > 0;
+        if (count($tarifas) === 0) {
+            return false;
+        }
+
+        return $this->tieneTarifaLiquidable($servicio);
+    }
+
+    /**
+     * El catálogo de SIREB v1 no manda un campo `tarifario` a nivel servicio:
+     * el tarifario se deduce de si al menos una tarifa es liquidable y vigente.
+     *
+     * @param array<string, mixed> $servicio
+     */
+    private function tarifarioDe(array $servicio): string
+    {
+        if (($servicio['tarifario'] ?? null) === 'sin_tarifa') {
+            return 'sin_tarifa';
+        }
+
+        return $this->tieneTarifaLiquidable($servicio) ? 'liquidable' : 'sin_tarifa';
+    }
+
+    /**
+     * @param array<string, mixed> $servicio
+     */
+    private function tieneTarifaLiquidable(array $servicio): bool
+    {
+        foreach ($servicio['tarifas'] ?? [] as $tarifa) {
+            $estadoTarifario = $tarifa['tarifario_estado'] ?? null;
+
+            if ($estadoTarifario !== null && $estadoTarifario !== 'vigente') {
+                continue;
+            }
+
+            if (($tarifa['liquidable'] ?? true) === true) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -340,9 +391,9 @@ class CampoPublicoSirebPresenter
             return 'El servicio no está activo en recaudaciones.';
         }
 
-        $tarifario = $servicio['tarifario'] ?? null;
-
-        if ($tarifario === 'sin_tarifa' || count($tarifas) === 0) {
+        if (($servicio['tarifario'] ?? null) === 'sin_tarifa'
+            || count($tarifas) === 0
+            || ! $this->tieneTarifaLiquidable($servicio)) {
             return 'Este servicio no tiene tarifa liquidable. Consultá precio en ventanilla.';
         }
 

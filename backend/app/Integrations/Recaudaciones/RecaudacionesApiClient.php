@@ -277,7 +277,12 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
             return null;
         }
         try {
-            $response = $this->request('get', '/api/v1/clientes', [
+            $path = (string) config(
+                'services.recaudaciones.paths.clientes',
+                '/api/v1/clientes'
+            );
+
+            $response = $this->request('get', $path, [
                 'ci_nit' => $ciNit,
             ]);
 
@@ -299,7 +304,12 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
      */
     public function registrarCliente(array $datos): array
     {
-        $response = $this->request('post', '/api/v1/clientes', $datos);
+        $path = (string) config(
+            'services.recaudaciones.paths.clientes',
+            '/api/v1/clientes'
+        );
+
+        $response = $this->request('post', $path, $datos);
         return $response['data'] ?? [];
     }
 
@@ -309,7 +319,12 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
      */
     public function listarCatalogo(int $pagina = 1, int $porPagina = 100): array
     {
-        $response = $this->request('get', '/api/v1/catalogo/servicios', [
+        $path = (string) config(
+            'services.recaudaciones.paths.catalogo_servicios',
+            '/api/v1/catalogo/servicios'
+        );
+
+        $response = $this->request('get', $path, [
             'pagina' => $pagina,
             'por_pagina' => min(100, $porPagina),
         ]);
@@ -335,6 +350,11 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
         string $referenciaExterna,
         ?string $sucursalId = null
     ): array {
+        $path = (string) config(
+            'services.recaudaciones.paths.liquidaciones',
+            '/api/v1/liquidaciones'
+        );
+
         $payload = [
             'cliente_id' => $clienteId,
             'items' => $items,
@@ -345,7 +365,7 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
             $payload['sucursal_id'] = $sucursalId;
         }
 
-        $response = $this->request('post', '/api/v1/liquidaciones', $payload, [
+        $response = $this->request('post', $path, $payload, [
             'Idempotency-Key' => $idempotencyKey,
         ]);
 
@@ -359,7 +379,12 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
     public function consultarLiquidacionPorCodigo(string $codigoPublico): ?array
     {
         try {
-            $response = $this->request('get', "/api/v1/liquidaciones/{$codigoPublico}");
+            $path = (string) config(
+                'services.recaudaciones.paths.liquidaciones',
+                '/api/v1/liquidaciones'
+            );
+
+            $response = $this->request('get', "{$path}/{$codigoPublico}");
             return $response['data'] ?? null;
         } catch (RecaudacionesApiException $e) {
             // 404 = código no existe o mal formado
@@ -376,7 +401,12 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
     public function consultarLiquidacionDetalle(string $liquidacionId): ?array
     {
         try {
-            $response = $this->request('get', "/api/v1/liquidaciones/{$liquidacionId}");
+            $path = (string) config(
+                'services.recaudaciones.paths.liquidaciones',
+                '/api/v1/liquidaciones'
+            );
+
+            $response = $this->request('get', "{$path}/{$liquidacionId}");
             return $response['data'] ?? null;
         } catch (RecaudacionesApiException $e) {
             if ($e->coreStatus === 404) {
@@ -393,7 +423,12 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
      */
     public function anularLiquidacion(string $liquidacionId, string $motivo): array
     {
-        $response = $this->request('patch', "/api/v1/liquidaciones/{$liquidacionId}/anular", [
+        $path = (string) config(
+            'services.recaudaciones.paths.liquidaciones',
+            '/api/v1/liquidaciones'
+        );
+
+        $response = $this->request('patch', "{$path}/{$liquidacionId}/anular", [
             'motivo' => $motivo,
         ]);
 
@@ -408,7 +443,12 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
         string $numeroBoleta,
         string $entidadBancaria
     ): array {
-        $response = $this->request('post', "/api/v1/liquidaciones/{$liquidacionId}/pago-manual", [
+        $path = (string) config(
+            'services.recaudaciones.paths.liquidaciones',
+            '/api/v1/liquidaciones'
+        );
+
+        $response = $this->request('post', "{$path}/{$liquidacionId}/pago-manual", [
             'numero_boleta' => $numeroBoleta,
             'entidad_bancaria' => $entidadBancaria,
         ]);

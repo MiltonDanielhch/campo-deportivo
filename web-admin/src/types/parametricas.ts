@@ -65,6 +65,10 @@ export interface CampoDeportivo {
   imagen_url: string | null;
   /** Hora (HH:MM:SS) a partir de la cual se aplica la tarifa nocturna */
   hora_inicio_noche: string;
+  /** UUID del servicio SIREB vinculado (nullable) */
+  servicio_sireb_id: string | null;
+  /** Código legible del servicio SIREB (nullable) */
+  servicio_sireb_codigo: string | null;
   creado_en: string;
   tipo_campo?: TipoCampo;
   horarios_atencion?: HorarioAtencion[];
@@ -101,16 +105,11 @@ export interface TarifaCampo {
   precio_por_hora: string;
   vigente_desde: string;
   vigente_hasta: string | null;
-  creado_por: string | FuncionarioResumen;
-}
-export interface TarifaCampo {
-  id: string;
-  campo_id: string;
-  tipo_tarifa: TipoTarifa;
-  precio_por_hora: string;
-  vigente_desde: string;
-  vigente_hasta: string | null;
-  creado_por: string | FuncionarioResumen;
+  /**
+   * Funcionario que registró la tarifa. Es null en las tarifas espejadas
+   * desde SIREB por el job de sincronización (no las carga una persona).
+   */
+  creado_por: FuncionarioResumen | string | null;
 }
 
 export interface TarifaCampoPayload {

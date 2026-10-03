@@ -39,6 +39,24 @@ class CamposService {
     }
   }
 
+  /// Obtiene meta información del catálogo (fuente de precios, sincronización, etc.)
+  Future<Map<String, dynamic>?> obtenerMeta() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/public/campos'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['meta'] as Map<String, dynamic>?;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Obtiene el detalle de un campo deportivo específico.
   /// GET /api/v1/public/campos/{id}
   Future<CampoDeportivo> obtenerCampo(String id) async {

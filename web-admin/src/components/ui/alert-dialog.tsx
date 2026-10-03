@@ -124,9 +124,32 @@ function AlertDialogTitle({
 }
 
 function AlertDialogDescription({
+  asChild = false,
+  children,
   className,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Description>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Description> & {
+  /**
+   * Compatibilidad con la API de Radix UI (usada en componentes shadcn).
+   * Base UI usa `render`; sin esta traducción el atributo se filtra al DOM
+   * y el contenido queda envuelto en un <p> inválido.
+   */
+  asChild?: boolean
+}) {
+  if (asChild && React.isValidElement(children)) {
+    return (
+      <AlertDialogPrimitive.Description
+        data-slot="alert-dialog-description"
+        render={children}
+        className={cn(
+          "text-sm text-balance text-muted-foreground md:text-pretty *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+          className
+        )}
+        {...props}
+      />
+    )
+  }
+
   return (
     <AlertDialogPrimitive.Description
       data-slot="alert-dialog-description"
@@ -135,7 +158,9 @@ function AlertDialogDescription({
         className
       )}
       {...props}
-    />
+    >
+      {children}
+    </AlertDialogPrimitive.Description>
   )
 }
 

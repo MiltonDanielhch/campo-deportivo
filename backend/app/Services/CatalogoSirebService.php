@@ -145,6 +145,19 @@ class CatalogoSirebService
     }
 
     /**
+     * Ignora la caché y vuelve a pedir el catálogo a SIREB.
+     *
+     * Lo usan la sincronización de campos y el botón "Sincronizar" del panel,
+     * donde el operador espera ver el estado real de /panel/servicios.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function refrescarCatalogo(): array
+    {
+        return $this->obtenerCatalogo(true);
+    }
+
+    /**
      * Busca un servicio SIREB por su UUID interno.
      *
      * @return array<string, mixed>|null

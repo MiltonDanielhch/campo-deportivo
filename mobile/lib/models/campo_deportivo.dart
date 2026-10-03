@@ -4,7 +4,7 @@
 class CampoDeportivo {
   final String id;
   final String nombre;
-  final TipoCampo tipoCampo;
+  final TipoCampo? tipoCampo;
   final String direccion;
   final double latitud;
   final double longitud;
@@ -14,11 +14,21 @@ class CampoDeportivo {
   final String horaInicioNoche;
   final Tarifas tarifas;
   final List<HorarioAtencion> horariosAtencion;
+  /// ID del servicio SIREB vinculado (nullable)
+  final String? servicioSirebId;
+  /// Datos del servicio SIREB (nullable)
+  final ServicioSireb? sireb;
+  /// True si el campo es reservable online según reglas SIREB
+  final bool reservableOnline;
+  /// Mensaje explicativo si no es reservable
+  final String? mensajeNoReservable;
+  /// Fuente de los precios (SIREB, LOCAL_FALLBACK, NO_VINCULADO)
+  final String? fuentePrecios;
 
   const CampoDeportivo({
     required this.id,
     required this.nombre,
-    required this.tipoCampo,
+    this.tipoCampo,
     required this.direccion,
     required this.latitud,
     required this.longitud,
@@ -27,6 +37,11 @@ class CampoDeportivo {
     required this.horaInicioNoche,
     required this.tarifas,
     this.horariosAtencion = const [],
+    this.servicioSirebId,
+    this.sireb,
+    this.reservableOnline = false,
+    this.mensajeNoReservable,
+    this.fuentePrecios,
   });
 
   /// Parsea el JSON del backend.
@@ -34,18 +49,27 @@ class CampoDeportivo {
     return CampoDeportivo(
       id: json['id'] as String,
       nombre: json['nombre'] as String,
-      tipoCampo: TipoCampo.fromJson(json['tipo_campo'] as Map<String, dynamic>),
+      tipoCampo: json['tipo_campo'] != null
+          ? TipoCampo.fromJson(json['tipo_campo'] as Map<String, dynamic>)
+          : null,
       direccion: json['direccion'] as String,
       latitud: (json['latitud'] as num).toDouble(),
       longitud: (json['longitud'] as num).toDouble(),
       estado: json['estado'] as String,
       imagenUrl: json['imagen_url'] as String?,
       horaInicioNoche: (json['hora_inicio_noche'] as String?) ?? '18:00:00',
-      tarifas: Tarifas.fromJson(json['tarifas'] as Map<String, dynamic>),
+      tarifas: Tarifas.fromJson(json['tarifas'] as Map<String, dynamic>?),
       horariosAtencion: (json['horarios_atencion'] as List<dynamic>?)
               ?.map((e) => HorarioAtencion.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      servicioSirebId: json['servicio_sireb_id'] as String?,
+      sireb: json['sireb'] != null
+          ? ServicioSireb.fromJson(json['sireb'] as Map<String, dynamic>)
+          : null,
+      reservableOnline: json['reservable_online'] as bool? ?? false,
+      mensajeNoReservable: json['mensaje_no_reservable'] as String?,
+      fuentePrecios: json['fuente_precios'] as String?,
     );
   }
 
@@ -53,7 +77,7 @@ class CampoDeportivo {
   Map<String, dynamic> toJson() => {
         'id': id,
         'nombre': nombre,
-        'tipo_campo': tipoCampo.toJson(),
+        'tipo_campo': tipoCampo?.toJson(),
         'direccion': direccion,
         'latitud': latitud,
         'longitud': longitud,
@@ -62,6 +86,11 @@ class CampoDeportivo {
         'hora_inicio_noche': horaInicioNoche,
         'tarifas': tarifas.toJson(),
         'horarios_atencion': horariosAtencion.map((e) => e.toJson()).toList(),
+        'servicio_sireb_id': servicioSirebId,
+        'sireb': sireb?.toJson(),
+        'reservable_online': reservableOnline,
+        'mensaje_no_reservable': mensajeNoReservable,
+        'fuente_precios': fuentePrecios,
       };
 
   /// True si el campo está activo y disponible para reserva.
@@ -69,6 +98,9 @@ class CampoDeportivo {
 
   /// True si el campo está en mantenimiento (no disponible temporalmente).
   bool get estaEnMantenimiento => estado == 'mantenimiento';
+
+  /// True si el campo es reservable online (considerando estado operativo y SIREB).
+  bool get esReservable => reservableOnline && estaActivo;
 
   /// URL de la imagen pasando por el proxy CORS de la API.
   /// Necesario en Flutter Web: los /storage/... directos no traen cabeceras
@@ -84,6 +116,35 @@ class CampoDeportivo {
     final esNocturno = esHoraNocturna(horaInicio);
     final tarifa = esNocturno ? tarifas.nocturna : tarifas.diurna;
     return tarifa?.precioPorHora;
+  }
+
+  /// Formatea el precio desde SIREB si está disponible.
+  String formatoPrecioSireb() {
+    final sireb = this.sireb;
+    if (sireb == null) return 'Consultar precio';
+
+    if (sireb.precioMin != null && sireb.precioMax != null) {
+      if (sireb.precioMin == sireb.precioMax) {
+        return 'Bs. ${sireb.precioMin!.toStringAsFixed(2)}';
+      }
+      return 'Bs. ${sireb.precioMin!.toStringAsFixed(2)} – Bs. ${sireb.precioMax!.toStringAsFixed(2)}';
+    }
+
+    final precios = sireb.tarifas
+        .map((t) => t.precio)
+        .where((p) => p != null)
+        .cast<double>()
+        .toList();
+
+    if (precios.isEmpty) return 'Consultar precio';
+
+    final min = precios.reduce((a, b) => a < b ? a : b);
+    final max = precios.reduce((a, b) => a > b ? a : b);
+
+    if (min == max) {
+      return 'Bs. ${min.toStringAsFixed(2)}';
+    }
+    return 'Bs. ${min.toStringAsFixed(2)} – Bs. ${max.toStringAsFixed(2)}';
   }
 
   /// Determina si una hora (HH:MM o HH:MM:SS) es nocturna según horaInicioNoche.
@@ -125,6 +186,107 @@ class TipoCampo {
       };
 }
 
+/// Servicio SIREB vinculado al campo.
+class ServicioSireb {
+  final String id;
+  final String codigo;
+  final String nombre;
+  final String? rubro;
+  final String? estado;
+  final String? tarifario;
+  final String? unidadMedida;
+  final double? precioMin;
+  final double? precioMax;
+  final List<TarifaSireb> tarifas;
+  final String fuente;
+
+  const ServicioSireb({
+    required this.id,
+    required this.codigo,
+    required this.nombre,
+    this.rubro,
+    this.estado,
+    this.tarifario,
+    this.unidadMedida,
+    this.precioMin,
+    this.precioMax,
+    this.tarifas = const [],
+    required this.fuente,
+  });
+
+  factory ServicioSireb.fromJson(Map<String, dynamic> json) {
+    return ServicioSireb(
+      id: json['id'] as String,
+      codigo: json['codigo'] as String,
+      nombre: json['nombre'] as String,
+      rubro: json['rubro'] as String?,
+      estado: json['estado'] as String?,
+      tarifario: json['tarifario'] as String?,
+      unidadMedida: json['unidad_medida'] as String?,
+      precioMin: json['precio_min']?.toDouble(),
+      precioMax: json['precio_max']?.toDouble(),
+      tarifas: (json['tarifas'] as List<dynamic>?)
+              ?.map((e) => TarifaSireb.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      fuente: json['fuente'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'codigo': codigo,
+        'nombre': nombre,
+        'rubro': rubro,
+        'estado': estado,
+        'tarifario': tarifario,
+        'unidad_medida': unidadMedida,
+        'precio_min': precioMin,
+        'precio_max': precioMax,
+        'tarifas': tarifas.map((e) => e.toJson()).toList(),
+        'fuente': fuente,
+      };
+}
+
+/// Tarifa SIREB.
+class TarifaSireb {
+  final String? id;
+  final String? tipo;
+  final String etiqueta;
+  final double? precio;
+  final String? unidadMedida;
+  final String? vigenteDesde;
+
+  const TarifaSireb({
+    this.id,
+    this.tipo,
+    required this.etiqueta,
+    this.precio,
+    this.unidadMedida,
+    this.vigenteDesde,
+  });
+
+  factory TarifaSireb.fromJson(Map<String, dynamic> json) {
+    return TarifaSireb(
+      id: json['id'] as String?,
+      tipo: json['tipo'] as String?,
+      etiqueta: json['etiqueta'] as String,
+      precio: json['precio']?.toDouble(),
+      unidadMedida: json['unidad_medida'] as String?,
+      vigenteDesde: json['vigente_desde'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'tipo': tipo,
+        'etiqueta': etiqueta,
+        'precio': precio,
+        'unidad_medida': unidadMedida,
+        'vigente_desde': vigenteDesde,
+      };
+}
+
 /// Contenedor de las dos tarifas (regular y con iluminación).
 class Tarifas {
   final TarifaVigente? diurna;
@@ -135,7 +297,10 @@ class Tarifas {
     this.nocturna,
   });
 
-  factory Tarifas.fromJson(Map<String, dynamic> json) {
+  factory Tarifas.fromJson(Map<String, dynamic>? json) {
+    if (json == null) {
+      return const Tarifas();
+    }
     return Tarifas(
       diurna: json['diurna'] != null
           ? TarifaVigente.fromJson(json['diurna'] as Map<String, dynamic>)

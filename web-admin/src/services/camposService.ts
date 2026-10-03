@@ -121,4 +121,30 @@ export const camposService = {
     );
     return data.data;
   },
+
+  /**
+   * Vincula un campo local a un servicio SIREB.
+   */
+  async vincularSireb(
+    id: string,
+    servicioSirebId: string,
+  ): Promise<{ message: string; data: any }> {
+    const { data } = await apiClient.patch<{ message: string; data: any }>(
+      `${BASE}/${id}/vinculo-sireb`,
+      { servicio_sireb_id: servicioSirebId },
+    );
+    return data;
+  },
+
+  /**
+   * Desvincula un campo de su servicio SIREB.
+   */
+  async desvincularSireb(
+    id: string,
+  ): Promise<{ message: string; data: any }> {
+    const { data } = await apiClient.delete<{ message: string; data: any }>(
+      `${BASE}/${id}/vinculo-sireb`,
+    );
+    return data;
+  },
 };

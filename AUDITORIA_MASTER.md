@@ -1,41 +1,41 @@
 # 🛠️ Auditoría de Software — campos-deportivos-gad-beni
 
-> Generado: `2026-10-01 19:23`
+> Generado: `2026-10-03 08:59`
 
 ## Resumen
 
 | Métrica | Valor |
 | :--- | :--- |
 | **Proyecto** | `campos-deportivos-gad-beni` |
-| **Líneas de Código (Netas)** | 64827 LoC |
-| **Peso Total del Proyecto** | 981.00MB |
-| **Archivos analizados** | 394 |
-| **Timestamp** | 2026-10-01 19:23 |
+| **Líneas de Código (Netas)** | 71796 LoC |
+| **Peso Total del Proyecto** | 981.72MB |
+| **Archivos analizados** | 418 |
+| **Timestamp** | 2026-10-03 08:59 |
 | **Estado** | Activa |
 
 ## Breakdown por Capa
 
 | Capa | Archivos | LoC | Comentarios | Peso | % LoC |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `src` | 69 | 11051 | 0 | 392.20KB | 17.0% ███ |
-| `web-public` | 11 | 10571 | 13 | 366.86KB | 16.3% ███ |
-| `backend` | 13 | 9054 | 4 | 343.32KB | 14.0% ██ |
-| `web-admin` | 13 | 7788 | 9 | 269.36KB | 12.0% ██ |
-| `app` | 76 | 5046 | 0 | 189.48KB | 7.8% █ |
-| `src` | 45 | 5034 | 0 | 194.05KB | 7.8% █ |
-| `roadmap` | 13 | 4956 | 0 | 264.20KB | 7.6% █ |
-| `lib` | 20 | 2709 | 0 | 93.93KB | 4.2%  |
-| `tests` | 23 | 2650 | 0 | 104.28KB | 4.1%  |
-| `config` | 12 | 1241 | 0 | 48.61KB | 1.9%  |
-| `database` | 36 | 1030 | 0 | 36.75KB | 1.6%  |
-| `architecture` | 3 | 787 | 0 | 56.48KB | 1.2%  |
-| `mobile` | 7 | 728 | 82 | 30.24KB | 1.1%  |
+| `src` | 72 | 12674 | 0 | 451.28KB | 17.7% ███ |
+| `web-public` | 11 | 10571 | 13 | 366.86KB | 14.7% ██ |
+| `backend` | 13 | 9054 | 4 | 348.02KB | 12.6% ██ |
+| `web-admin` | 13 | 7788 | 9 | 269.36KB | 10.8% ██ |
+| `app` | 86 | 6844 | 0 | 260.90KB | 9.5% █ |
+| `roadmap` | 14 | 6116 | 0 | 307.76KB | 8.5% █ |
+| `src` | 46 | 5237 | 0 | 203.60KB | 7.3% █ |
+| `tests` | 26 | 3618 | 0 | 144.43KB | 5.0% █ |
+| `lib` | 20 | 3002 | 0 | 105.01KB | 4.2%  |
+| `config` | 12 | 1249 | 0 | 49.13KB | 1.7%  |
+| `database` | 39 | 1134 | 0 | 40.80KB | 1.6%  |
+| `docs` | 5 | 938 | 0 | 45.50KB | 1.3%  |
+| `architecture` | 3 | 787 | 0 | 56.48KB | 1.1%  |
+| `mobile` | 7 | 728 | 82 | 30.24KB | 1.0%  |
 | `bootstrap` | 4 | 355 | 0 | 24.32KB | 0.5%  |
-| `storage` | 7 | 250 | 0 | 952.34KB | 0.4%  |
-| `adr` | 6 | 249 | 0 | 14.11KB | 0.4%  |
+| `storage` | 7 | 250 | 0 | 952.34KB | 0.3%  |
+| `adr` | 6 | 249 | 0 | 14.11KB | 0.3%  |
 | `resources` | 3 | 213 | 0 | 70.96KB | 0.3%  |
-| `docs` | 2 | 162 | 0 | 14.28KB | 0.2%  |
-| `routes` | 3 | 139 | 0 | 8.29KB | 0.2%  |
+| `routes` | 3 | 175 | 0 | 10.23KB | 0.2%  |
 | `scripts` | 1 | 60 | 0 | 2.30KB | 0.1%  |
 | `web` | 7 | 54 | 0 | 42.58KB | 0.1%  |
 | `public` | 7 | 36 | 0 | 875.04KB | 0.1%  |
@@ -45,19 +45,19 @@
 | `test` | 1 | 24 | 0 | 1.07KB | 0.0%  |
 | `workflows` | 1 | 0 | 0 | 0.00B | 0.0%  |
 | `docker` | 2 | 0 | 0 | 0.00B | 0.0%  |
-| **TOTAL** | — | **64827** | — | **981.00MB** | 100% |
+| **TOTAL** | — | **71796** | — | **981.72MB** | 100% |
 
 ## Desglose por Extensión
 
 | Extensión | Archivos | LoC | Peso |
 | :--- | ---: | ---: | ---: |
 | `.json` | 17 | 18914 | 645.12KB |
-| `.tsx` | 92 | 14559 | 539.84KB |
-| `.php` | 160 | 10937 | 561.45KB |
+| `.tsx` | 93 | 16081 | 598.73KB |
+| `.php` | 176 | 13851 | 679.53KB |
 | `.lock` | 2 | 9376 | 332.80KB |
-| `.md` | 30 | 6445 | 363.96KB |
-| `.dart` | 21 | 2733 | 95.00KB |
-| `.ts` | 20 | 695 | 25.67KB |
+| `.md` | 34 | 8381 | 438.73KB |
+| `.dart` | 21 | 3026 | 106.08KB |
+| `.ts` | 23 | 999 | 35.41KB |
 | `.py` | 1 | 435 | 23.00KB |
 | `.css` | 3 | 252 | 9.53KB |
 | `(sin extensión)` | 15 | 123 | 7.65KB |
@@ -70,7 +70,7 @@
 | `.yaml` | 2 | 27 | 5.33KB |
 | `.iml` | 1 | 17 | 859.00B |
 | `.txt` | 1 | 2 | 24.00B |
-| `.cache` | 1 | 1 | 16.30KB |
+| `.cache` | 1 | 1 | 21.00KB |
 | `.ico` | 1 | 0 | 0.00B |
 | `.png` | 9 | 0 | 1.29MB |
 | `.jpg` | 2 | 0 | 461.65KB |
@@ -82,13 +82,13 @@
 | `web-public/package-lock.json` | 10317 | 0 | 0 | 359.29KB |
 | `backend/composer.lock` | 8729 | 0 | 0 | 314.54KB |
 | `web-admin/package-lock.json` | 7540 | 0 | 0 | 261.92KB |
+| `docs/roadmap/roamap7_gestion_operativa.md` | 1160 | 0 | 316 | 43.55KB |
 | `web-admin/src/pages/usuarios/Funcionarios.tsx` | 881 | 13 | 45 | 35.07KB |
 | `web-admin/src/components/data-table.tsx` | 873 | 3 | 5 | 28.76KB |
-| `web-admin/src/pages/parametricas/Tarifas.tsx` | 699 | 16 | 56 | 27.60KB |
+| `web-admin/src/pages/parametricas/CamposDeportivos.tsx` | 779 | 12 | 42 | 31.04KB |
+| `web-admin/src/components/reservas/DialogDetalleReserva.tsx` | 758 | 10 | 112 | 29.42KB |
+| `web-admin/src/pages/parametricas/Tarifas.tsx` | 704 | 18 | 60 | 27.83KB |
 | `mobile/lib/screens/campo_detalle_screen.dart` | 694 | 0 | 57 | 24.52KB |
-| `web-admin/src/components/ui/sidebar.tsx` | 665 | 9 | 49 | 21.13KB |
-| `web-admin/src/components/parametricas/CampoFormDialog.tsx` | 657 | 7 | 37 | 23.96KB |
-| `web-admin/src/pages/parametricas/TiposCampo.tsx` | 655 | 11 | 38 | 24.32KB |
 
 ## Mapa de Arquitectura
 
@@ -101,12 +101,12 @@ campos-deportivos-gad-beni/
 ├── .github/ [0.00B]
 │   └── workflows/ [0.00B]
 │       └── .gitkeep (0 LoC | 0.00B)
-├── backend/ [70.32MB]
+├── backend/ [70.44MB]
 │   ├── .editorconfig (14 LoC | 275.00B)
 │   ├── .env.example (76 LoC | 2.53KB)
 │   ├── .gitattributes (9 LoC | 186.00B)
 │   ├── .npmrc (2 LoC | 31.00B)
-│   ├── .phpunit.result.cache (1 LoC | 16.30KB)
+│   ├── .phpunit.result.cache (1 LoC | 21.00KB)
 │   ├── artisan (12 LoC | 425.00B)
 │   ├── composer.json (93 LoC | 2.78KB)
 │   ├── composer.lock (8729 LoC | 314.54KB)
@@ -115,13 +115,14 @@ campos-deportivos-gad-beni/
 │   ├── pint.json (3 LoC | 28.00B)
 │   ├── README.md (36 LoC | 3.61KB)
 │   ├── vite.config.js (19 LoC | 632.00B) [4 comentarios]
-│   ├── app/ [189.48KB]
-│   │   ├── Console/ [6.52KB]
-│   │   │   └── Commands/ [6.52KB]
+│   ├── app/ [260.90KB]
+│   │   ├── Console/ [20.79KB]
+│   │   │   └── Commands/ [20.79KB]
 │   │   │       ├── ExpirarSolicitudesVencidas.php (36 LoC | 1.29KB)
-│   │   │       ├── SincronizarTarifasSireb.php (98 LoC | 4.40KB)
+│   │   │       ├── MapearCamposSireb.php (322 LoC | 14.20KB)
+│   │   │       ├── SincronizarTarifasSireb.php (99 LoC | 4.46KB)
 │   │   │       └── VincularFuncionarioMamore.php (20 LoC | 851.00B)
-│   │   ├── DTOs/ [7.08KB]
+│   │   ├── DTOs/ [10.50KB]
 │   │   │   ├── CrearCampoDTO.php (37 LoC | 1.12KB)
 │   │   │   ├── EstadoCobroDTO.php (23 LoC | 765.00B)
 │   │   │   ├── FranjaSolicitadaDTO.php (25 LoC | 788.00B)
@@ -129,6 +130,7 @@ campos-deportivos-gad-beni/
 │   │   │   ├── RespuestaCobroDTO.php (25 LoC | 951.00B)
 │   │   │   ├── SolicitudCobroDTO.php (18 LoC | 578.00B)
 │   │   │   ├── SolicitudCreadaDTO.php (14 LoC | 404.00B)
+│   │   │   ├── SolicitudFiltrosDTO.php (95 LoC | 3.42KB)
 │   │   │   ├── SolicitudReservaDTO.php (38 LoC | 1.15KB)
 │   │   │   └── WebhookPayloadDTO.php (32 LoC | 1.11KB)
 │   │   ├── Enums/ [239.00B]
@@ -139,12 +141,12 @@ campos-deportivos-gad-beni/
 │   │   │   ├── FranjaNoDisponibleException.php (29 LoC | 878.00B)
 │   │   │   ├── RecaudacionesApiException.php (28 LoC | 878.00B)
 │   │   │   └── ServicioDeCobroNoDisponibleException.php (19 LoC | 557.00B)
-│   │   ├── Http/ [67.04KB]
-│   │   │   ├── Controllers/ [41.49KB]
+│   │   ├── Http/ [90.35KB]
+│   │   │   ├── Controllers/ [58.60KB]
 │   │   │   │   ├── AuthController.php (159 LoC | 6.92KB)
 │   │   │   │   ├── Controller.php (6 LoC | 77.00B)
-│   │   │   │   └── Api/ [34.49KB]
-│   │   │   │       └── V1/ [34.49KB]
+│   │   │   │   └── Api/ [51.60KB]
+│   │   │   │       └── V1/ [51.60KB]
 │   │   │   │           ├── AsignacionFuncionarioController.php (59 LoC | 2.05KB)
 │   │   │   │           ├── CampoDeportivoController.php (147 LoC | 5.51KB)
 │   │   │   │           ├── FuncionarioController.php (85 LoC | 2.78KB)
@@ -153,10 +155,13 @@ campos-deportivos-gad-beni/
 │   │   │   │           ├── TarifaCampoController.php (55 LoC | 2.00KB)
 │   │   │   │           ├── TipoCampoController.php (101 LoC | 3.23KB)
 │   │   │   │           ├── WebhookRecaudacionesController.php (62 LoC | 2.51KB)
-│   │   │   │           ├── Admin/ [7.75KB]
-│   │   │   │           │   └── SolicitudReservaController.php (202 LoC | 7.75KB)
-│   │   │   │           └── Public/ [7.41KB]
-│   │   │   │               ├── CampoController.php (72 LoC | 2.65KB)
+│   │   │   │           ├── Admin/ [24.74KB]
+│   │   │   │           │   ├── AsistenciaController.php (56 LoC | 1.72KB)
+│   │   │   │           │   ├── CatalogoSirebController.php (297 LoC | 12.42KB)
+│   │   │   │           │   ├── ReservasExportController.php (56 LoC | 1.93KB)
+│   │   │   │           │   └── SolicitudReservaController.php (219 LoC | 8.66KB)
+│   │   │   │           └── Public/ [7.53KB]
+│   │   │   │               ├── CampoController.php (81 LoC | 2.77KB)
 │   │   │   │               ├── DisponibilidadController.php (44 LoC | 1.69KB)
 │   │   │   │               ├── SolicitudEstadoController.php (25 LoC | 862.00B)
 │   │   │   │               ├── SolicitudReservaController.php (43 LoC | 1.61KB)
@@ -164,35 +169,38 @@ campos-deportivos-gad-beni/
 │   │   │   ├── Middleware/ [8.02KB]
 │   │   │   │   ├── RoleMiddleware.php (59 LoC | 2.28KB)
 │   │   │   │   └── VerificaTokenOAuth.php (138 LoC | 5.75KB)
-│   │   │   ├── Requests/ [11.01KB]
+│   │   │   ├── Requests/ [13.53KB]
 │   │   │   │   ├── AnularLiquidacionRequest.php (24 LoC | 707.00B)
+│   │   │   │   ├── StoreAsistenciaRequest.php (26 LoC | 732.00B)
 │   │   │   │   ├── StoreCampoDeportivoRequest.php (85 LoC | 3.65KB)
 │   │   │   │   ├── StoreFuncionarioRequest.php (67 LoC | 2.62KB)
-│   │   │   │   ├── StoreSolicitudReservaRequest.php (43 LoC | 1.98KB)
+│   │   │   │   ├── StoreSolicitudReservaRequest.php (73 LoC | 3.78KB)
 │   │   │   │   ├── StoreTarifaRequest.php (29 LoC | 1007.00B)
 │   │   │   │   └── StoreTipoCampoRequest.php (34 LoC | 1.09KB)
-│   │   │   └── Resources/ [6.51KB]
+│   │   │   └── Resources/ [10.20KB]
+│   │   │       ├── AuditoriaResource.php (21 LoC | 679.00B)
 │   │   │       ├── CampoPublicoResource.php (48 LoC | 2.01KB)
 │   │   │       ├── DisponibilidadResource.php (30 LoC | 918.00B)
 │   │   │       ├── SolicitudEstadoResource.php (47 LoC | 2.12KB)
+│   │   │       ├── SolicitudReservaAdminResource.php (68 LoC | 3.03KB)
 │   │   │       └── SolicitudReservaResource.php (38 LoC | 1.48KB)
-│   │   ├── Integrations/ [27.69KB]
-│   │   │   └── Recaudaciones/ [27.69KB]
-│   │   │       ├── RecaudacionesApiClient.php (426 LoC | 16.26KB)
+│   │   ├── Integrations/ [28.69KB]
+│   │   │   └── Recaudaciones/ [28.69KB]
+│   │   │       ├── RecaudacionesApiClient.php (458 LoC | 17.26KB)
 │   │   │       ├── RecaudacionesApiClientInterface.php (62 LoC | 2.12KB)
 │   │   │       └── RecaudacionesApiClientSimulado.php (219 LoC | 9.31KB)
 │   │   ├── Jobs/ [11.56KB]
 │   │   │   ├── ExpirarSolicitudJob.php (97 LoC | 3.70KB)
 │   │   │   ├── PollingSolicitudJob.php (39 LoC | 1.50KB)
 │   │   │   └── ReintentarSolicitudJob.php (163 LoC | 6.37KB)
-│   │   ├── Models/ [13.97KB]
+│   │   ├── Models/ [14.29KB]
 │   │   │   ├── AsignacionFuncionario.php (26 LoC | 814.00B)
 │   │   │   ├── Auditoria.php (29 LoC | 820.00B)
-│   │   │   ├── CampoDeportivo.php (69 LoC | 2.26KB)
+│   │   │   ├── CampoDeportivo.php (69 LoC | 2.29KB)
 │   │   │   ├── Funcionario.php (64 LoC | 1.89KB)
 │   │   │   ├── HorarioAtencion.php (18 LoC | 588.00B)
 │   │   │   ├── ParametroSistema.php (22 LoC | 719.00B)
-│   │   │   ├── Reserva.php (38 LoC | 1.17KB)
+│   │   │   ├── Reserva.php (51 LoC | 1.48KB)
 │   │   │   ├── Rol.php (28 LoC | 754.00B)
 │   │   │   ├── SolicitudReserva.php (39 LoC | 1.29KB)
 │   │   │   ├── SolicitudReservaDetalle.php (39 LoC | 1.25KB)
@@ -201,16 +209,18 @@ campos-deportivos-gad-beni/
 │   │   │   └── User.php (29 LoC | 888.00B)
 │   │   ├── Providers/ [1.09KB]
 │   │   │   └── AppServiceProvider.php (29 LoC | 1.09KB)
-│   │   └── Services/ [51.57KB]
+│   │   └── Services/ [80.67KB]
 │   │       ├── AsignacionFuncionarioService.php (102 LoC | 3.86KB)
 │   │       ├── AuditoriaService.php (48 LoC | 1.95KB)
 │   │       ├── AuthService.php (34 LoC | 1.11KB)
 │   │       ├── CampoDeportivoService.php (96 LoC | 3.46KB)
-│   │       ├── CatalogoSirebService.php (106 LoC | 4.09KB)
+│   │       ├── CampoPublicoSirebPresenter.php (360 LoC | 13.85KB)
+│   │       ├── CatalogoSirebService.php (155 LoC | 5.57KB)
 │   │       ├── ConfirmacionCobroService.php (106 LoC | 4.30KB)
 │   │       ├── DisponibilidadService.php (126 LoC | 5.43KB)
 │   │       ├── FuncionarioService.php (105 LoC | 3.83KB)
-│   │       ├── SolicitudReservaService.php (348 LoC | 15.22KB)
+│   │       ├── MarcarAsistenciaService.php (125 LoC | 4.70KB)
+│   │       ├── SolicitudReservaService.php (569 LoC | 24.30KB)
 │   │       ├── TarifaCampoService.php (173 LoC | 6.37KB)
 │   │       └── TipoCampoService.php (67 LoC | 1.95KB)
 │   ├── bootstrap/ [24.32KB]
@@ -219,7 +229,7 @@ campos-deportivos-gad-beni/
 │   │   └── cache/ [22.99KB]
 │   │       ├── packages.php (51 LoC | 963.00B)
 │   │       └── services.php (269 LoC | 22.05KB)
-│   ├── config/ [48.61KB]
+│   ├── config/ [49.13KB]
 │   │   ├── app.php (104 LoC | 4.20KB)
 │   │   ├── auth.php (104 LoC | 4.00KB)
 │   │   ├── cache.php (115 LoC | 4.27KB)
@@ -230,12 +240,12 @@ campos-deportivos-gad-beni/
 │   │   ├── mail.php (100 LoC | 3.55KB)
 │   │   ├── queue.php (110 LoC | 4.10KB)
 │   │   ├── sanctum.php (74 LoC | 3.03KB)
-│   │   ├── services.php (68 LoC | 2.95KB)
+│   │   ├── services.php (76 LoC | 3.47KB)
 │   │   └── session.php (197 LoC | 8.23KB)
-│   ├── database/ [36.75KB]
+│   ├── database/ [40.80KB]
 │   │   ├── factories/ [1.02KB]
 │   │   │   └── UserFactory.php (40 LoC | 1.02KB)
-│   │   ├── migrations/ [30.22KB]
+│   │   ├── migrations/ [33.80KB]
 │   │   │   ├── 0000_00_00_000000_create_extensions.php (19 LoC | 728.00B)
 │   │   │   ├── 0001_01_01_000000_create_roles_table.php (21 LoC | 657.00B)
 │   │   │   ├── 0001_01_01_000000_create_users_table.php (44 LoC | 1.44KB)
@@ -265,11 +275,14 @@ campos-deportivos-gad-beni/
 │   │   │   ├── 2026_09_25_180001_add_hora_inicio_noche_to_campos_deportivos_table.php (21 LoC | 614.00B)
 │   │   │   ├── 2026_10_01_000001_add_servicio_sireb_id_to_campos_deportivos.php (22 LoC | 695.00B)
 │   │   │   ├── 2026_10_01_000002_add_sireb_fields_to_solicitudes_reserva.php (26 LoC | 1021.00B)
-│   │   │   └── 2026_10_01_000003_make_creado_por_nullable_in_tarifas_campo.php (18 LoC | 542.00B)
-│   │   └── seeders/ [5.52KB]
+│   │   │   ├── 2026_10_01_000003_make_creado_por_nullable_in_tarifas_campo.php (18 LoC | 542.00B)
+│   │   │   ├── 2026_10_03_000001_add_asistencia_to_reservas_table.php (27 LoC | 845.00B)
+│   │   │   ├── 2026_10_03_000002_add_unique_index_servicio_sireb_id_to_campos_deportivos.php (44 LoC | 1.75KB)
+│   │   │   └── 2026_10_03_000003_add_servicio_sireb_codigo_to_campos_deportivos.php (28 LoC | 1.01KB)
+│   │   └── seeders/ [5.98KB]
 │   │       ├── DatabaseSeeder.php (14 LoC | 405.00B)
 │   │       ├── FuncionarioSeeder.php (42 LoC | 1.55KB)
-│   │       ├── MapeoSirebSeeder.php (32 LoC | 1.27KB)
+│   │       ├── MapeoSirebSeeder.php (37 LoC | 1.73KB)
 │   │       ├── ParametrosSistemaSeeder.php (33 LoC | 1.12KB)
 │   │       └── RolesSeeder.php (32 LoC | 1.18KB)
 │   ├── public/ [875.04KB]
@@ -289,8 +302,8 @@ campos-deportivos-gad-beni/
 │   │   │   └── app.js (0 LoC | 3.00B) [1 comentarios]
 │   │   └── views/ [70.61KB]
 │   │       └── welcome.blade.php (212 LoC | 70.61KB)
-│   ├── routes/ [8.29KB]
-│   │   ├── api.php (114 LoC | 7.31KB)
+│   ├── routes/ [10.23KB]
+│   │   ├── api.php (150 LoC | 9.26KB)
 │   │   ├── console.php (9 LoC | 403.00B)
 │   │   └── web.php (16 LoC | 595.00B)
 │   ├── storage/ [952.34KB]
@@ -312,15 +325,15 @@ campos-deportivos-gad-beni/
 │   │   │       ├── 7ea5f0f9c5138d7341c4b3c5bbe09c14.php (211 LoC | 70.97KB)
 │   │   │       └── df1c67babce2e5d238d8c0093a8c4a81.php (4 LoC | 477.00B)
 │   │   └── logs/ [0.00B]
-│   ├── tests/ [104.28KB]
+│   ├── tests/ [144.43KB]
 │   │   ├── TestCase.php (22 LoC | 878.00B)
-│   │   ├── Feature/ [103.19KB]
+│   │   ├── Feature/ [143.34KB]
 │   │   │   ├── AuthOAuthIbareTest.php (121 LoC | 4.38KB)
 │   │   │   ├── AuthTest.php (61 LoC | 2.09KB)
 │   │   │   ├── ExampleTest.php (15 LoC | 359.00B)
 │   │   │   ├── ModelsTest.php (266 LoC | 10.22KB)
-│   │   │   ├── Api/ [72.76KB]
-│   │   │   │   └── V1/ [72.76KB]
+│   │   │   ├── Api/ [112.92KB]
+│   │   │   │   └── V1/ [112.92KB]
 │   │   │   │       ├── AsignacionFuncionarioTest.php (171 LoC | 7.40KB)
 │   │   │   │       ├── CampoDeportivoTest.php (169 LoC | 6.38KB)
 │   │   │   │       ├── FuncionarioTest.php (179 LoC | 6.80KB)
@@ -328,8 +341,11 @@ campos-deportivos-gad-beni/
 │   │   │   │       ├── TarifaCampoTest.php (135 LoC | 5.50KB)
 │   │   │   │       ├── TipoCampoTest.php (96 LoC | 3.39KB)
 │   │   │   │       ├── WebhookRecaudacionesControllerTest.php (157 LoC | 6.26KB)
-│   │   │   │       ├── Admin/ [5.10KB]
-│   │   │   │       │   └── SolicitudReservaAnulacionTest.php (125 LoC | 5.10KB)
+│   │   │   │       ├── Admin/ [45.25KB]
+│   │   │   │       │   ├── AsistenciaReservaTest.php (315 LoC | 12.72KB)
+│   │   │   │       │   ├── ReservasExportTest.php (275 LoC | 11.48KB)
+│   │   │   │       │   ├── SolicitudReservaAnulacionTest.php (125 LoC | 5.10KB)
+│   │   │   │       │   └── SolicitudReservaListadoTest.php (378 LoC | 15.95KB)
 │   │   │   │       └── Public/ [31.45KB]
 │   │   │   │           ├── CampoControllerTest.php (107 LoC | 4.19KB)
 │   │   │   │           ├── DatosCobroPendienteTest.php (101 LoC | 4.22KB)
@@ -346,9 +362,12 @@ campos-deportivos-gad-beni/
 │   │   └── Unit/ [243.00B]
 │   │       └── ExampleTest.php (13 LoC | 243.00B)
 │   └── vendor/ [67.73MB | 10110 archivos | dependencias omitidas]
-├── docs/ [349.07KB]
+├── docs/ [423.84KB]
+│   ├── ESTADO_FINAL_IMPLEMENTACION.md (233 LoC | 9.52KB)
 │   ├── guia.md (78 LoC | 5.91KB)
 │   ├── info.md (84 LoC | 8.37KB)
+│   ├── PLAN_TECNICO_SIREB_INTEGRACION.md (384 LoC | 14.66KB)
+│   ├── RESUMEN_IMPLEMENTACION_SIREB.md (159 LoC | 7.04KB)
 │   ├── adr/ [14.11KB]
 │   │   ├── ADR-001-monorepo-estructura.md (29 LoC | 1.61KB)
 │   │   ├── ADR-002-postgresql-sobre-mysql.md (40 LoC | 2.19KB)
@@ -360,7 +379,7 @@ campos-deportivos-gad-beni/
 │   │   ├── Doc-1-Analisis-Modulos-BD-hub-spoke.md (321 LoC | 21.87KB)
 │   │   ├── Doc-2-Diccionario-Datos-hub-spoke.md (306 LoC | 19.28KB)
 │   │   └── Doc-3-Historias-Usuario-hub-spoke.md (160 LoC | 15.33KB)
-│   └── roadmap/ [264.20KB]
+│   └── roadmap/ [307.76KB]
 │       ├── ROADMAP_MODULO_0_8_UI_LOGIN.md (256 LoC | 14.26KB)
 │       ├── ROADMAP_MODULO_0_9_AUTH_IBARE.md (335 LoC | 20.34KB)
 │       ├── ROADMAP_MODULO_0_SETUP.md (593 LoC | 33.82KB)
@@ -373,7 +392,8 @@ campos-deportivos-gad-beni/
 │       ├── ROADMAP_MODULO_7_GESTION_OPERATIVA_RESERVAS.md (435 LoC | 22.47KB)
 │       ├── ROADMAP_MODULO_7_SEGURIDAD_PUBLICACION.md (214 LoC | 11.94KB)
 │       ├── ROADMAP_MODULO_8_INTEGRACION_SIREB.md (596 LoC | 27.73KB)
-│       └── ROADMAP_WEB_PUBLICA.md (533 LoC | 27.81KB)
+│       ├── ROADMAP_WEB_PUBLICA.md (533 LoC | 27.81KB)
+│       └── roamap7_gestion_operativa.md (1160 LoC | 43.55KB)
 ├── infrastructure/ [3.42KB]
 │   ├── LOCAL_SETUP.md (31 LoC | 1.12KB)
 │   ├── docker/ [0.00B]
@@ -383,7 +403,7 @@ campos-deportivos-gad-beni/
 │   │       └── .gitkeep (0 LoC | 0.00B)
 │   └── scripts/ [2.30KB]
 │       └── smoke_concurrencia_reserva.ps1 (60 LoC | 2.30KB)
-├── mobile/ [72.41MB]
+├── mobile/ [72.87MB]
 │   ├── .flutter-plugins-dependencies (1 LoC | 4.23KB)
 │   ├── .metadata (25 LoC | 964.00B)
 │   ├── analysis_options.yaml (3 LoC | 1.41KB) [22 comentarios]
@@ -391,22 +411,22 @@ campos-deportivos-gad-beni/
 │   ├── pubspec.lock (647 LoC | 18.26KB)
 │   ├── pubspec.yaml (24 LoC | 3.92KB) [60 comentarios]
 │   ├── README.md (11 LoC | 656.00B)
-│   ├── .dart_tool/ [13.25MB | 227 archivos | dependencias omitidas]
+│   ├── .dart_tool/ [13.70MB | 237 archivos | dependencias omitidas]
 │   ├── android/ [76.01KB | 25 archivos | código nativo generado]
 │   ├── build/ [58.85MB | 13 archivos | dependencias omitidas]
 │   ├── ios/ [69.17KB | 49 archivos | código nativo generado]
-│   ├── lib/ [93.93KB]
+│   ├── lib/ [105.01KB]
 │   │   ├── main.dart (37 LoC | 1.13KB)
-│   │   ├── models/ [11.33KB]
+│   │   ├── models/ [16.20KB]
 │   │   │   ├── bloque_disponibilidad.dart (61 LoC | 1.97KB)
-│   │   │   ├── campo_deportivo.dart (186 LoC | 6.36KB)
+│   │   │   ├── campo_deportivo.dart (336 LoC | 11.23KB)
 │   │   │   ├── estado_solicitud.dart (58 LoC | 1.99KB)
 │   │   │   └── franja_carrito.dart (33 LoC | 1.01KB)
 │   │   ├── providers/ [1.46KB]
 │   │   │   └── carrito_reserva_provider.dart (46 LoC | 1.46KB)
-│   │   ├── screens/ [71.86KB]
+│   │   ├── screens/ [77.58KB]
 │   │   │   ├── campo_detalle_screen.dart (694 LoC | 24.52KB)
-│   │   │   ├── campos_listado_screen.dart (321 LoC | 11.72KB)
+│   │   │   ├── campos_listado_screen.dart (448 LoC | 17.43KB)
 │   │   │   ├── campos_mapa_screen.dart (68 LoC | 2.38KB)
 │   │   │   ├── carrito_resumen_screen.dart (132 LoC | 5.14KB)
 │   │   │   ├── comprobante_screen.dart (95 LoC | 3.41KB)
@@ -414,9 +434,9 @@ campos-deportivos-gad-beni/
 │   │   │   ├── datos_solicitante_screen.dart (174 LoC | 6.14KB)
 │   │   │   ├── health_check_screen.dart (104 LoC | 3.53KB)
 │   │   │   └── pago_qr_screen.dart (313 LoC | 9.89KB)
-│   │   ├── services/ [8.15KB]
+│   │   ├── services/ [8.65KB]
 │   │   │   ├── api_client.dart (21 LoC | 704.00B)
-│   │   │   ├── campos_service.dart (58 LoC | 2.00KB)
+│   │   │   ├── campos_service.dart (74 LoC | 2.50KB)
 │   │   │   ├── disponibilidad_service.dart (35 LoC | 1.33KB)
 │   │   │   ├── estado_solicitud_service.dart (25 LoC | 1.02KB)
 │   │   │   └── solicitud_reserva_service.dart (87 LoC | 3.11KB)
@@ -432,7 +452,7 @@ campos-deportivos-gad-beni/
 │           ├── Icon-512.png (0 LoC | 8.06KB)
 │           ├── Icon-maskable-192.png (0 LoC | 5.46KB)
 │           └── Icon-maskable-512.png (0 LoC | 20.51KB)
-├── web-admin/ [254.95MB]
+├── web-admin/ [255.01MB]
 │   ├── .env.example (3 LoC | 141.00B)
 │   ├── .prettierignore (2 LoC | 18.00B)
 │   ├── .prettierrc (7 LoC | 120.00B)
@@ -451,16 +471,16 @@ campos-deportivos-gad-beni/
 │   ├── public/ [14.21KB]
 │   │   ├── favicon.svg (1 LoC | 9.30KB)
 │   │   └── icons.svg (24 LoC | 4.91KB)
-│   └── src/ [392.20KB]
+│   └── src/ [451.28KB]
 │       ├── App.tsx (48 LoC | 1.98KB)
 │       ├── index.css (125 LoC | 4.70KB) [7 comentarios]
 │       ├── main.tsx (21 LoC | 685.00B)
 │       ├── app/ [12.50KB]
 │       │   └── dashboard/ [12.50KB]
 │       │       └── data.json (614 LoC | 12.50KB)
-│       ├── components/ [208.60KB]
+│       ├── components/ [235.28KB]
 │       │   ├── .gitkeep (0 LoC | 0.00B)
-│       │   ├── app-sidebar.tsx (170 LoC | 5.99KB)
+│       │   ├── app-sidebar.tsx (183 LoC | 6.34KB)
 │       │   ├── chart-area-interactive.tsx (291 LoC | 10.60KB)
 │       │   ├── data-table.tsx (873 LoC | 28.76KB) [3 comentarios]
 │       │   ├── nav-documents.tsx (86 LoC | 2.47KB)
@@ -473,13 +493,14 @@ campos-deportivos-gad-beni/
 │       │   ├── layout/ [3.91KB]
 │       │   │   ├── AppLayout.tsx (90 LoC | 3.26KB) [3 comentarios]
 │       │   │   └── ThemeProvider.tsx (17 LoC | 667.00B)
-│       │   ├── parametricas/ [23.96KB]
-│       │   │   └── CampoFormDialog.tsx (657 LoC | 23.96KB) [7 comentarios]
-│       │   ├── reservas/ [17.62KB]
+│       │   ├── parametricas/ [33.56KB]
+│       │   │   ├── CampoFormDialog.tsx (659 LoC | 24.33KB) [12 comentarios]
+│       │   │   └── VincularSirebDialog.tsx (238 LoC | 9.24KB) [4 comentarios]
+│       │   ├── reservas/ [33.06KB]
 │       │   │   ├── AnularLiquidacionDialog.tsx (114 LoC | 3.64KB)
-│       │   │   └── DialogDetalleReserva.tsx (347 LoC | 13.98KB)
-│       │   └── ui/ [104.65KB]
-│       │       ├── alert-dialog.tsx (171 LoC | 5.13KB)
+│       │   │   └── DialogDetalleReserva.tsx (758 LoC | 29.42KB) [10 comentarios]
+│       │   └── ui/ [105.92KB]
+│       │       ├── alert-dialog.tsx (190 LoC | 5.86KB) [5 comentarios]
 │       │       ├── avatar.tsx (99 LoC | 2.95KB)
 │       │       ├── badge.tsx (48 LoC | 1.88KB)
 │       │       ├── breadcrumb.tsx (116 LoC | 2.53KB)
@@ -489,7 +510,7 @@ campos-deportivos-gad-beni/
 │       │       ├── checkbox.tsx (25 LoC | 1.50KB)
 │       │       ├── dialog.tsx (146 LoC | 3.97KB)
 │       │       ├── drawer.tsx (195 LoC | 11.09KB) [12 comentarios]
-│       │       ├── dropdown-menu.tsx (249 LoC | 8.52KB)
+│       │       ├── dropdown-menu.tsx (268 LoC | 9.07KB) [6 comentarios]
 │       │       ├── input.tsx (17 LoC | 1.02KB)
 │       │       ├── label.tsx (15 LoC | 504.00B)
 │       │       ├── select.tsx (188 LoC | 6.50KB)
@@ -512,34 +533,36 @@ campos-deportivos-gad-beni/
 │       │   └── use-theme.ts (31 LoC | 1.28KB)
 │       ├── lib/ [166.00B]
 │       │   └── utils.ts (5 LoC | 166.00B)
-│       ├── pages/ [136.88KB]
+│       ├── pages/ [161.74KB]
 │       │   ├── auth/ [1.12KB]
 │       │   │   └── Login.tsx (32 LoC | 1.12KB)
 │       │   ├── Dashboard/ [329.00B]
 │       │   │   └── index.tsx (12 LoC | 329.00B)
-│       │   ├── parametricas/ [68.42KB]
-│       │   │   ├── CamposDeportivos.tsx (430 LoC | 16.50KB) [4 comentarios]
-│       │   │   ├── Tarifas.tsx (699 LoC | 27.60KB) [16 comentarios]
+│       │   ├── parametricas/ [83.19KB]
+│       │   │   ├── CamposDeportivos.tsx (779 LoC | 31.04KB) [12 comentarios]
+│       │   │   ├── Tarifas.tsx (704 LoC | 27.83KB) [18 comentarios]
 │       │   │   └── TiposCampo.tsx (655 LoC | 24.32KB) [11 comentarios]
-│       │   ├── Reservas/ [7.91KB]
-│       │   │   └── index.tsx (213 LoC | 7.91KB)
+│       │   ├── Reservas/ [18.01KB]
+│       │   │   └── index.tsx (555 LoC | 18.01KB)
 │       │   └── usuarios/ [59.10KB]
 │       │       ├── Asignaciones.tsx (579 LoC | 24.03KB) [12 comentarios]
 │       │       └── Funcionarios.tsx (881 LoC | 35.07KB) [13 comentarios]
-│       ├── services/ [11.99KB]
+│       ├── services/ [18.24KB]
 │       │   ├── apiClient.ts (20 LoC | 787.00B) [3 comentarios]
 │       │   ├── asignacionesService.ts (33 LoC | 1.68KB) [17 comentarios]
-│       │   ├── camposService.ts (93 LoC | 3.32KB) [17 comentarios]
+│       │   ├── asistenciaService.ts (15 LoC | 628.00B) [9 comentarios]
+│       │   ├── camposService.ts (111 LoC | 3.96KB) [23 comentarios]
+│       │   ├── catalogoSirebService.ts (67 LoC | 2.10KB) [12 comentarios]
 │       │   ├── funcionariosService.ts (54 LoC | 2.10KB) [21 comentarios]
-│       │   ├── solicitudesReservaService.ts (46 LoC | 1.25KB)
+│       │   ├── solicitudesReservaService.ts (127 LoC | 4.14KB) [18 comentarios]
 │       │   ├── tarifasService.ts (22 LoC | 890.00B) [7 comentarios]
 │       │   └── tiposCampoService.ts (53 LoC | 2.00KB) [22 comentarios]
-│       └── types/ [8.61KB]
+│       └── types/ [9.90KB]
 │           ├── index.ts (11 LoC | 206.00B)
-│           ├── parametricas.ts (97 LoC | 4.16KB) [24 comentarios]
-│           ├── reservas.ts (62 LoC | 1.47KB)
+│           ├── parametricas.ts (90 LoC | 4.29KB) [30 comentarios]
+│           ├── reservas.ts (113 LoC | 2.63KB)
 │           └── usuarios.ts (47 LoC | 2.78KB) [25 comentarios]
-└── web-public/ [582.94MB]
+└── web-public/ [582.95MB]
     ├── .env.example (1 LoC | 51.00B)
     ├── components.json (25 LoC | 515.00B)
     ├── eslint.config.js (9 LoC | 591.00B) [12 comentarios]
@@ -555,24 +578,24 @@ campos-deportivos-gad-beni/
     ├── public/ [14.21KB]
     │   ├── favicon.svg (1 LoC | 9.30KB)
     │   └── icons.svg (24 LoC | 4.91KB)
-    └── src/ [194.05KB]
+    └── src/ [203.60KB]
         ├── index.css (126 LoC | 4.48KB) [1 comentarios]
         ├── main.tsx (13 LoC | 417.00B)
         ├── router.tsx (37 LoC | 1.55KB)
-        ├── components/ [115.72KB]
-        │   ├── campo/ [30.23KB]
+        ├── components/ [121.38KB]
+        │   ├── campo/ [33.84KB]
         │   │   ├── BarraCarrito.tsx (48 LoC | 2.07KB)
-        │   │   ├── CampoCard.tsx (115 LoC | 4.34KB)
+        │   │   ├── CampoCard.tsx (153 LoC | 6.55KB) [3 comentarios]
         │   │   ├── FiltrosCampos.tsx (230 LoC | 8.24KB) [1 comentarios]
         │   │   ├── GrillaDisponibilidad.tsx (184 LoC | 6.29KB) [1 comentarios]
-        │   │   ├── MapaCampos.tsx (125 LoC | 4.40KB)
+        │   │   ├── MapaCampos.tsx (147 LoC | 5.81KB) [1 comentarios]
         │   │   └── SelectorFechas.tsx (113 LoC | 4.89KB) [8 comentarios]
         │   ├── comprobante/ [14.46KB]
         │   │   ├── ComprobantePDF.tsx (199 LoC | 8.67KB)
         │   │   └── EstadoReserva.tsx (178 LoC | 5.79KB) [1 comentarios]
-        │   ├── landing/ [20.88KB]
+        │   ├── landing/ [22.37KB]
         │   │   ├── BandaCTA.tsx (35 LoC | 1.63KB)
-        │   │   ├── CamposDestacados.tsx (155 LoC | 6.46KB)
+        │   │   ├── CamposDestacados.tsx (178 LoC | 7.95KB)
         │   │   ├── ComoFunciona.tsx (70 LoC | 2.88KB)
         │   │   ├── Footer.tsx (101 LoC | 3.68KB)
         │   │   ├── Hero.tsx (83 LoC | 3.89KB)
@@ -584,8 +607,8 @@ campos-deportivos-gad-beni/
         │   ├── pago/ [9.76KB]
         │   │   ├── CuentaRegresiva.tsx (82 LoC | 2.58KB) [1 comentarios]
         │   │   └── MedioDePago.tsx (201 LoC | 7.19KB) [5 comentarios]
-        │   ├── reserva/ [8.95KB]
-        │   │   ├── FormularioSolicitante.tsx (131 LoC | 4.72KB) [1 comentarios]
+        │   ├── reserva/ [9.50KB]
+        │   │   ├── FormularioSolicitante.tsx (143 LoC | 5.26KB) [2 comentarios]
         │   │   └── ResumenCarrito.tsx (102 LoC | 4.24KB) [1 comentarios]
         │   └── ui/ [27.54KB]
         │       ├── badge.tsx (48 LoC | 1.87KB)
@@ -601,9 +624,9 @@ campos-deportivos-gad-beni/
         ├── lib/ [824.00B]
         │   ├── api.ts (20 LoC | 651.00B) [1 comentarios]
         │   └── utils.ts (5 LoC | 173.00B)
-        ├── pages/ [69.75KB]
-        │   ├── CampoDetalle.tsx (487 LoC | 21.33KB) [3 comentarios]
-        │   ├── Campos.tsx (163 LoC | 6.57KB) [1 comentarios]
+        ├── pages/ [71.44KB]
+        │   ├── CampoDetalle.tsx (497 LoC | 21.85KB) [4 comentarios]
+        │   ├── Campos.tsx (182 LoC | 7.74KB) [1 comentarios]
         │   ├── Comprobante.tsx (210 LoC | 8.68KB)
         │   ├── ConsultarEstado.tsx (209 LoC | 8.03KB)
         │   ├── Landing.tsx (34 LoC | 1.27KB)
@@ -611,6 +634,7 @@ campos-deportivos-gad-beni/
         │   └── Reserva.tsx (185 LoC | 7.64KB) [1 comentarios]
         ├── store/ [1011.00B]
         │   └── carritoStore.ts (32 LoC | 1011.00B)
-        └── types/ [360.00B]
+        └── types/ [2.56KB]
+            ├── campo.ts (79 LoC | 2.21KB) [8 comentarios]
             └── reserva.ts (15 LoC | 360.00B)
 ```

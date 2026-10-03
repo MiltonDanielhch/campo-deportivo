@@ -19,17 +19,20 @@ class CamposListadoScreen extends StatefulWidget {
 class _CamposListadoScreenState extends State<CamposListadoScreen> {
   final _service = CamposService();
   late Future<List<CampoDeportivo>> _camposFuture;
+  late Future<Map<String, dynamic>?> _metaFuture;
   ModoVista _modo = ModoVista.lista;
 
   @override
   void initState() {
     super.initState();
     _camposFuture = _service.listarCampos();
+    _metaFuture = _service.obtenerMeta();
   }
 
   void _recargar() {
     setState(() {
       _camposFuture = _service.listarCampos();
+      _metaFuture = _service.obtenerMeta();
     });
   }
 
@@ -120,14 +123,78 @@ class _CamposListadoScreenState extends State<CamposListadoScreen> {
                   return CamposMapaView(campos: campos);
                 }
 
-                return RefreshIndicator(
-                  onRefresh: () async => _recargar(),
-                  child: ListView.builder(
-                    itemCount: campos.length,
-                    itemBuilder: (context, index) {
-                      return _CampoTarjeta(campo: campos[index]);
-                    },
-                  ),
+                return Column(
+                  children: [
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: () async => _recargar(),
+                        child: ListView.builder(
+                          itemCount: campos.length,
+                          itemBuilder: (context, index) {
+                            return _CampoTarjeta(campo: campos[index]);
+                          },
+                        ),
+                      ),
+                    ),
+                    // ─── Footer con información de origen de precios ───
+                    FutureBuilder<Map<String, dynamic>?>(
+                      future: _metaFuture,
+                      builder: (context, metaSnapshot) {
+                        if (!metaSnapshot.hasData || metaSnapshot.data == null) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final meta = metaSnapshot.data!;
+                        final aviso = meta['aviso'] as String?;
+                        final fuente = meta['fuente_precios'] as String?;
+                        final sincronizadoEn = meta['sincronizado_en'] as String?;
+
+                        if (aviso != null) {
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            color: Colors.orange[50],
+                            child: Row(
+                              children: [
+                                const Icon(Icons.warning_amber_rounded,
+                                    size: 20, color: Colors.orange),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    aviso,
+                                    style: const TextStyle(
+                                        fontSize: 12, color: Colors.orange),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          color: Colors.grey[100],
+                          child: Row(
+                            children: [
+                              const Icon(Icons.refresh, size: 16, color: Colors.grey),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Precios oficiales sincronizados desde Paitití / SIREB.',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                              if (sincronizadoEn != null)
+                                Text(
+                                  'Actualizado: ${_formatFecha(sincronizadoEn)}',
+                                  style: const TextStyle(
+                                      fontSize: 11, color: Colors.grey),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 );
               },
             ),
@@ -135,6 +202,15 @@ class _CamposListadoScreenState extends State<CamposListadoScreen> {
         ],
       ),
     );
+  }
+
+  String _formatFecha(String fechaIso) {
+    try {
+      final fecha = DateTime.parse(fechaIso);
+      return '${fecha.day}/${fecha.month}/${fecha.year} ${fecha.hour}:${fecha.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'N/A';
+    }
   }
 }
 
@@ -147,23 +223,24 @@ class _CampoTarjeta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final esMantenimiento = campo.estaEnMantenimiento;
+    final esReservable = campo.esReservable;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: esMantenimiento ? 1 : 2,
+      elevation: esReservable ? 2 : 1,
       color: esMantenimiento ? Colors.grey[100] : null,
       clipBehavior: Clip.antiAlias, // ← para que la foto respete las esquinas redondeadas
       child: InkWell(
-        onTap: esMantenimiento
-            ? null
-            : () {
+        onTap: esReservable
+            ? () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => CampoDetalleScreen(campo: campo),
                   ),
                 );
-              },
+              }
+            : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -195,13 +272,14 @@ class _CampoTarjeta extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    campo.tipoCampo.nombre,
-                    style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                        fontStyle: FontStyle.italic),
-                  ),
+                  if (campo.tipoCampo != null)
+                    Text(
+                      campo.tipoCampo!.nombre,
+                      style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                          fontStyle: FontStyle.italic),
+                    ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
@@ -214,8 +292,32 @@ class _CampoTarjeta extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // ─── Tarifas: regular (☀️) y con iluminación (💡) ───
-                  if (campo.tarifas.diurna != null ||
+                  // ─── Precios desde SIREB o locales ───
+                  if (campo.fuentePrecios == 'SIREB' && campo.sireb != null)
+                    Row(
+                      children: [
+                        Icon(Icons.payments, size: 20, color: Colors.green),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            campo.formatoPrecioSireb(),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ),
+                        if (campo.sireb!.tarifario == 'liquidable')
+                          const Chip(
+                            label: Text('Oficial'),
+                            backgroundColor: Colors.green,
+                            labelStyle:
+                                TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                      ],
+                    )
+                  else if (campo.tarifas.diurna != null ||
                       campo.tarifas.nocturna != null) ...[
                     if (campo.tarifas.diurna != null)
                       Row(
@@ -257,12 +359,31 @@ class _CampoTarjeta extends StatelessWidget {
                         Icon(Icons.payments, size: 20, color: Colors.grey[600]),
                         const SizedBox(width: 4),
                         Text(
-                          'Sin tarifa definida',
+                          'Consultar precio',
                           style:
                               TextStyle(fontSize: 14, color: Colors.grey[600]),
                         ),
                       ],
                     ),
+                  // ─── Mensaje de no reservable ───
+                  if (campo.mensajeNoReservable != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            campo.mensajeNoReservable!,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange[700],
+                                fontStyle: FontStyle.italic),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (esMantenimiento) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -270,6 +391,16 @@ class _CampoTarjeta extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 12,
                           color: Colors.orange[700],
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                  if (!esReservable && !esMantenimiento) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'No disponible para reserva online',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
                           fontStyle: FontStyle.italic),
                     ),
                   ],

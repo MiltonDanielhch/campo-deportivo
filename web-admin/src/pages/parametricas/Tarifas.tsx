@@ -43,7 +43,6 @@ import { camposService } from '@/services/camposService';
 import { tarifasService } from '@/services/tarifasService';
 import type {
   CampoDeportivo,
-  FuncionarioResumen,
   HistorialTarifas,
   TarifaCampo,
   TipoTarifa,
@@ -95,8 +94,13 @@ const horaAPorcentaje = (hhmm: string): number =>
 
 /** Iniciales del nombre del creador */
 const iniciales = (tarifa: TarifaCampo): string => {
-  const obj = typeof tarifa.creado_por === 'object' ? tarifa.creado_por : null;
-  if (!obj) return '?';
+  const obj =
+    tarifa.creado_por && typeof tarifa.creado_por === 'object'
+      ? tarifa.creado_por
+      : null;
+
+  if (!obj?.nombre_completo) return '?';
+
   return obj.nombre_completo
     .split(' ')
     .map((p) => p[0])
@@ -105,10 +109,17 @@ const iniciales = (tarifa: TarifaCampo): string => {
     .toUpperCase();
 };
 
-const nombreCreador = (tarifa: TarifaCampo): string =>
-  typeof tarifa.creado_por === 'object'
-    ? (tarifa.creado_por as FuncionarioResumen).nombre_completo
-    : 'Sistema';
+const nombreCreador = (tarifa: TarifaCampo): string => {
+  const creador = tarifa.creado_por;
+
+  // Ojo: typeof null === 'object'. Las tarifas espejadas desde SIREB
+  // (creadas por el job de sincronización) no tienen funcionario creador.
+  if (creador && typeof creador === 'object') {
+    return creador.nombre_completo?.trim() || 'Funcionario';
+  }
+
+  return 'Sistema';
+};
 
 // ─── Barra visual de 24 horas ──────────────────────────────────────────
 

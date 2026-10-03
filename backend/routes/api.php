@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\WebhookRecaudacionesController;
 use App\Http\Controllers\Api\V1\Public\SolicitudEstadoController;
 use App\Http\Controllers\Api\V1\Admin\SolicitudReservaController as AdminSolicitudReservaController;
 use App\Http\Controllers\Api\V1\Admin\AsistenciaController as AdminAsistenciaController;
+use App\Http\Controllers\Api\V1\Admin\CatalogoSirebController;
 use App\Http\Controllers\Api\V1\Admin\ReservasExportController as AdminReservasExportController;
 
 /*
@@ -93,9 +94,24 @@ Route::middleware('auth.oauth')->group(function () {
             Route::patch('/{campoDeportivo}/estado', [CampoDeportivoController::class, 'cambiarEstado']);
             Route::patch('/{campoDeportivo}/hora-noche', [CampoDeportivoController::class, 'actualizarHoraNoche']);
 
+            // ─── Integración SIREB (Fase C.4) ───
+            Route::patch('/{campoDeportivo}/vinculo-sireb', [CatalogoSirebController::class, 'vincular']);
+            Route::delete('/{campoDeportivo}/vinculo-sireb', [CatalogoSirebController::class, 'desvincular']);
+            // ─── FIN Integración SIREB ───
+
             // Tarifas del campo (HU-A3)
             Route::post('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'store']);
             Route::get('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'historial']);
+        });
+
+        // ─── Catálogo SIREB (Fase C.4) ───
+        Route::prefix('v1/admin/catalogo-sireb')->group(function () {
+            Route::get('/campos', [CatalogoSirebController::class, 'index']);
+        });
+
+        // ─── Sincronización SIREB (Fase C.4) ───
+        Route::prefix('v1/admin/sireb')->group(function () {
+            Route::post('/sincronizar-tarifas', [CatalogoSirebController::class, 'sincronizarTarifas']);
         });
 
         // Funcionarios (HU-B1)

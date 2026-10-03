@@ -71,6 +71,12 @@ interface CampoFormDialogProps {
   onOpenChange: (open: boolean) => void;
   modo: 'crear' | 'editar';
   campo?: CampoDeportivo | null;
+  /**
+   * Valores con los que se abre el formulario en modo "crear".
+   * Se usa, por ejemplo, para dar de alta el campo local de un servicio
+   * del catálogo de SIREB que todavía no existe en el satélite.
+   */
+  valoresIniciales?: { codigo?: string; nombre?: string } | null;
   onGuardado: () => void;
 }
 
@@ -114,6 +120,7 @@ export default function CampoFormDialog({
   onOpenChange,
   modo,
   campo,
+  valoresIniciales,
   onGuardado,
 }: CampoFormDialogProps) {
   // ─── Datos generales ───
@@ -175,8 +182,8 @@ export default function CampoFormDialog({
       }
     } else {
       setTipoCampoId('');
-      setCodigo('');
-      setNombre('');
+      setCodigo(valoresIniciales?.codigo ?? '');
+      setNombre(valoresIniciales?.nombre ?? '');
       setDireccion('');
       setLatitud(LAT_TRINIDAD);
       setLongitud(LNG_TRINIDAD);
@@ -188,7 +195,7 @@ export default function CampoFormDialog({
       .listarActivos()
       .then(setTiposActivos)
       .catch(() => toast.error('No se pudieron cargar los tipos de campo'));
-  }, [open, modo, campo]);
+  }, [open, modo, campo, valoresIniciales]);
 
   // ─── Imagen: helpers ───
   const previewUrl = imagenFile

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -33,14 +33,20 @@ interface HorarioAtencion {
 
 interface Campo {
   id: string;
+  /** Código oficial del servicio en SIREB (SEDEDE-CS1, 0005, …). */
+  codigo?: string;
   nombre: string;
-  tipo_campo: { nombre: string };
+  nombre_local?: string;
+  tipo_campo?: { nombre: string } | null;
   direccion: string;
   estado: string;
   latitud: number;
   longitud: number;
   imagen_url: string | null;
   hora_inicio_noche: string;
+  servicio_sireb_id?: string | null;
+  servicio_sireb_codigo?: string | null;
+  fuente_precios?: string;
   tarifas: {
     diurna: InfoTarifa | null;
     nocturna: InfoTarifa | null;
@@ -150,12 +156,12 @@ export default function CampoDetalle() {
         <title>{campo.nombre} - Canchas Deportivas GAD Beni</title>
         <meta
           name="description"
-          content={`Reserva ${campo.nombre} (${campo.tipo_campo.nombre}) en ${campo.direccion}. Disponible para reserva online.`}
+          content={`Reserva ${campo.nombre} (${campo.tipo_campo?.nombre ?? 'campo deportivo'}) en ${campo.direccion}. Disponible para reserva online.`}
         />
         <meta property="og:title" content={campo.nombre} />
         <meta
           property="og:description"
-          content={`${campo.tipo_campo.nombre} en ${campo.direccion}`}
+          content={`${campo.tipo_campo?.nombre ?? 'Campo deportivo'} en ${campo.direccion}`}
         />
       </Helmet>
 
@@ -209,7 +215,7 @@ export default function CampoDetalle() {
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0">
                 <p className="text-xs md:text-sm font-semibold uppercase tracking-widest text-teal-200 mb-2">
-                  {campo.tipo_campo.nombre}
+                  {campo.tipo_campo?.nombre ?? 'Campo deportivo'}
                 </p>
                 <h1 className="text-3xl md:text-5xl font-bold tracking-tight mb-2">
                   {campo.nombre}
@@ -218,6 +224,11 @@ export default function CampoDetalle() {
                   <MapPin className="w-4 h-4 flex-shrink-0" />
                   <span className="truncate">{campo.direccion}</span>
                 </p>
+                {campo.servicio_sireb_codigo && (
+                  <p className="mt-2 font-mono text-xs text-white/70">
+                    Código oficial SIREB: {campo.servicio_sireb_codigo}
+                  </p>
+                )}
               </div>
               <Badge
                 variant={esMantenimiento ? 'secondary' : 'default'}
