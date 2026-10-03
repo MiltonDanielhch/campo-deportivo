@@ -10,6 +10,10 @@ import CamposDeportivos from '@/pages/parametricas/CamposDeportivos';
 import Tarifas from '@/pages/parametricas/Tarifas';
 import FuncionariosPage from '@/pages/usuarios/Funcionarios';
 import Asignaciones from '@/pages/usuarios/Asignaciones';
+import MisCampos from '@/pages/ocupacion/MisCampos';
+import MapaGlobal from '@/pages/ocupacion/MapaGlobal';
+import DashboardReportes from '@/pages/reportes/Dashboard';
+import ClientesFrecuentes from '@/pages/reportes/ClientesFrecuentes';
 
 function App() {
   return (
@@ -31,6 +35,14 @@ function App() {
           >
             <Route index element={<Dashboard />} />
 
+            {/* Ocupación (Módulo 6) */}
+            <Route path="ocupacion" element={<MisCampos />} />
+            <Route path="ocupacion/mapa" element={<MapaGlobal />} />
+
+            {/* Reportes (Módulo 6) */}
+            <Route path="reportes" element={<DashboardReportes />} />
+            <Route path="reportes/clientes-frecuentes" element={<ClientesFrecuentes />} />
+
             {/* Paramétricas (Fase 2.6) */}
             <Route path="parametricas/tipos-campo" element={<TiposCampo />} />
             <Route path="parametricas/campos" element={<CamposDeportivos />} />
@@ -39,7 +51,7 @@ function App() {
             {/* Usuarios (Fase 2.7) */}
             <Route path="funcionarios" element={<FuncionariosPage />} />
 
-            {/* Reservas (placeholder hasta módulo correspondiente) */}
+            {/* Reservas (Módulo 7) */}
             <Route path="reservas" element={<Reservas />} />
 
             <Route path="asignaciones" element={<Asignaciones />} />
