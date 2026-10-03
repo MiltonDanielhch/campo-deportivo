@@ -1,483 +1,237 @@
-# Plan Técnico Mejorado - Integración Paitití/SIREB como Fuente de Verdad
+# Integración Paitití / SIREB — Diseño técnico
 
-**Fecha:** 2026-10-03
-**Estado:** Análisis completado, implementación pendiente
+**Última actualización:** 2026-10-03
+**Estado:** implementado y verificado contra `https://test.sireb.beni.gob.bo`
 
----
-
-## Resumen Ejecutivo
-
-El proyecto ya tiene **70% de la infraestructura base implementada**:
-- ✅ Cliente real SIREB con OAuth2
-- ✅ Servicio de catálogo cacheado
-- ✅ Presenter público con SIREB
-- ✅ Controller público usando presenter
-- ✅ Command de sincronización de tarifas
-- ✅ Binding simulador/real
-- ✅ Columna `servicio_sireb_id` en campos
-- ✅ `creado_por` nullable en tarifas_campo
-
-**Faltan 30% críticos:**
-- Configuración de paths SIREB en `config/services.php`
-- Endpoints admin para vinculación/desvinculación
-- Rediseño de admin web basado en servicios SIREB
-- Actualización de tipos en frontend (web-public y mobile)
-- Validación de `reservable_online` en UI
-- Índice único parcial para evitar duplicados
+> Este documento describe **cómo está construida** la integración hoy. Para el
+> detalle de qué se tocó archivo por archivo ver `RESUMEN_IMPLEMENTACION_SIREB.md`,
+> y para el estado operativo y los pendientes ver `ESTADO_FINAL_IMPLEMENTACION.md`.
 
 ---
 
-## Estado Actual Detallado
+## 1. Objetivo y reglas del sistema
 
-### ✅ Ya Implementado (No requiere cambios)
+Este repositorio es el **satélite de Canchas** del ecosistema GAD Beni
+(patrón Hub & Spoke). El cobro se delega al **Core de Recaudaciones (SIREB)**,
+que es un proyecto independiente.
 
-#### Backend
-1. **RecaudacionesApiClient.php** - Cliente real con OAuth2 client_credentials
-   - Cache de token JWT
-   - Reintento en 401 TOKEN_INVALIDO
-   - ⚠️ Rutas hardcodeadas (`/api/v1/catalogo/servicios`, etc.)
+Cuatro invariantes que el código debe respetar siempre:
 
-2. **CatalogoSirebService.php** - Servicio de catálogo
-   - Cache 10 minutos
-   - Métodos: `catalogoCacheado()`, `servicioPorId()`, `ultimaActualizacion()`
-   - ✅ Ya expone timestamp de actualización
-
-3. **CampoPublicoSirebPresenter.php** - Presenter público
-   - ✅ Ya implementa lógica SIREB vs fallback local
-   - ✅ Ya expone `sireb`, `reservable_online`, `fuente_precios`, `meta`
-   - ✅ Ya maneja servicios sin tarifa, no vinculados, etc.
-   - **NO REQUIERE CAMBIOS**
-
-4. **CampoController.php** (Public)
-   - ✅ Ya inyecta `CampoPublicoSirebPresenter`
-   - ✅ Ya devuelve respuesta enriquecida
-   - **NO REQUIERE CAMBIOS**
-
-5. **SincronizarTarifasSireb.php** - Command
-   - ✅ Sincroniza etiquetas "Diurno"/"Nocturno" a tipos diurna/nocturna
-   - ✅ Crea/actualiza tarifas locales
-   - ⚠️ Usa `creado_por = null` (ya es nullable, OK)
-
-6. **Migraciones**
-   - ✅ `servicio_sireb_id` nullable en campos_deportivos
-   - ✅ `creado_por` nullable en tarifas_campo
-
-7. **AppServiceProvider.php**
-   - ✅ Binding condicional simulador/real
-   - **NO REQUIERE CAMBIOS**
-
-### ❌ Faltan Cambios Críticos
-
-#### Backend - Configuración
-
-**Archivo:** `backend/config/services.php`
-
-**Problema:** Paths SIREB hardcodeados en código, no configurables por entorno.
-
-**Cambios requeridos:**
-```php
-'recaudaciones' => [
-    // ... existente ...
-    'paths' => [
-        'catalogo_servicios' => env('SIREB_PATH_CATALOGO_SERVICIOS', '/api/v1/catalogo/servicios'),
-        'clientes' => env('SIREB_PATH_CLIENTES', '/api/v1/clientes'),
-        'liquidaciones' => env('SIREB_PATH_LIQUIDACIONES', '/api/v1/liquidaciones'),
-    ],
-    'catalogo_publico_fallback_local' => env('CATALOGO_PUBLICO_FALLBACK_LOCAL', true),
-],
-```
-
-#### Backend - Cliente Real
-
-**Archivo:** `backend/app/Integrations/Recaudaciones/RecaudacionesApiClient.php`
-
-**Problema:** Rutas hardcodeadas en todos los métodos.
-
-**Cambios requeridos:**
-- `listarCatalogo()`: Usar `config('services.recaudaciones.paths.catalogo_servicios')`
-- `buscarCliente()`: Usar `config('services.recaudaciones.paths.clientes')`
-- `registrarCliente()`: Usar `config('services.recaudaciones.paths.clientes')`
-- `crearLiquidacion()`: Usar `config('services.recaudaciones.paths.liquidaciones')`
-- `consultarLiquidacionPorCodigo()`: Usar `config('services.recaudaciones.paths.liquidaciones')`
-- `consultarLiquidacionDetalle()`: Usar `config('services.recaudaciones.paths.liquidaciones')`
-- `anularLiquidacion()`: Usar `config('services.recaudaciones.paths.liquidaciones')`
-- `registrarPagoManual()`: Usar `config('services.recaudaciones.paths.liquidaciones')`
-
-#### Backend - Endpoints Admin
-
-**Archivo:** Nuevo `backend/app/Http/Controllers/Api/V1/Admin/CatalogoSirebController.php`
-
-**Endpoints requeridos:**
-
-1. **GET /api/v1/admin/catalogo-sireb/campos**
-   - Lista servicios SIREB con campo local vinculado
-   - Muestra: servicio SIREB, campo local, estado de vinculación, reservable_online
-   - Meta: total_servicios, vinculados, sin_vincular
-
-2. **PATCH /api/v1/admin/campos-deportivos/{campoId}/vinculo-sireb**
-   - Vincula campo local a servicio SIREB
-   - Valida: servicio existe, no duplicado, estado SIREB
-   - Auditoría
-
-3. **DELETE /api/v1/admin/campos-deportivos/{campoId}/vinculo-sireb**
-   - Desvincula campo de SIREB
-   - Auditoría
-
-4. **POST /api/v1/admin/sireb/sincronizar-tarifas**
-   - Ejecuta sincronización manual
-   - Retorna estadísticas
-
-**Archivo:** `backend/routes/api.php`
-- Agregar rutas con middleware auth:oauth y roles apropiados
-
-#### Backend - Migraciones
-
-**Archivo:** Nueva migración
-
-**Cambios requeridos:**
-
-1. **Índice único parcial** (CRÍTICO para evitar duplicados)
-```sql
-CREATE UNIQUE INDEX uq_campos_servicio_sireb
-ON campos_deportivos (servicio_sireb_id)
-WHERE servicio_sireb_id IS NOT NULL;
-```
-
-2. **Columna servicio_sireb_codigo** (OPCIONAL pero recomendado)
-```sql
-ALTER TABLE campos_deportivos ADD COLUMN servicio_sireb_codigo VARCHAR(50) NULL;
-CREATE INDEX idx_campos_servicio_sireb_codigo ON campos_deportivos (servicio_sireb_codigo);
-```
-
-#### Web-public - Tipos
-
-**Archivo:** `web-public/src/types/campo.ts` (nuevo) o actualizar tipos existentes
-
-**Problema:** Tipos actuales no incluyen campos SIREB.
-
-**Cambios requeridos:**
-```typescript
-export interface TarifaSireb {
-  id?: string | null;
-  tipo: string | null;
-  etiqueta: string;
-  precio: number | null;
-  unidad_medida?: string | null;
-  vigente_desde?: string | null;
-}
-
-export interface ServicioSireb {
-  id: string;
-  codigo: string;
-  nombre: string;
-  rubro?: string | null;
-  estado?: string | null;
-  tarifario?: string | null;
-  unidad_medida?: string | null;
-  precio_min?: number | null;
-  precio_max?: number | null;
-  tarifas: TarifaSireb[];
-  fuente: string;
-}
-
-export interface CampoPublico {
-  id: string;
-  nombre: string;
-  tipo_campo?: { id: string; nombre: string } | null;
-  direccion?: string | null;
-  imagen_url?: string | null;
-  latitud?: number | null;
-  longitud?: number | null;
-  estado: string;
-  hora_inicio_noche?: string | null;
-  servicio_sireb_id?: string | null;
-  horarios_atencion?: Array<{ dia_semana: number; hora_apertura: string; hora_cierre: string }>;
-  tarifas?: {
-    diurna?: { precio_por_hora: number; etiqueta?: string; tipo?: string; sireb_tarifa_id?: string | null; vigente_desde?: string | null } | null;
-    nocturna?: { precio_por_hora: number; etiqueta?: string; tipo?: string; sireb_tarifa_id?: string | null; vigente_desde?: string | null } | null;
-  };
-  sireb?: ServicioSireb | null;
-  reservable_online: boolean;
-  mensaje_no_reservable?: string | null;
-  fuente_precios?: string;
-}
-```
-
-#### Web-public - CampoCard
-
-**Archivo:** `web-public/src/components/campo/CampoCard.tsx`
-
-**Problema:** No valida `reservable_online`, no muestra origen de precios.
-
-**Cambios requeridos:**
-- Validar `campo.reservable_online` antes de permitir navegación
-- Mostrar `campo.mensaje_no_reservable` si corresponde
-- Mostrar rango de precios desde `sireb.precio_min/max`
-- Mostrar aviso si `fuente_precios === 'LOCAL_FALLBACK'`
-
-#### Web-public - Página Campos
-
-**Archivo:** `web-public/src/pages/Campos.tsx`
-
-**Cambios requeridos:**
-- Mostrar meta.sincronizado_en en footer
-- Mostrar meta.aviso si existe
-- Mostrar origen de precios (SIREB vs LOCAL_FALLBACK)
-
-#### Web-admin - Pantalla Campos
-
-**Archivo:** `web-admin/src/pages/parametricas/CamposDeportivos.tsx`
-
-**Problema:** Solo muestra campos locales, no integración SIREB.
-
-**Cambios requeridos:**
-- Cambiar header a "Vinculación y control operativo de servicios de Paitití/SIREB"
-- Cambiar botón "Nuevo campo" a "Vincular servicio de recaudaciones"
-- Rediseñar tabla para mostrar:
-  - Servicio SIREB (código, nombre)
-  - Campo local vinculado
-  - Estado SIREB
-  - Estado operativo local
-  - Reservable online
-- Agregar modal de vinculación
-- Agregar botón "Sincronizar tarifas desde SIREB"
-- Bloquear edición de precios (solo operativos)
-- Agregar indicador de estado SIREB
-
-#### Web-admin - Service
-
-**Archivo:** Nuevo o actualizar `web-admin/src/services/catalogoSirebService.ts`
-
-**Cambios requeridos:**
-- `listarCatalogoSireb()` - GET /api/v1/admin/catalogo-sireb/campos
-- `vincularCampo(campoId, servicioSirebId)` - PATCH vinculo-sireb
-- `desvincularCampo(campoId)` - DELETE vinculo-sireb
-- `sincronizarTarifas()` - POST /api/v1/admin/sireb/sincronizar-tarifas
-
-#### Mobile - Modelos
-
-**Archivo:** `mobile/lib/models/campo_deportivo.dart`
-
-**Problema:** No incluye campos SIREB.
-
-**Cambios requeridos:**
-```dart
-class CampoDeportivo {
-  // ... existente ...
-  final String? servicioSirebId;
-  final ServicioSireb? sireb;
-  final bool reservableOnline;
-  final String? mensajeNoReservable;
-  final String? fuentePrecios;
-
-  factory CampoDeportivo.fromJson(Map<String, dynamic> json) {
-    return CampoDeportivo(
-      // ... existente ...
-      servicioSirebId: json['servicio_sireb_id'] as String?,
-      sireb: json['sireb'] != null ? ServicioSireb.fromJson(json['sireb']) : null,
-      reservableOnline: json['reservable_online'] as bool? ?? false,
-      mensajeNoReservable: json['mensaje_no_reservable'] as String?,
-      fuentePrecios: json['fuente_precios'] as String?,
-    );
-  }
-}
-
-class ServicioSireb {
-  final String id;
-  final String codigo;
-  final String nombre;
-  final String? rubro;
-  final String? estado;
-  final String? tarifario;
-  final String? unidadMedida;
-  final double? precioMin;
-  final double? precioMax;
-  final List<TarifaSireb> tarifas;
-  final String fuente;
-
-  // ... fromJson, toJson ...
-}
-
-class TarifaSireb {
-  final String? id;
-  final String? tipo;
-  final String etiqueta;
-  final double? precio;
-  // ...
-}
-```
-
-#### Mobile - UI
-
-**Archivo:** `mobile/lib/screens/campos_listado_screen.dart`
-
-**Cambios requeridos:**
-- Validar `reservableOnline` antes de permitir navegación
-- Mostrar `mensajeNoReservable` si corresponde
-- Mostrar rango de precios desde `sireb.precioMin/max`
-- Agregar pull-to-refresh
-- Mostrar aviso si `fuentePrecios === 'LOCAL_FALLBACK'`
+1. **SIREB es la fuente de verdad de los precios.** Este sistema no fija
+   tarifas: las refleja. No existe endpoint, formulario ni comando para que una
+   persona escriba un precio.
+2. **Ningún cliente llama a SIREB directamente.** Web pública, panel y mobile
+   consumen la API de este backend. Solo el backend habla con SIREB.
+3. **La vinculación campo ↔ servicio SIREB es 1:1.** Un servicio de SIREB no
+   puede estar vinculado a dos campos locales (índice único parcial).
+4. **El código interno del campo no se publica.** La web pública muestra el
+   código oficial de SIREB (`SEDEDE-CS1`, `0005`, …); el interno (`CD-001`,
+   `FS-001`, …) queda para uso del GAD.
 
 ---
 
-## Orden de Implementación (Optimizado)
+## 2. Arquitectura
 
-### Fase 1: Backend Core (30 min)
-1. Actualizar `config/services.php` con paths configurables
-2. Actualizar `RecaudacionesApiClient.php` para usar config de paths
-3. Crear migración: índice único parcial servicio_sireb_id
-4. Crear migración: columna servicio_sireb_codigo (opcional)
-5. Ejecutar migraciones
+```
+ciudadano ──▶ web-public ─┐
+ciudadano ──▶ mobile ─────┼──▶ API Canchas (Laravel) ──▶ SIREB (API REST + OAuth2)
+operador  ──▶ web-admin ──┘                              test.sireb.beni.gob.bo
+```
 
-### Fase 2: Backend Admin (45 min)
-1. Crear `CatalogoSirebController.php`
-2. Agregar rutas en `routes/api.php`
-3. Implementar endpoint GET catalogo-sireb/campos
-4. Implementar endpoint PATCH vinculo-sireb
-5. Implementar endpoint DELETE vinculo-sireb
-6. Implementar endpoint POST sincronizar-tarifas
-7. Tests backend admin
-
-### Fase 3: Web-public (30 min)
-1. Crear/actualizar tipos TypeScript para CampoPublico
-2. Actualizar `CampoCard.tsx` para usar `reservable_online`
-3. Actualizar `Campos.tsx` para mostrar meta
-4. Agregar helper de formato de precio
-5. Build y typecheck
-
-### Fase 4: Web-admin (60 min)
-1. Crear `catalogoSirebService.ts`
-2. Rediseñar `CamposDeportivos.tsx`:
-   - Header actualizado
-   - Tabla basada en SIREB
-   - Modal vinculación
-   - Botón sincronizar
-3. Actualizar `CampoFormDialog.tsx`:
-   - Bloquear edición de precios
-   - Solo operativos
-4. Build y typecheck
-
-### Fase 5: Mobile (45 min)
-1. Actualizar `campo_deportivo.dart` con campos SIREB
-2. Actualizar `campos_listado_screen.dart`:
-   - Validar reservableOnline
-   - Mostrar mensajes
-   - Pull-to-refresh
-3. Build y test
-
-### Fase 6: Mapeo y Operación (30 min)
-1. Desactivar simulador en .env test
-2. Consultar catálogo real SIREB
-3. Mapear campos locales a UUID SIREB
-4. Ejecutar sincronización de tarifas
-5. Verificar end-to-end
-
-**Total estimado:** ~4 horas de trabajo efectivo
+- **Autenticación del backend contra SIREB:** OAuth2 `client_credentials`
+  contra Ibare (`https://test.ibare.beni.gob.bo/oauth/token`). El token dura
+  `expires_in` segundos, no hay refresh: se pide otro con las mismas
+  credenciales. Se cachea en Redis con la clave `sireb:access_token`.
+- **Catálogo de servicios:** se consulta `GET /api/v1/catalogo/servicios` y se
+  cachea 10 minutos (clave `sireb:catalogo`). `CatalogoSirebService` expone
+  `catalogoCacheado()`, `refrescarCatalogo()` (ignora la caché),
+  `servicioPorId()` y `ultimaActualizacion()`.
+- **Simulador:** `RECAUDACIONES_SIMULADOR_HABILITADO=true` inyecta
+  `RecaudacionesApiClientSimulado` en lugar del cliente real. Se usa en
+  desarrollo y en la suite de tests; en test/producción va en `false`.
 
 ---
 
-## Variables de Entorno
+## 3. Modelo de datos
 
-### Desarrollo Local (Simulador)
+### `campos_deportivos`
+
+| Columna | Rol |
+| --- | --- |
+| `codigo`, `nombre`, `direccion`, `latitud`, `longitud`, `imagen_url` | Datos operativos locales (los administra el GAD) |
+| `hora_inicio_noche` | Hora de corte entre tarifa regular y con iluminación. Es una decisión **local** y sigue siendo editable |
+| `servicio_sireb_id` | UUID del servicio en SIREB. `NULL` = sin vincular. Índice único parcial `uq_campos_servicio_sireb` |
+| `servicio_sireb_codigo` | Código legible del servicio (`SEDEDE-CS1`, `0005`, …) |
+
+El nombre de la web pública es el **oficial de SIREB**; el interno viaja como
+`nombre_local` en el JSON público.
+
+### `tarifas_campo`
+
+Tabla **espejo** del tarifario de SIREB, versionada por fecha:
+
+| Columna | Rol |
+| --- | --- |
+| `tipo_tarifa` | `diurna` (bloques antes de la hora de corte) o `nocturna` |
+| `precio_por_hora` | Precio copiado de SIREB |
+| `vigente_desde` / `vigente_hasta` | Ventana de vigencia. `vigente_hasta NULL` = versión activa |
+| `creado_por` | Funcionario que la registró. **Siempre `NULL`**: las escribe el comando de sincronización, no una persona |
+
+Índice único parcial `uq_tarifa_activa_por_tipo` sobre `(campo_id, tipo_tarifa)`
+donde `vigente_hasta IS NULL`: como máximo una tarifa activa por tipo.
+
+---
+
+## 4. Endpoints
+
+### Públicos (sin token)
+
+| Método | Ruta | Qué devuelve |
+| --- | --- | --- |
+| `GET` | `/api/v1/public/campos` | Catálogo con precios de SIREB, `reservable_online` y `meta.fuente_precios` |
+| `GET` | `/api/v1/public/campos/{id}` | Detalle de un campo |
+
+El bloque `sireb` del JSON trae `id`, `codigo`, `nombre`, `descripcion`,
+`rubro`, `estado`, `modo_tarifa`, `tarifario`, `unidad_medida`, `precio_min`,
+`precio_max` y `tarifas`. Si el campo no está vinculado, `fuente_precios` es
+`NO_VINCULADO` y `reservable_online` es `false`.
+
+### Panel (rol `admin_parametricas`)
+
+| Método | Ruta | Qué hace |
+| --- | --- | --- |
+| `GET` | `/api/v1/admin/catalogo-sireb/campos` | Lista el catálogo de SIREB con su campo local y estado de vinculación |
+| `PATCH` | `/api/v1/campos-deportivos/{id}/vinculo-sireb` | Vincula el campo a un servicio (rechaza servicios ya tomados) |
+| `DELETE` | `/api/v1/campos-deportivos/{id}/vinculo-sireb` | Desvincula |
+| `POST` | `/api/v1/admin/sireb/sincronizar-tarifas` | Espeja el tarifario de SIREB. **Única vía por la que cambian los precios** |
+| `GET` | `/api/v1/campos-deportivos/{id}/tarifas` | Tarifas activas + historial + hora de corte. **Solo lectura** |
+
+No existe `POST /api/v1/campos-deportivos/{id}/tarifas`: la ruta se eliminó
+junto con `StoreTarifaRequest` y `TarifaCampoService::actualizarTarifa`.
+
+---
+
+## 5. Comandos y scheduler
+
+```bash
+# Vincula los campos locales con el catálogo vigente de SIREB.
+# Completa servicio_sireb_id y servicio_sireb_codigo. Es idempotente.
+php artisan sireb:mapear-campos [--dry-run] [--listar]
+php artisan sireb:mapear-campos --crear --tipo-campo=Fútbol
+php artisan sireb:mapear-campos --map=CD-010:SEDEDE-CS3
+
+# Espeja el tarifario. Versiona: cierra la tarifa vigente y crea una nueva.
+php artisan sireb:sincronizar-tarifas [--dry-run]
+```
+
+`sireb:sincronizar-tarifas` corre **todos los días** por el scheduler
+(`routes/console.php`) con `withoutOverlapping()`.
+
+### Correspondencia de etiquetas
+
+SIREB no manda "diurna/nocturna": manda etiquetas libres. El mapeo es por
+texto, en `SincronizarTarifasSireb::tipoDesdeEtiqueta()` y en el presenter:
+
+| Etiqueta SIREB | `tipo_tarifa` |
+| --- | --- |
+| contiene "Diurno" | `diurna` |
+| contiene "Nocturno" | `nocturna` |
+| cualquier otra | se ignora y se reporta en la tabla del comando |
+
+---
+
+## 6. Variables de entorno
+
+### Backend (`backend/.env`)
+
 ```env
-RECAUDACIONES_SIMULADOR_HABILITADO=true
-RECAUDACIONES_API_URL=http://localhost
-CATALOGO_PUBLICO_FALLBACK_LOCAL=true
-```
-
-### Test (SIREB Real)
-```env
-RECAUDACIONES_SIMULADOR_HABILITADO=false
+# URL base de SIREB (donde viven los /api/v1/*)
 RECAUDACIONES_API_URL=https://test.sireb.beni.gob.bo
+
+# Credenciales del sistema consumidor, emitidas por Ibare
 SIREB_TOKEN_URL=https://test.ibare.beni.gob.bo/oauth/token
 SIREB_CLIENT_ID=sedede
-SIREB_CLIENT_SECRET=SECRET_TEST_REAL
+SIREB_CLIENT_SECRET=<secreto>
+
+# Paths configurables por entorno
 SIREB_PATH_CATALOGO_SERVICIOS=/api/v1/catalogo/servicios
 SIREB_PATH_CLIENTES=/api/v1/clientes
 SIREB_PATH_LIQUIDACIONES=/api/v1/liquidaciones
-CATALOGO_PUBLICO_FALLBACK_LOCAL=true
-```
 
-### Producción
-```env
+# false = cliente real contra SIREB; true = simulador local
 RECAUDACIONES_SIMULADOR_HABILITADO=false
-RECAUDACIONES_API_URL=https://sireb.beni.gob.bo
-SIREB_TOKEN_URL=https://ibare.beni.gob.bo/oauth/token
-SIREB_CLIENT_ID=sedede
-SIREB_CLIENT_SECRET=SECRET_PRODUCCION
-SIREB_PATH_CATALOGO_SERVICIOS=/api/v1/catalogo/servicios
-SIREB_PATH_CLIENTES=/api/v1/clientes
-SIREB_PATH_LIQUIDACIONES=/api/v1/liquidaciones
-CATALOGO_PUBLICO_FALLBACK_LOCAL=false
+RECAUDACIONES_TIMEOUT_SEGUNDOS=10
 ```
 
----
+### Frontends
 
-## Deuda Técnica Identificada
-
-### Crítica
-- Ninguna detectada (creado_por ya es nullable)
-
-### Importante
-- Paths hardcodeados en RecaudacionesApiClient → Se soluciona en Fase 1
-- Falta índice único servicio_sireb_id → Se soluciona en Fase 1
-
-### Menor
-- No hay código SIREB legible en campos → Opcional, se soluciona en Fase 1
-- Scheduler para sincronización periódica → Fuera de scope, puede ser tarea separada
+| Variable | Dónde | Default |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | web-admin, web-public | `http://localhost:8000/api` |
+| `VITE_SIREB_PANEL_SERVICIOS_URL` | web-admin | `https://test.sireb.beni.gob.bo/panel/servicios` |
+| `VITE_SIREB_PANEL_URL` | web-public | `https://test.sireb.beni.gob.bo/panel/liquidaciones` |
 
 ---
 
-## Criterios de Aceptación
+## 7. Reglas de negocio derivadas
+
+- Un servicio es **reservable online** si está `activo` y tiene al menos una
+  tarifa `liquidable` con `tarifario_estado = vigente`. Lo calcula
+  `CampoPublicoSirebPresenter::esReservable()`.
+- El catálogo de SIREB devuelve **solo servicios liquidables**. Un servicio
+  `sin_tarifa` (por ejemplo `0002`) aparece en el panel de SIREB pero no en la
+  API, así que no puede publicarse.
+- Al reservar, `CatalogoSirebService::resolverTarifaId()` traduce
+  (campo + hora) a un `tarifa_id` de SIREB usando `hora_inicio_noche` como
+  corte. Si el campo no está vinculado, la reserva falla con un error explícito.
+- Si SIREB no responde, la web pública cae al espejo local y lo declara en
+  `meta.aviso` con `fuente_precios: LOCAL_FALLBACK`.
+
+---
+
+## 8. Deuda técnica y decisiones abiertas
+
+| Tema | Detalle |
+| --- | --- |
+| `CATALOGO_PUBLICO_FALLBACK_LOCAL` | Declarada en `config/services.php` pero **ningún código la lee**. El fallback local está siempre activo. Hay que decidir si se implementa (y si en producción conviene fallar en vez de mostrar precios posiblemente desactualizados) o se elimina la clave |
+| Tipo de campo de la piscina | `CD-005` quedó con tipo "Fútbol Sala" y muestra la etiqueta equivocada en la web pública. Es dato local, SIREB no lo manda |
+| Direcciones locales | `CD-002` tiene `direccion = "av"` y `CD-005` `"av principal"`. Se ven junto al nombre oficial |
+| Campo sin vincular | Hoy un campo sin `servicio_sireb_id` se publica marcado como no reservable. Decidir si conviene ocultarlo |
+| Antigüedad del espejo | El espejo local puede quedar hasta 1 día desactualizado si SIREB cambia un precio después de la corrida diaria |
+
+---
+
+## 9. Criterios de aceptación
 
 ### Backend
-- [ ] Paths SIREB configurables por env
-- [ ] Cliente real usa config de paths
-- [ ] Endpoint admin catálogo SIREB funciona
-- [ ] Endpoint vincular/desvincular funciona
-- [ ] Endpoint sincronizar tarifas funciona
-- [ ] Índice único parcial creado
-- [ ] No permite doble vínculo
 
-### Web-public
-- [ ] CampoCard valida reservable_online
-- [ ] Muestra mensaje si no reservable
-- [ ] Muestra origen de precios
-- [ ] Build exitoso sin errores TypeScript
+- [x] Paths de SIREB configurables por entorno
+- [x] El cliente real usa la config de paths
+- [x] `GET /admin/catalogo-sireb/campos` funcionando
+- [x] Vincular / desvincular con auditoría
+- [x] Sincronización de tarifas funcionando y versionada
+- [x] Índice único parcial por servicio
+- [x] No se puede fijar un precio a mano (ruta eliminada; test lo verifica)
+- [x] El comando de vinculación completa código y da de alta lo que falte
 
-### Web-admin
-- [ ] Tabla muestra servicios SIREB
-- [ ] Permite vincular/desvincular
-- [ ] No permite editar precios
-- [ ] Sincronizar tarifas funciona
-- [ ] Build exitoso sin errores TypeScript
+### Web pública
+
+- [x] Valida `reservable_online` antes de dejar reservar
+- [x] Muestra `mensaje_no_reservable` cuando corresponde
+- [x] Muestra nombre y código oficiales, precio de SIREB y badge "Oficial"
+- [x] Muestra el aviso cuando cae al espejo local
+- [x] `npx tsc --noEmit` limpio
+
+### Panel
+
+- [x] Conmutador *Campos locales* / *Catálogo SIREB*
+- [x] Vincular y desvincular desde la UI
+- [x] Pantalla de tarifas en solo lectura, con acceso al panel de SIREB
+- [x] Botón de sincronización
+- [x] `npx tsc --noEmit` limpio
 
 ### Mobile
-- [ ] Modelos actualizados con campos SIREB
-- [ ] Valida reservableOnline
-- [ ] Muestra mensajes apropiados
-- [ ] Pull-to-refresh funciona
-- [ ] Build exitoso
 
----
-
-## Notas Importantes
-
-1. **El presenter público ya está implementado correctamente** - No requiere cambios
-2. **El controller público ya usa el presenter** - No requiere cambios
-3. **El comando de sincronización ya funciona** - Solo necesita índice único
-4. **El binding simulador/real ya está en AppServiceProvider** - No requiere cambios
-5. **Mobile consume backend, no SIREB directo** - Ya cumple la regla arquitectónica
-
----
-
-## Next Steps
-
-1. Implementar Fase 1 (Backend Core)
-2. Implementar Fase 2 (Backend Admin)
-3. Implementar Fase 3 (Web-public)
-4. Implementar Fase 4 (Web-admin)
-5. Implementar Fase 5 (Mobile)
-6. Implementar Fase 6 (Mapeo y Operación)
-7. Documentar procedimiento de mapeo
-8. Smoke test end-to-end
+- [x] Modelos con los campos de SIREB
+- [x] Valida `reservableOnline`
+- [x] Muestra mensajes y origen de precios

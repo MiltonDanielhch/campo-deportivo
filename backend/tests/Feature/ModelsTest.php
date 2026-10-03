@@ -104,6 +104,7 @@ class ModelsTest extends TestCase
 
         $tarifa = TarifaCampo::create([
             'campo_id' => $campo->id,
+            'tipo_tarifa' => 'diurna',
             'precio_por_hora' => 150.50,
             'vigente_desde' => now(),
             'creado_por' => $funcionario->id,

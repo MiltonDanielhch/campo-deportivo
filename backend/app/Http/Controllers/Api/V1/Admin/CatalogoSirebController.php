@@ -237,15 +237,13 @@ class CatalogoSirebController extends Controller
     /**
      * POST /api/v1/admin/sireb/sincronizar-tarifas
      *
-     * Ejecuta sincronización manual de tarifas desde SIREB.
-     * Llama al comando sireb:sincronizar-tarifas.
+     * Espeja en tarifas_campo el tarifario vigente de SIREB.
+     * Es la ÚNICA vía por la que cambian los precios de este sistema.
      */
     public function sincronizarTarifas(): JsonResponse
     {
         try {
-            $exitCode = \Illuminate\Support\Facades\Artisan::call('sireb:sincronizar-tarifas', [
-                '--force' => true,
-            ]);
+            $exitCode = \Illuminate\Support\Facades\Artisan::call('sireb:sincronizar-tarifas');
 
             $output = \Illuminate\Support\Facades\Artisan::output();
 

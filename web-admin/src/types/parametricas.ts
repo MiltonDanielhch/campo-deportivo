@@ -108,13 +108,9 @@ export interface TarifaCampo {
   /**
    * Funcionario que registró la tarifa. Es null en las tarifas espejadas
    * desde SIREB por el job de sincronización (no las carga una persona).
+   * Hoy todas las altas vienen de SIREB, así que en la práctica es null.
    */
   creado_por: FuncionarioResumen | string | null;
-}
-
-export interface TarifaCampoPayload {
-  tipo_tarifa: TipoTarifa;
-  precio_por_hora: number;
 }
 
 /** Respuesta del endpoint GET /campos-deportivos/{id}/tarifas */

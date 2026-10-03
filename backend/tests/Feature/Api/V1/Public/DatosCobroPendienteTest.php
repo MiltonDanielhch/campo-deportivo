@@ -56,6 +56,7 @@ class DatosCobroPendienteTest extends TestCase
 
         TarifaCampo::create([
             'campo_id' => $campo->id,
+            'tipo_tarifa' => 'diurna',
             'precio_por_hora' => 150,
             'vigente_desde' => now(),
             'creado_por' => $admin->id,
@@ -92,8 +93,12 @@ class DatosCobroPendienteTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertJsonPath('data.estado', 'pendiente');
-        $response->assertJsonPath('data.datos_cobro_pendiente.qr_string', 'https://core.gob.bo/pago/sim/RES-20260916-COB01');
-        $response->assertJsonPath('data.datos_cobro_pendiente.checkout_url', 'https://core.gob.bo/checkout/sim/RES-20260916-COB01');
+
+        // SIREB v1: el recurso arma el bloque desde referencia_recaudaciones,
+        // no desde la columna datos_cobro_pendiente (que quedó del Core mock).
+        $response->assertJsonPath('data.datos_cobro_pendiente.qr_string', 'SIREB:CORE-SIM-COB01');
+        $response->assertJsonPath('data.datos_cobro_pendiente.codigo_publico', 'CORE-SIM-COB01');
+        $response->assertJsonPath('data.datos_cobro_pendiente.checkout_url', null);
     }
 
     public function test_endpoint_estado_no_incluye_datos_cobro_cuando_confirmada(): void

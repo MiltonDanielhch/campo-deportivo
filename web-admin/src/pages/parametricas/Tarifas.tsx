@@ -8,23 +8,13 @@ import {
   Sun,
   Save,
   Clock,
-  User,
-  TrendingUp,
   CheckCircle2,
-  AlertCircle,
   Minus,
+  RefreshCw,
+  ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,6 +30,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useBreadcrumbOverride } from '@/context/BreadcrumbContext';
 import { camposService } from '@/services/camposService';
+import { catalogoSirebService } from '@/services/catalogoSirebService';
 import { tarifasService } from '@/services/tarifasService';
 import type {
   CampoDeportivo,
@@ -47,6 +38,14 @@ import type {
   TarifaCampo,
   TipoTarifa,
 } from '@/types/parametricas';
+
+/**
+ * Panel de SIREB donde se administran los servicios y sus tarifas.
+ * Este sistema NO fija precios: solo refleja lo que se define ahí.
+ */
+const SIREB_PANEL_SERVICIOS_URL =
+  import.meta.env.VITE_SIREB_PANEL_SERVICIOS_URL ||
+  'https://test.sireb.beni.gob.bo/panel/servicios';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -188,94 +187,19 @@ interface PropsColumna {
   tipo: TipoTarifa;
   activa: TarifaCampo | null;
   historial: TarifaCampo[];
-  campoId: string;
-  onCreada: () => void;
 }
 
-function ColumnaTarifa({
-  tipo,
-  activa,
-  historial,
-  campoId,
-  onCreada,
-}: PropsColumna) {
-  const [precio, setPrecio] = useState('');
-  const [guardando, setGuardando] = useState(false);
-  const [errorPrecio, setErrorPrecio] = useState<string | null>(null);
-
-  // Estado del AlertDialog de confirmación
-  const [confirmarAbierto, setConfirmarAbierto] = useState(false);
-
+function ColumnaTarifa({ tipo, activa, historial }: PropsColumna) {
   const esDiurna = tipo === 'diurna';
   const Icono = esDiurna ? Sun : Lightbulb;
   const colorIcono = esDiurna
     ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
     : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400';
   const colorPunto = esDiurna ? 'bg-amber-500' : 'bg-indigo-500';
-  const colorDeltaPositivo = esDiurna ? 'text-amber-600' : 'text-indigo-600';
-  const colorDeltaNegativo = 'text-emerald-600 dark:text-emerald-400';
 
   const labelTarifa = esDiurna ? 'regular' : 'con iluminación';
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorPrecio(null);
-
-    const valor = parseFloat(precio);
-    if (isNaN(valor) || valor <= 0) {
-      setErrorPrecio('Ingresá un precio mayor a cero');
-      return;
-    }
-    if (valor > 10000) {
-      setErrorPrecio('El precio parece demasiado alto');
-      return;
-    }
-
-    // Si hay una activa, pedimos confirmación
-    if (activa) {
-      setConfirmarAbierto(true);
-    } else {
-      guardarTarifa(valor);
-    }
-  };
-
-  const guardarTarifa = async (valor: number) => {
-    setGuardando(true);
-    try {
-      await tarifasService.crear(campoId, {
-        tipo_tarifa: tipo,
-        precio_por_hora: valor,
-      });
-      toast.success(
-        `Tarifa ${labelTarifa} fijada en Bs ${valor.toFixed(2)}. ${
-          activa ? 'La anterior quedó cerrada.' : ''
-        }`,
-      );
-      setPrecio('');
-      onCreada();
-    } catch (error: any) {
-      if (error.response?.status === 422) {
-        setErrorPrecio(
-          error.response.data.errors?.precio_por_hora?.[0] ?? 'Precio inválido',
-        );
-      } else {
-        toast.error(`No se pudo fijar la tarifa ${labelTarifa}`);
-      }
-    } finally {
-      setGuardando(false);
-      setConfirmarAbierto(false);
-    }
-  };
-
   const historialFiltrado = historial.filter((t) => t.tipo_tarifa === tipo);
-
-  // Calcular delta vs la tarifa inmediatamente anterior (la siguiente en el array)
-  const precioActivaFloat = activa ? parseFloat(activa.precio_por_hora) : null;
-  const nuevoPrecioFloat = parseFloat(precio);
-  const delta =
-    activa && !isNaN(nuevoPrecioFloat) && nuevoPrecioFloat > 0
-      ? nuevoPrecioFloat - precioActivaFloat!
-      : null;
 
   return (
     <Card className="flex flex-col overflow-hidden">
@@ -338,7 +262,7 @@ function ColumnaTarifa({
           <div className="rounded-xl border-2 border-dashed border-border bg-muted/30 p-5 text-center">
             <Icono className="size-8 mx-auto mb-2 text-muted-foreground/50" />
             <p className="text-sm font-medium text-muted-foreground">
-              Sin tarifa {labelTarifa} definida
+              SIREB no tiene tarifa {labelTarifa} para este servicio
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Los bloques de este tipo aparecerán deshabilitados en la web pública.
@@ -346,64 +270,15 @@ function ColumnaTarifa({
           </div>
         )}
 
-        {/* ─── Formulario para fijar nueva ─── */}
-        <div className="space-y-3">
-          <Label htmlFor={`precio-${tipo}`} className="text-xs font-semibold">
-            {activa ? 'Fijar nueva tarifa (Bs/hora)' : 'Definir tarifa (Bs/hora)'}
-          </Label>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <Input
-              id={`precio-${tipo}`}
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="Ej: 150.00"
-              value={precio}
-              onChange={(e) => setPrecio(e.target.value)}
-              required
-            />
-            {errorPrecio && (
-              <p className="text-xs text-destructive flex items-center gap-1">
-                <AlertCircle className="size-3" />
-                {errorPrecio}
-              </p>
-            )}
-
-            {/* Preview del delta (si hay activa) */}
-            {delta !== null && delta !== 0 && (
-              <div className="flex items-center justify-between text-xs bg-muted/50 rounded-lg px-3 py-2">
-                <span className="text-muted-foreground">Variación:</span>
-                <span
-                  className={`font-semibold flex items-center gap-1 ${
-                    delta > 0 ? colorDeltaPositivo : colorDeltaNegativo
-                  }`}
-                >
-                  {delta > 0 ? (
-                    <>
-                      <ArrowUp className="size-3" />+Bs {delta.toFixed(2)}
-                    </>
-                  ) : (
-                    <>
-                      <ArrowDown className="size-3" />
-                      Bs {delta.toFixed(2)}
-                    </>
-                  )}
-                </span>
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              disabled={guardando}
-              className="w-full rounded-full shadow-sm"
-            >
-              {guardando
-                ? 'Guardando…'
-                : activa
-                  ? `Fijar nueva ${labelTarifa}`
-                  : `Crear ${labelTarifa}`}
-            </Button>
-          </form>
+        {/* ─── Solo lectura: el precio lo administra SIREB ─── */}
+        <div className="flex items-start gap-2.5 rounded-xl border bg-muted/40 p-3">
+          <ShieldCheck className="size-4 shrink-0 mt-0.5 text-primary" />
+          <p className="text-xs text-muted-foreground">
+            El precio de este tipo lo define{' '}
+            <strong className="text-foreground">SIREB</strong> y este sistema
+            solo lo refleja. Para cambiarlo hay que hacerlo en el panel de
+            recaudaciones; acá podés volver a sincronizar cuando lo actualicen.
+          </p>
         </div>
 
         <Separator />
@@ -512,84 +387,6 @@ function ColumnaTarifa({
           )}
         </div>
       </CardContent>
-
-      {/* ─── AlertDialog de confirmación ─── */}
-      <AlertDialog
-        open={confirmarAbierto && activa !== null && !isNaN(parseFloat(precio))}
-        onOpenChange={setConfirmarAbierto}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertCircle className="size-5 text-amber-500" />
-              Confirmar cambio de tarifa
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3 pt-2">
-                <p>
-                  Vas a fijar una nueva tarifa {labelTarifa}. La tarifa activa
-                  actual pasará al historial.
-                </p>
-                {activa && (
-                  <div className="rounded-lg border bg-muted/40 p-3 space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Actual:</span>
-                      <span className="font-semibold tabular-nums">
-                        {formatearPrecio(activa.precio_por_hora)}/hora
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Nueva:</span>
-                      <span className="font-bold tabular-nums">
-                        {formatearPrecio(precio)}/hora
-                      </span>
-                    </div>
-                    {delta !== null && delta !== 0 && (
-                      <>
-                        <Separator className="my-1" />
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Variación:</span>
-                          <span
-                            className={`font-bold tabular-nums flex items-center gap-1 ${
-                              delta > 0
-                                ? 'text-destructive'
-                                : 'text-emerald-600 dark:text-emerald-400'
-                            }`}
-                          >
-                            {delta > 0 ? (
-                              <>
-                                <TrendingUp className="size-3.5" />+
-                              </>
-                            ) : (
-                              <>
-                                <ArrowDown className="size-3.5" />
-                              </>
-                            )}
-                            Bs {Math.abs(delta).toFixed(2)}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Esta acción no se puede deshacer, pero podés volver a fijar
-                  otra tarifa más adelante.
-                </p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={guardando}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => guardarTarifa(parseFloat(precio))}
-              disabled={guardando || !activa}
-            >
-              {guardando ? 'Guardando…' : 'Confirmar y fijar'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Card>
   );
 }
@@ -607,6 +404,7 @@ export default function Tarifas() {
   const [horaNoche, setHoraNoche] = useState('18:00');
   const [horaOriginal, setHoraOriginal] = useState('18:00');
   const [guardandoHora, setGuardandoHora] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
 
   // Override del breadcrumb: mostrar el nombre del campo en vez del UUID
   useBreadcrumbOverride(
@@ -659,6 +457,23 @@ export default function Tarifas() {
 
   const horaModificada = horaNoche !== horaOriginal;
 
+  /**
+   * Vuelve a espejar el tarifario de SIREB en tarifas_campo.
+   * Es la única forma de que un precio cambie en este sistema.
+   */
+  const sincronizarDesdeSireb = async () => {
+    setSincronizando(true);
+    try {
+      await catalogoSirebService.sincronizarTarifas();
+      toast.success('Tarifas actualizadas desde SIREB');
+      await cargar();
+    } catch {
+      toast.error('No se pudo consultar el tarifario de SIREB');
+    } finally {
+      setSincronizando(false);
+    }
+  };
+
   // Skeleton mientras carga
   if (cargando) {
     return (
@@ -698,6 +513,41 @@ export default function Tarifas() {
               {campo?.codigo ?? '—'}
             </code>{' '}
             · {campo?.tipo_campo?.nombre ?? ''}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" className="rounded-full" asChild>
+            <a
+              href={SIREB_PANEL_SERVICIOS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="mr-2 size-4" />
+              Ver tarifas en SIREB
+            </a>
+          </Button>
+          <Button
+            onClick={sincronizarDesdeSireb}
+            disabled={sincronizando}
+            className="rounded-full"
+          >
+            <RefreshCw
+              className={`mr-2 size-4 ${sincronizando ? 'animate-spin' : ''}`}
+            />
+            {sincronizando ? 'Sincronizando…' : 'Sincronizar desde SIREB'}
+          </Button>
+        </div>
+      </div>
+
+      {/* ─── Aviso: el precio es de SIREB ─── */}
+      <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <ShieldCheck className="size-5 shrink-0 mt-0.5 text-primary" />
+        <div className="text-sm">
+          <p className="font-semibold">Los precios los define SIREB</p>
+          <p className="text-muted-foreground">
+            Este sistema no fija tarifas: refleja el tarifario oficial de
+            recaudaciones. Si un precio está mal, hay que corregirlo en el
+            panel de SIREB y después sincronizar.
           </p>
         </div>
       </div>
@@ -759,21 +609,17 @@ export default function Tarifas() {
       </Card>
 
       {/* ─── Dos columnas: diurna y nocturna ─── */}
-      {historial && campoId ? (
+      {historial ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <ColumnaTarifa
             tipo="diurna"
             activa={historial.activas.diurna}
             historial={historial.historial}
-            campoId={campoId}
-            onCreada={cargar}
           />
           <ColumnaTarifa
             tipo="nocturna"
             activa={historial.activas.nocturna}
             historial={historial.historial}
-            campoId={campoId}
-            onCreada={cargar}
           />
         </div>
       ) : null}

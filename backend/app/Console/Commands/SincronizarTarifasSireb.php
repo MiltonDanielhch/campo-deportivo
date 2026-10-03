@@ -5,7 +5,9 @@ namespace App\Console\Commands;
 use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Models\CampoDeportivo;
 use App\Models\TarifaCampo;
+use App\Services\AuditoriaService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -15,18 +17,22 @@ use Illuminate\Support\Facades\Log;
  * La tabla local queda como ESPEJO VALIDADO para que la estimación
  * que ve el ciudadano antes del submit coincida con la liquidación real.
  *
+ * Ninguna persona fija precios en este sistema: el endpoint manual se
+ * eliminó y el formulario del panel pasó a solo lectura. Lo único que
+ * escribe tarifas_campo es este comando, y siempre con creado_por = null.
+ *
  * Por cada campo con servicio_sireb_id mapeado:
  *  - etiqueta SIREB "Diurno"   → tipo_tarifa 'diurna'
  *  - etiqueta SIREB "Nocturno" → tipo_tarifa 'nocturna'
- *  - si la tarifa local activa difiere → actualiza precio_por_hora
+ *  - si la tarifa local activa difiere → cierra la versión vigente y crea
+ *    una nueva, así el historial conserva el precio anterior
  *  - si no existe → la crea
  *  - discrepancias de estructura → se reportan, no se tocan
  */
 class SincronizarTarifasSireb extends Command
 {
     protected $signature = 'sireb:sincronizar-tarifas
-        {--dry-run : Solo reporta discrepancias sin escribir nada}
-        {--force : Forzar sincronización incluso si hay errores}';
+        {--dry-run : Solo reporta discrepancias sin escribir nada}';
 
     protected $description = 'Alinea tarifas_campo con el tarifario vigente de SIREB (espejo validado)';
 
@@ -73,27 +79,30 @@ class SincronizarTarifasSireb extends Command
 
                 if ($local === null) {
                     if (! $dryRun) {
-                        TarifaCampo::create([
-                            'campo_id' => $campo->id,
-                            'tipo_tarifa' => $tipo,
-                            'precio_por_hora' => $precioSireb,
-                            'vigente_desde' => now(),
-                            'vigente_hasta' => null,
-                            'creado_por' => null,
-                        ]);
+                        $this->crearVersion($campo, $tipo, $precioSireb, null);
                     }
                     $filas[] = [$campo->codigo, $tipo, '—', $precioSireb, $dryRun ? 'FALTANTE (dry-run)' : 'Creada desde SIREB'];
                     continue;
                 }
 
-                if (abs((float) $local->precio_por_hora - $precioSireb) > 0.005) {
-                    if (! $dryRun) {
-                        $local->update(['precio_por_hora' => $precioSireb]);
-                    }
-                    $filas[] = [$campo->codigo, $tipo, (float) $local->precio_por_hora, $precioSireb, $dryRun ? 'DIFIERE (dry-run)' : 'Actualizada desde SIREB'];
-                } else {
-                    $filas[] = [$campo->codigo, $tipo, (float) $local->precio_por_hora, $precioSireb, 'OK'];
+                $precioLocal = (float) $local->precio_por_hora;
+
+                if (abs($precioLocal - $precioSireb) <= 0.005) {
+                    $filas[] = [$campo->codigo, $tipo, $precioLocal, $precioSireb, 'OK'];
+                    continue;
                 }
+
+                if (! $dryRun) {
+                    $this->crearVersion($campo, $tipo, $precioSireb, $local);
+                }
+
+                $filas[] = [
+                    $campo->codigo,
+                    $tipo,
+                    $precioLocal,
+                    $precioSireb,
+                    $dryRun ? 'DIFIERE (dry-run)' : 'Nueva versión desde SIREB',
+                ];
             }
         }
 
@@ -105,6 +114,52 @@ class SincronizarTarifasSireb extends Command
         ]);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Cierra la versión vigente (si la hay) y crea la nueva.
+     *
+     * No se actualiza el precio en sitio: así el historial sigue mostrando
+     * cuánto costaba antes y desde cuándo rige el precio nuevo. creado_por
+     * va en null porque el precio lo define SIREB, no un funcionario.
+     */
+    private function crearVersion(
+        CampoDeportivo $campo,
+        string $tipo,
+        float $precio,
+        ?TarifaCampo $anterior,
+    ): TarifaCampo {
+        return DB::transaction(function () use ($campo, $tipo, $precio, $anterior): TarifaCampo {
+            $snapshotAnterior = $anterior?->only([
+                'id', 'tipo_tarifa', 'precio_por_hora', 'vigente_desde', 'vigente_hasta',
+            ]);
+
+            if ($anterior) {
+                $anterior->update(['vigente_hasta' => now()]);
+            }
+
+            $nueva = TarifaCampo::create([
+                'campo_id' => $campo->id,
+                'tipo_tarifa' => $tipo,
+                'precio_por_hora' => $precio,
+                'vigente_desde' => now(),
+                'vigente_hasta' => null,
+                'creado_por' => null,
+            ]);
+
+            AuditoriaService::registrar(
+                tabla: 'tarifas_campo',
+                registroId: $nueva->id,
+                accion: 'sincronizar_tarifa_sireb',
+                usuarioId: null,
+                datosAnteriores: $snapshotAnterior,
+                datosNuevos: $nueva->only([
+                    'id', 'tipo_tarifa', 'precio_por_hora', 'vigente_desde', 'vigente_hasta',
+                ]),
+            );
+
+            return $nueva;
+        });
     }
 
     private function tipoDesdeEtiqueta(string $etiqueta): ?string

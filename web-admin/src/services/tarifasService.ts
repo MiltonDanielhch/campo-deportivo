@@ -1,25 +1,16 @@
 import apiClient from './apiClient';
-import type {
-  HistorialTarifas,
-  TarifaCampo,
-  TarifaCampoPayload,
-} from '@/types/parametricas';
+import type { HistorialTarifas } from '@/types/parametricas';
 
 const BASE = '/v1/campos-deportivos';
 
+/**
+ * Tarifas de un campo. SOLO LECTURA.
+ *
+ * El precio lo define SIREB (fuente de verdad del contrato de recaudaciones)
+ * y el backend lo espeja con `sireb:sincronizar-tarifas`. No existe método
+ * para crear ni modificar tarifas desde el panel.
+ */
 export const tarifasService = {
-  /**
-   * Fijar una nueva tarifa (diurna o nocturna) para un campo.
-   * Solo se cierra la tarifa anterior del MISMO tipo.
-   */
-  async crear(campoId: string, payload: TarifaCampoPayload): Promise<TarifaCampo> {
-    const { data } = await apiClient.post<{
-      message: string;
-      data: TarifaCampo;
-    }>(`${BASE}/${campoId}/tarifas`, payload);
-    return data.data;
-  },
-
   /**
    * Historial completo + tarifas activas (diurna y nocturna) + hora de corte.
    */

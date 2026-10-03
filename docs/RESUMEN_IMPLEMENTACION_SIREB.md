@@ -1,202 +1,122 @@
-# Resumen de Implementación - Integración SIREB
+# Bitácora de implementación — Integración SIREB
 
-**Fecha:** 2026-10-03
-**Estado:** Fases 1-3 completadas, Fase 4 en progreso
+**Última actualización:** 2026-10-03
+**Estado:** todas las fases cerradas
 
----
-
-## ✅ Fases Completadas
-
-### Fase 1: Backend Core ✅
-**Archivo modificado:** `backend/config/services.php`
-- Agregado sección `paths` con rutas configurables por entorno
-- Agregado `catalogo_publico_fallback_local` configurable
-
-**Archivo modificado:** `backend/app/Integrations/Recaudaciones/RecaudacionesApiClient.php`
-- Actualizado todos los métodos para usar `config('services.recaudaciones.paths.*')`
-- Métodos actualizados:
-  - `buscarCliente()`
-  - `registrarCliente()`
-  - `listarCatalogo()`
-  - `crearLiquidacion()`
-  - `consultarLiquidacionPorCodigo()`
-  - `consultarLiquidacionDetalle()`
-  - `anularLiquidacion()`
-  - `registrarPagoManual()`
-
-**Archivo creado:** `backend/database/migrations/2026_10_03_000002_add_unique_index_servicio_sireb_id_to_campos_deportivos.php`
-- Índice único parcial para evitar duplicados en `servicio_sireb_id`
-- Soporta PostgreSQL, MySQL y SQLite
-
-**Archivo creado:** `backend/database/migrations/2026_10_03_000003_add_servicio_sireb_codigo_to_campos_deportivos.php`
-- Columna opcional `servicio_sireb_codigo` para código legible de SIREB
-- Índice para búsquedas rápidas
-
-**Archivo modificado:** `backend/app/Models/CampoDeportivo.php`
-- Agregado `servicio_sireb_codigo` a fillable
-
-### Fase 2: Backend Admin ✅
-**Archivo creado:** `backend/app/Http/Controllers/Api/V1/Admin/CatalogoSirebController.php`
-- `GET /api/v1/admin/catalogo-sireb/campos` - Lista servicios SIREB con vinculación
-- `PATCH /api/v1/admin/campos-deportivos/{campoId}/vinculo-sireb` - Vincular campo
-- `DELETE /api/v1/admin/campos-deportivos/{campoId}/vinculo-sireb` - Desvincular campo
-- `POST /api/v1/admin/sireb/sincronizar-tarifas` - Sincronizar tarifas manualmente
-- Validaciones y auditoría implementadas
-
-**Archivo modificado:** `backend/routes/api.php`
-- Agregadas rutas para endpoints de SIREB
-- Middleware `role:admin_parametricas` aplicado
-
-**Archivo modificado:** `backend/app/Console/Commands/SincronizarTarifasSireb.php`
-- Agregado flag `--force` para sincronización forzada
-
-### Fase 3: Web-public ✅
-**Archivo creado:** `web-public/src/types/campo.ts`
-- Interfaces TypeScript completas para datos SIREB
-- `TarifaSireb`, `ServicioSireb`, `CampoPublico`, `CamposResponse`, `CampoDetalleResponse`
-
-**Archivo modificado:** `web-public/src/components/campo/CampoCard.tsx`
-- Actualizado para usar `CampoPublico` en lugar de interfaz antigua
-- Validación de `reservable_online` antes de permitir navegación
-- Mostrar `mensaje_no_reservable` cuando corresponde
-- Helper `formatoPrecioSireb()` para formatear precios desde SIREB
-- Mostrar origen de precios (SIREB vs LOCAL_FALLBACK)
-
-**Archivo modificado:** `web-public/src/pages/Campos.tsx`
-- Actualizado para usar `CampoPublico` y `CamposResponse`
-- Mostrar `meta.sincronizado_en` en footer
-- Mostrar `meta.aviso` cuando hay fallback local
-- Indicador visual de origen de precios
-
-**Archivo modificado:** `web-public/src/components/campo/MapaCampos.tsx`
-- Actualizado para usar `CampoPublico`
-- Validación de `reservable_online` en click de marcador
-- Helper `formatoPrecioSireb()` para popups
-- Mostrar mensajes de no reservabilidad
+> Qué se tocó y por qué, archivo por archivo. Para el diseño ver
+> `PLAN_TECNICO_SIREB_INTEGRACION.md`, y para el estado operativo
+> `ESTADO_FINAL_IMPLEMENTACION.md`.
 
 ---
 
-## 🔄 Fase 4: Web-admin (En Progreso)
+## Fase 1 — Backend core
 
-**Archivo creado:** `web-admin/src/services/catalogoSirebService.ts`
-- Service para consumir endpoints de SIREB
-- Métodos: `listarCatalogo()`, `vincularCampo()`, `desvincularCampo()`, `sincronizarTarifas()`
+| Archivo | Cambio |
+| --- | --- |
+| `backend/config/services.php` | Paths de SIREB (`catalogo_servicios`, `clientes`, `liquidaciones`) y credenciales OAuth2 configurables por entorno |
+| `backend/app/Integrations/Recaudaciones/RecaudacionesApiClient.php` | Todos los métodos usan `config('services.recaudaciones.paths.*')` en vez de rutas hardcodeadas |
+| `backend/app/Services/CatalogoSirebService.php` | Caché del catálogo (10 min) y posteriormente `refrescarCatalogo()` para ignorarla |
+| `backend/database/migrations/2026_10_03_000002_add_unique_index_servicio_sireb_id_to_campos_deportivos.php` | Índice único parcial `uq_campos_servicio_sireb` |
+| `backend/database/migrations/2026_10_03_000003_add_servicio_sireb_codigo_to_campos_deportivos.php` | Columna `servicio_sireb_codigo` + índice |
+| `backend/app/Models/CampoDeportivo.php` | `servicio_sireb_codigo` en `$fillable` |
 
-**Archivo modificado:** `web-admin/src/services/camposService.ts`
-- Agregados métodos `vincularSireb()` y `desvincularSireb()`
+## Fase 2 — Backend admin
 
-**Archivo modificado:** `web-admin/src/pages\parametricas\CamposDeportivos.tsx` (parcial)
-- Agregados imports para SIREB
-- Agregado estado para catálogo SIREB
-- Pendiente: Rediseño completo de UI
+| Archivo | Cambio |
+| --- | --- |
+| `backend/app/Http/Controllers/Api/V1/Admin/CatalogoSirebController.php` | Nuevo. `index`, `vincular`, `desvincular`, `sincronizarTarifas`, con auditoría |
+| `backend/routes/api.php` | Rutas del panel bajo `auth.oauth` + `role:admin_parametricas` |
 
-**Cambios pendientes en Fase 4:**
-1. Completar rediseño de UI en `CamposDeportivos.tsx`
-2. Agregar toggle entre vista local y vista SIREB
-3. Implementar tabla de servicios SIREB
-4. Agregar modal de vinculación
-5. Agregar botón de sincronización de tarifas
-6. Actualizar `CampoFormDialog` para bloquear edición de precios
+## Fase 3 — Web pública
 
----
+| Archivo | Cambio |
+| --- | --- |
+| `web-public/src/types/campo.ts` | Nuevo. Tipos del payload real del backend |
+| `web-public/src/components/campo/CampoCard.tsx` | Valida `reservable_online`, muestra `mensaje_no_reservable`, precio y badge oficial |
+| `web-public/src/pages/Campos.tsx` | Muestra `meta.sincronizado_en` y `meta.aviso` |
+| `web-public/src/components/campo/MapaCampos.tsx` | Validación en el click del marcador y precios de SIREB en el popup |
+| `web-public/src/components/landing/CamposDestacados.tsx` | Usa el tipo compartido y muestra badge "Oficial" y rango de precios |
+| `web-public/src/pages/CampoDetalle.tsx` | Nombre oficial y "Código oficial SIREB" en el hero |
 
-## ✅ Fase 5: Mobile ✅
+## Fase 4 — Panel Paitití
 
-**Archivo modificado:** `mobile/lib/models/campo_deportivo.dart`
-- Agregados campos: `servicioSirebId`, `sireb`, `reservableOnline`, `mensajeNoReservable`, `fuentePrecios`
-- Agregados modelos: `ServicioSireb`, `TarifaSireb`
-- Actualizado `fromJson()` para parsear datos SIREB
-- Agregado getter `esReservable` que combina estado operativo y SIREB
-- Agregado método `formatoPrecioSireb()` para formatear precios desde SIREB
-- Actualizado `toJson()` para incluir campos SIREB
+| Archivo | Cambio |
+| --- | --- |
+| `web-admin/src/services/catalogoSirebService.ts` | Nuevo. Catálogo, vincular, desvincular, sincronizar |
+| `web-admin/src/services/camposService.ts` | `vincularSireb()` y `desvincularSireb()` |
+| `web-admin/src/components/parametricas/VincularSirebDialog.tsx` | Nuevo. Diálogo de vinculación contra el catálogo oficial |
+| `web-admin/src/pages/parametricas/CamposDeportivos.tsx` | Conmutador *Campos locales* / *Catálogo SIREB*, acción de alta prellenada desde el servicio y columna con el código oficial |
+| `web-admin/src/components/parametricas/CampoFormDialog.tsx` | Acepta `valoresIniciales` para el alta desde un servicio de SIREB |
+| `web-admin/src/pages/parametricas/Tarifas.tsx` | Reescrita en **solo lectura**: se quitó el formulario de precios y el diálogo de confirmación; se agregaron aviso, botón de sincronización y enlace al panel de SIREB |
 
-**Archivo modificado:** `mobile/lib/services/campos_service.dart`
-- Agregado método `obtenerMeta()` para obtener información del catálogo (fuente, sincronización, avisos)
+## Fase 5 — Mobile
 
-**Archivo modificado:** `mobile/lib/screens/campos_listado_screen.dart`
-- Agregado estado para meta información del catálogo
-- Agregado footer con información de origen de precios
-- Mostrar aviso si hay fallback local
-- Mostrar fecha de última sincronización
-- Actualizado `_CampoTarjeta` para:
-  - Validar `esReservable` antes de permitir navegación
-  - Mostrar precios desde SIREB cuando estén disponibles
-  - Mostrar `mensajeNoReservable` cuando corresponda
-  - Mostrar badge "Oficial" para precios SIREB
-- Pull-to-refresh ya existente, funciona correctamente
+| Archivo | Cambio |
+| --- | --- |
+| `mobile/lib/models/campo_deportivo.dart` | Campos de SIREB y modelos `ServicioSireb` / `TarifaSireb` |
+| `mobile/lib/services/campos_service.dart` | `obtenerMeta()` |
+| `mobile/lib/screens/campos_listado_screen.dart` | Valida reservabilidad, precios de SIREB, badge "Oficial", footer con origen y última sincronización |
 
----
+## Fase 6 — Operación
 
-## ⏳ Fases Pendientes
-
-### Fase 6: Mapeo y Operación
-- Desactivar simulador en .env test
-- Consultar catálogo real SIREB
-- Mapear campos locales a UUID SIREB
-- Ejecutar sincronización de tarifas
-- Verificar end-to-end
-
-### Fase 6: Mapeo y Operación
-- Desactivar simulador en .env test
-- Consultar catálogo real SIREB
-- Mapear campos locales a UUID SIREB
-- Ejecutar sincronización de tarifas
-- Verificar end-to-end
+| Archivo | Cambio |
+| --- | --- |
+| `backend/app/Console/Commands/MapearCamposSireb.php` | Deja de ser un listado: vincula contra el catálogo vigente. Flags `--dry-run`, `--listar`, `--crear`, `--tipo-campo`, `--map` |
+| `backend/database/seeders/MapeoSirebSeeder.php` | Respaldo offline del mapeo, con la piscina (`0005`) y los códigos |
+| `backend/database/mapeo_sireb.sql` | **Eliminado**: era un parche con UUIDs de reemplazo que contradecía el mapeo real |
 
 ---
 
-## 📝 Variables de Entorno Requeridas
+## Cambios posteriores (misma fecha)
 
-```env
-# Paths SIREB (configurables)
-SIREB_PATH_CATALOGO_SERVICIOS=/api/v1/catalogo/servicios
-SIREB_PATH_CLIENTES=/api/v1/clientes
-SIREB_PATH_LIQUIDACIONES=/api/v1/liquidaciones
+### El precio deja de ser editable
 
-# Fallback local
-CATALOGO_PUBLICO_FALLBACK_LOCAL=true
-```
+Motivo: SIREB es la fuente de verdad de precios y el job diario pisaba cualquier
+valor cargado a mano, así que la pantalla prometía algo que no podía cumplir.
 
----
+| Archivo | Cambio |
+| --- | --- |
+| `backend/routes/api.php` | Se elimina `POST /campos-deportivos/{id}/tarifas`. Queda solo el `GET` |
+| `backend/app/Http/Controllers/Api/V1/TarifaCampoController.php` | Sin `store()`. Pasa a ser un controlador de consulta |
+| `backend/app/Services/TarifaCampoService.php` | Sin `actualizarTarifa()` ni los helpers de identificación del funcionario. Quedan `tarifasActivas()` e `historial()` |
+| `backend/app/Http/Requests/StoreTarifaRequest.php` | **Eliminado** |
+| `backend/app/Console/Commands/SincronizarTarifasSireb.php` | Versiona los cambios (cierra la tarifa vigente y crea una nueva) en vez de pisar el precio, y registra auditoría. Se quita el flag `--force`, que no hacía nada |
+| `backend/app/Http/Controllers/Api/V1/Admin/CatalogoSirebController.php` | Deja de pasar `--force` |
+| `web-admin/src/pages/parametricas/Tarifas.tsx` | Solo lectura: aviso, botón "Sincronizar desde SIREB" y enlace a `/panel/servicios` |
+| `web-admin/src/services/tarifasService.ts` | Sin `crear()` |
+| `web-admin/src/types/parametricas.ts` | Sin `TarifaCampoPayload`; `creado_por` admite `null` |
+| `backend/tests/Feature/Api/V1/TarifaCampoTest.php` | Reescrito: verifica que el endpoint de escritura devuelve 405, que la sincronización crea el espejo, que versiona los cambios y que el dry-run no toca nada |
 
-## 🧪 Pruebas Requeridas
+### Correcciones en el panel
 
-### Backend
-- [ ] Ejecutar migraciones
-- [ ] Verificar índice único parcial
-- [ ] Test endpoint GET catalogo-sireb/campos
-- [ ] Test endpoint PATCH vinculo-sireb
-- [ ] Test endpoint DELETE vinculo-sireb
-- [ ] Test endpoint POST sincronizar-tarifas
+| Archivo | Cambio |
+| --- | --- |
+| `web-admin/src/pages/parametricas/Tarifas.tsx` | `creado_por` nulo (tarifas espejadas) rompía la pantalla: `typeof null === 'object'` entraba al camino que asume objeto |
+| `web-admin/src/components/ui/dropdown-menu.tsx` | `DropdownMenuTrigger` traduce `asChild` a `render`: eliminaba botones anidados |
+| `web-admin/src/components/ui/alert-dialog.tsx` | `AlertDialogDescription` traduce `asChild` a `render`: el atributo se filtraba al DOM y generaba `<p><div>` |
 
-### Web-public
-- [ ] `npm run build`
-- [ ] `npx tsc --noEmit`
-- [ ] Verificar que CampoCard muestra precios SIREB
-- [ ] Verificar que reserva se bloquea si no reservable
-- [ ] Verificar aviso de fallback local
+### Fixtures de test desactualizados (hallazgo)
 
-### Web-admin
-- [ ] `npm run build`
-- [ ] `npx tsc --noEmit`
-- [ ] Verificar tabla SIREB
-- [ ] Verificar vinculación/desvinculación
-- [ ] Verificar sincronización de tarifas
+Al correr la suite completa aparecieron **31 tests en rojo** sin relación con
+SIREB. Causa: la migración `2026_09_25_180000_add_tipo_tarifa_to_tarifas_campo_table`
+agregó la columna `tipo_tarifa` y le quitó el default, pero cinco fixtures
+seguían creando tarifas sin indicarla, contra una columna `NOT NULL`.
 
-### Mobile
-- [ ] `flutter analyze`
-- [ ] `flutter test`
-- [ ] `flutter build apk --debug`
-- [ ] Verificar modelos actualizados
-- [ ] Verificar UI con datos SIREB
+Se agregó `'tipo_tarifa' => 'diurna'` (el valor que la columna tenía por
+defecto antes de la migración) en:
 
----
+- `backend/tests/Feature/Services/ConfirmacionCobroServiceTest.php`
+- `backend/tests/Feature/Jobs/SolicitudesJobsTest.php`
+- `backend/tests/Feature/ModelsTest.php`
+- `backend/tests/Feature/Api/V1/WebhookRecaudacionesControllerTest.php`
+- `backend/tests/Feature/Api/V1/Public/DatosCobroPendienteTest.php`
 
-## 🚀 Siguientes Pasos
+### Mapeo aplicado en el entorno de test
 
-1. Completar Fase 4 (Web-admin UI)
-2. Implementar Fase 5 (Mobile)
-3. Implementar Fase 6 (Mapeo y operación)
-4. Ejecutar pruebas en todas las fases
-5. Documentar procedimiento de mapeo
-6. Smoke test end-to-end
+| Campo local | Nombre local | Servicio SIREB | Precio |
+| --- | --- | --- | --- |
+| `CD-001` | cancha vieja | `SEDEDE-CS1` · Cancha Sintética N° 1 | Bs. 50 – 100 |
+| `FS-001` | Cancha Techada Central | `SEDEDE-CS2` · Cancha Sintética N° 2 | Bs. 50 – 100 |
+| `CD-002` | estadio gran mamore | `SEDEDE-EGM-ENTREN` · Estadio Gran Mamoré - Alquiler | Bs. 100 – 400 |
+| `CD-005` | piscina | `0005` · H. PISCINA OLIMPICA | Bs. 10 |
+| `CD-008` | asdfg (inactivo) | sin equivalente | — |

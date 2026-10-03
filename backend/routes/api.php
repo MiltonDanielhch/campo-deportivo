@@ -99,8 +99,10 @@ Route::middleware('auth.oauth')->group(function () {
             Route::delete('/{campoDeportivo}/vinculo-sireb', [CatalogoSirebController::class, 'desvincular']);
             // ─── FIN Integración SIREB ───
 
-            // Tarifas del campo (HU-A3)
-            Route::post('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'store']);
+            // Tarifas del campo (HU-A3) — SOLO LECTURA.
+            // El precio lo define SIREB (fuente de verdad del contrato de
+            // recaudaciones) y lo espeja `sireb:sincronizar-tarifas`. No existe
+            // endpoint para fijar precios a mano.
             Route::get('/{campoDeportivo}/tarifas', [TarifaCampoController::class, 'historial']);
         });
 

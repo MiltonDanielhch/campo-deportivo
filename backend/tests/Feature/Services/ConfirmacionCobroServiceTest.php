@@ -63,6 +63,7 @@ class ConfirmacionCobroServiceTest extends TestCase
 
         TarifaCampo::create([
             'campo_id' => $campo->id,
+            'tipo_tarifa' => 'diurna',
             'precio_por_hora' => 150,
             'vigente_desde' => now(),
             'creado_por' => $admin->id,

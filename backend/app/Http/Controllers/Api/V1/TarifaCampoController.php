@@ -3,37 +3,23 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreTarifaRequest;
 use App\Models\CampoDeportivo;
 use App\Services\TarifaCampoService;
 use Illuminate\Http\JsonResponse;
 
+/**
+ * Tarifas de un campo deportivo (HU-A3).
+ *
+ * Solo lectura: el precio lo define SIREB, que es la fuente de verdad del
+ * contrato de recaudaciones. Este sistema mantiene tarifas_campo como espejo
+ * validado mediante `php artisan sireb:sincronizar-tarifas`, y no expone
+ * ninguna vía para fijar precios a mano.
+ */
 class TarifaCampoController extends Controller
 {
     public function __construct(
         private TarifaCampoService $service
     ) {}
-
-    /**
-     * POST /api/v1/campos-deportivos/{campoDeportivo}/tarifas
-     * Crea una nueva tarifa (diurna o nocturna) cerrando la activa del mismo tipo.
-     */
-    public function store(StoreTarifaRequest $request, CampoDeportivo $campoDeportivo): JsonResponse
-    {
-        $tarifa = $this->service->actualizarTarifa(
-            $campoDeportivo,
-            $request->validated('tipo_tarifa'),
-            (float) $request->validated('precio_por_hora'),
-        );
-
-        return response()->json([
-            'message' => sprintf(
-                'Tarifa %s creada. La anterior del mismo tipo fue cerrada automáticamente.',
-                $tarifa->tipo_tarifa,
-            ),
-            'data' => $tarifa->load('creadoPor:id,nombre_completo'),
-        ], 201);
-    }
 
     /**
      * GET /api/v1/campos-deportivos/{campoDeportivo}/tarifas
