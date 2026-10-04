@@ -913,4 +913,43 @@ Esto está fuera de alcance del Módulo 6 pero debe documentarse para abordarlo 
 
 ---
 
+## Deuda técnica documentada (pre-existente al Módulo 6)
+
+### D-07 — Tipos de @base-ui/react Select (14 errores TS)
+**Origen:** Actualización de `@base-ui/react` que cambió el tipo de 
+`Select.onValueChange` para aceptar `string | null` en vez de solo `string`.
+**Archivos afectados:** CampoFormDialog, CamposDeportivos, TiposCampo, 
+Reservas/index, Asignaciones, Funcionarios.
+**Fix sugerido:** Refactor global usando helper tipo 
+`const onChange = (v: string | null) => v && setState(v)` 
+o cambiar el tipo del state a `string | null`.
+**Prioridad:** Media. No rompe build en modo dev, solo en `tsc --noEmit`.
+
+### D-08 — Rutas de auth legacy comentadas/eliminadas (12 tests fallando)
+**Origen:** Migración de auth Sanctum a OAuth Ibare dejó rutas viejas 
+comentadas (`POST /v1/auth/login`) o eliminadas (`GET /v1/oauth/me`).
+**Tests afectados:** AuthTest (4), AuthOAuthIbareTest (7), FuncionarioTest (1).
+**Fix sugerido:** 
+  - Opción A: Eliminar tests legacy si ya no se usa auth Sanctum.
+  - Opción B: Restaurar rutas si son necesarias como fallback.
+  - Opción C: Agregar manejo de `user === null` en `AuthController::me()`.
+**Prioridad:** Alta (falla en CI). Pero NO es responsabilidad del Módulo 6.
+
+### D-09 — Warning baseUrl en web-public
+**Origen:** TypeScript 6.0 deprecó `baseUrl`.
+**Fix:** Agregar `"ignoreDeprecations": "6.0"` a tsconfig.
+**Prioridad:** Baja (warning, no error funcional).
+
+
+## Deuda técnica documentada (post-cierre)
+
+### D-07 — Tipos de @base-ui/react Select (16 errores TS pre-existentes)
+Origen: actualización de librería que cambió tipo de Select.onValueChange.
+No es responsabilidad del Módulo 6. Requiere refactor global en módulo futuro.
+
+### D-08 — Tests legacy de auth fallando (12 tests pre-existentes)
+Origen: migración de auth Sanctum a OAuth Ibare dejó rutas comentadas.
+No es responsabilidad del Módulo 6. Requiere decisión sobre si eliminar
+tests legacy o restaurar rutas.
+
 **Siguiente módulo:** el Módulo 7 (Épica G — seguridad, concurrencia y publicación) ya tiene backend cerrado y frontend base. Con el Módulo 6 completo, el sistema queda listo para smoke final y publicación, con todas las capas operativas implementadas.

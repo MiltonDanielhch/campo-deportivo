@@ -212,7 +212,7 @@ export default function Dashboard() {
                 <XAxis dataKey="campo_nombre" angle={-45} textAnchor="end" height={80} />
                 <YAxis />
                 <Tooltip
-                  formatter={(value: number) => formatMonto(value)}
+                  formatter={(value) => formatMonto(Number(value))}
                   labelFormatter={(label) => `Campo: ${label}`}
                 />
                 <Bar dataKey="total_ingresos" fill="#14b8a6" name="Ingresos" />
@@ -242,7 +242,7 @@ export default function Dashboard() {
                 />
                 <YAxis />
                 <Tooltip
-                  formatter={(value: number) => [`${value} reservas`, 'Total']}
+                  formatter={(value) => [`${value} reservas`, 'Total']}
                   labelFormatter={(hora) => `Hora: ${formatHora(Number(hora))}`}
                 />
                 <Legend />

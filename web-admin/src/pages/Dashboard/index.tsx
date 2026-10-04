@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   BarChart,
@@ -225,7 +225,7 @@ export default function Dashboard() {
                 />
                 <YAxis allowDecimals={false} />
                 <Tooltip
-                  formatter={(value: number) => [`${value} reservas`, 'Total']}
+                  formatter={(value) => [`${value} reservas`, 'Total']}
                   labelFormatter={(hora) => `Hora: ${formatHora(Number(hora))}`}
                 />
                 <Bar dataKey="total" fill="#14b8a6" />
