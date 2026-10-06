@@ -515,7 +515,9 @@ export default function DialogDetalleReserva({
                               : ''}
                           </p>
 
-                          {(entrada.antes || entrada.despues) && (
+                          {/* antes/despues son JSON arbitrario: hay que
+                              coercionarlos a boolean para el condicional. */}
+                          {Boolean(entrada.antes || entrada.despues) && (
                             <details className="mt-1 text-xs text-muted-foreground">
                               <summary className="cursor-pointer hover:text-foreground">
                                 Ver datos registrados

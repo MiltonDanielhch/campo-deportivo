@@ -34,7 +34,6 @@ export default function CuentaRegresiva({
   // Niveles de urgencia
   const critico = segundos <= 60;       // < 1 min
   const precaucion = segundos <= 300;   // < 5 min
-  const normal = !precaucion;
 
   const colorTexto = critico
     ? 'text-red-600'

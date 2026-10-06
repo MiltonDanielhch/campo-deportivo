@@ -1,7 +1,7 @@
 import { ImageIcon, MapPin, ArrowRight, Sun, Lightbulb, AlertCircle, BadgeCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 import type { CampoPublico } from '@/types/campo';
 
 interface CampoCardProps {

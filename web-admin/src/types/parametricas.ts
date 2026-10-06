@@ -86,6 +86,11 @@ export interface CampoDeportivoPayload {
   quitar_imagen?: boolean;
 }
 
+/** Payload para cambiar el estado operativo de un campo. */
+export interface CambioEstadoCampoPayload {
+  estado: EstadoCampo;
+}
+
 // ─── TarifaCampo ─────────────────────────────────────────────────────────
 
 export type TipoTarifa = 'diurna' | 'nocturna';

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ElementType } from 'react';
 import { toast } from 'sonner';
 import {
@@ -14,7 +14,6 @@ import {
   Filter,
   Loader2,
   MapPin,
-  MoreHorizontal,
   RotateCcw,
   Search,
   UserCheck,

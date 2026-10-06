@@ -114,8 +114,13 @@ export const solicitudesReservaService = {
         responseType: 'blob',
       });
 
+      // Axios tipa el header como string | number | boolean | string[] |
+      // AxiosHeaders: lo normalizamos antes de usarlo como MIME del blob.
+      const contentTypeHeader = response.headers['content-type'];
       const contentType =
-        response.headers['content-type'] ?? 'text/csv; charset=UTF-8';
+        typeof contentTypeHeader === 'string' && contentTypeHeader !== ''
+          ? contentTypeHeader
+          : 'text/csv; charset=UTF-8';
 
       const blob = new Blob([response.data], {
         type: contentType,

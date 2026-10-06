@@ -65,6 +65,16 @@ web-public/dist/
 web-public/.vite/
 
 # ==========================================================
+# DOCKER / INFRAESTRUCTURA
+# .env.docker vive en la raíz y lleva DB_PASSWORD y APP_KEY
+# reales: se versionan los .example, nunca el archivo cargado.
+# ==========================================================
+/.env
+/.env.*
+!/.env.example
+!/.env.docker.example
+
+# ==========================================================
 # IDEs Y ENTORNO LOCAL
 # ==========================================================
 .idea/

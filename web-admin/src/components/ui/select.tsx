@@ -6,7 +6,33 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+/**
+ * Base UI tipa `onValueChange` como `(value: string | null, details) => void`.
+ * Todos los selects de este panel usan valores string no nulos (incluido el
+ * "todos" de los filtros, que es una cadena), así que estrechamos la firma:
+ * el consumidor recibe siempre un string y no tiene que defenderse de null
+ * en cada llamada.
+ */
+type SelectRootProps = SelectPrimitive.Root.Props<string, false>
+
+interface SelectProps extends Omit<SelectRootProps, 'onValueChange'> {
+  onValueChange?: (value: string) => void
+}
+
+function Select({ onValueChange, ...props }: SelectProps) {
+  return (
+    <SelectPrimitive.Root
+      {...props}
+      onValueChange={
+        onValueChange
+          ? (value) => {
+              if (value !== null) onValueChange(value)
+            }
+          : undefined
+      }
+    />
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

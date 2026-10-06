@@ -54,7 +54,9 @@ function Calendar({
         Chevron: ({ orientation }) => {
           if (orientation === "left") return <ChevronLeft className="h-4 w-4" />
           if (orientation === "right") return <ChevronRight className="h-4 w-4" />
-          return null
+          // react-day-picker exige un Element; para las orientaciones que no
+          // usamos devolvemos un fragmento vacío en vez de null.
+          return <></>
         },
       }}
       {...props}

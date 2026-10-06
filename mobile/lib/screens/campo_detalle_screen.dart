@@ -424,15 +424,18 @@ class _InfoCampo extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            campo.tipoCampo.nombre,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.grey,
-              fontStyle: FontStyle.italic,
+          // El tipo es opcional: un campo puede no tenerlo asignado.
+          if (campo.tipoCampo != null) ...[
+            Text(
+              campo.tipoCampo!.nombre,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+                fontStyle: FontStyle.italic,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
+            const SizedBox(height: 4),
+          ],
           Row(
             children: [
               const Icon(Icons.location_on, size: 16),

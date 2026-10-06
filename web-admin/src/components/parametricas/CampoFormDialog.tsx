@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Camera,
@@ -198,17 +198,22 @@ export default function CampoFormDialog({
   }, [open, modo, campo, valoresIniciales]);
 
   // ─── Imagen: helpers ───
-  const previewUrl = imagenFile
-    ? URL.createObjectURL(imagenFile)
-    : !quitarImagen && imagenPersistida
-      ? imagenPersistida
-      : null;
+  // El object URL del archivo elegido se crea una sola vez por archivo y se
+  // libera al cambiarlo o al desmontar. Crearlo dentro del render filtraba un
+  // blob por cada render y revocaba una URL que podía no ser la vigente.
+  const objectUrl = useMemo(
+    () => (imagenFile ? URL.createObjectURL(imagenFile) : null),
+    [imagenFile],
+  );
 
   useEffect(() => {
     return () => {
-      if (imagenFile) URL.revokeObjectURL(previewUrl);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [imagenFile, previewUrl]);
+  }, [objectUrl]);
+
+  const previewUrl =
+    objectUrl ?? (!quitarImagen && imagenPersistida ? imagenPersistida : null);
 
   const aceptarArchivo = (file: File | undefined | null) => {
     if (!file) return;

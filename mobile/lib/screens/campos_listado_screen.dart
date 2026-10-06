@@ -146,7 +146,6 @@ class _CamposListadoScreenState extends State<CamposListadoScreen> {
 
                         final meta = metaSnapshot.data!;
                         final aviso = meta['aviso'] as String?;
-                        final fuente = meta['fuente_precios'] as String?;
                         final sincronizadoEn = meta['sincronizado_en'] as String?;
 
                         if (aviso != null) {

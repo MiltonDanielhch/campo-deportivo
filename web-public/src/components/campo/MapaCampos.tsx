@@ -1,5 +1,5 @@
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { Icon, LatLngExpression } from 'leaflet';
+import { Icon, type LatLngExpression } from 'leaflet';
 import { useNavigate } from 'react-router-dom';
 import { Sun, Lightbulb, MapPin, AlertCircle } from 'lucide-react';
 import type { CampoPublico } from '@/types/campo';
@@ -72,6 +72,10 @@ export default function MapaCampos({ campos }: MapaCamposProps) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {campos.map((campo) => {
+        // Sin coordenadas no hay marcador que ubicar.
+        const { latitud, longitud } = campo;
+        if (latitud == null || longitud == null) return null;
+
         const esReservable = campo.reservable_online && campo.estado !== 'mantenimiento';
         const { diurna, nocturna } = campo.tarifas ?? {
           diurna: null,
@@ -81,7 +85,7 @@ export default function MapaCampos({ campos }: MapaCamposProps) {
         return (
           <Marker
             key={campo.id}
-            position={[campo.latitud, campo.longitud]}
+            position={[latitud, longitud]}
             icon={campo.estado === 'activo' ? iconoActivo : iconoMantenimiento}
             eventHandlers={{
               click: () => {

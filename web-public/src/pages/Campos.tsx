@@ -1,7 +1,7 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, SearchX, Trophy, AlertCircle, RefreshCw } from 'lucide-react';
+import { SearchX, Trophy, AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import FiltrosCampos, { type FiltrosEstado } from '@/components/campo/FiltrosCampos';
 import CampoCard from '@/components/campo/CampoCard';

@@ -1,10 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { AppSidebar } from '@/components/app-sidebar';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import {
-  BreadcrumbProvider,
-  useBreadcrumbContext,
-} from '@/context/BreadcrumbContext';
+import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import {
   Breadcrumb,
   BreadcrumbItem,
