@@ -30,7 +30,8 @@ use App\Http\Controllers\Api\V1\DashboardController;
 
 // ─── Endpoints públicos ─────────────────────────────────────────────────
 Route::get('/v1/health', [HealthController::class, 'index']);
-// Route::post('/v1/auth/login', [AuthController::class, 'login']);
+// El login local se eliminó: la autenticación humana pasa por Ibare
+// (GET /auth/login-redirect y GET /auth/callback, en routes/web.php).
 
 // Webhook servidor-a-servidor del Core de Recaudaciones (HU-D4).
 // Fuera del grupo público (sin throttle: no debe bloquear reintentos

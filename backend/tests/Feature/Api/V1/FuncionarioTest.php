@@ -194,23 +194,4 @@ class FuncionarioTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.rol.nombre', 'funcionario_control');
     }
-
-    public function test_login_falla_con_funcionario_inactivo(): void
-    {
-        Funcionario::create([
-            'nombre_completo' => 'Juan Inactivo',
-            'ci' => '87654321',
-            'usuario' => 'juan.inactivo',
-            'password_hash' => bcrypt('secret123'),
-            'rol_id' => $this->rolControl->id,
-            'estado' => 'inactivo',
-        ]);
-
-        $response = $this->postJson('/api/v1/auth/login', [
-            'usuario' => 'juan.inactivo',
-            'password' => 'secret123',
-        ]);
-
-        $response->assertUnauthorized();
-    }
 }

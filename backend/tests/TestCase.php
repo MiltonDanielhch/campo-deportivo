@@ -13,9 +13,14 @@ abstract class TestCase extends BaseTestCase
      * Lo saltamos globalmente: la lógica de negocio (roles, reglas de estado,
      * anulación SIREB) se testea igual vía Sanctum::actingAs() + RoleMiddleware.
      *
-     * Excepción: tests que quieran probar el middleware OAuth ACTIVO (p.ej.
-     * AuthOAuthIbareTest) deben re-habilitarlo en su propio setUp con
-     * $this->withMiddleware() (sin argumentos restaura todos).
+     * Excepción: los tests que necesitan el middleware OAuth ACTIVO (p.ej.
+     * AuthOAuthIbareTest) deben revertirlo en su propio setUp pasando la clase:
+     *
+     *     $this->withMiddleware(VerificaTokenOAuth::class);
+     *
+     * Ojo: withMiddleware() SIN argumentos no alcanza. Solo limpia la bandera
+     * global 'middleware.disable'; lo que agrega withoutMiddleware(UnaClase) es
+     * un binding en el contenedor, y para sacarlo hay que pasar la clase.
      */
     protected function setUp(): void
     {

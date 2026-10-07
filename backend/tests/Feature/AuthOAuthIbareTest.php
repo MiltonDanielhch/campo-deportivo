@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\VerificaTokenOAuth;
 use App\Models\Funcionario;
 use App\Models\Rol;
 use Firebase\JWT\JWT;
@@ -22,6 +23,12 @@ class AuthOAuthIbareTest extends TestCase
     {
         parent::setUp();
         Cache::flush(); // Evita que el JWKS cacheado de un test afecte al siguiente
+
+        // El TestCase base desactiva VerificaTokenOAuth para el resto de la
+        // suite; este archivo existe justamente para probarlo, así que lo
+        // volvemos a habilitar. Hay que pasar la clase: withMiddleware() sin
+        // argumentos solo limpia middleware.disable, no el binding por clase.
+        $this->withMiddleware(VerificaTokenOAuth::class);
     }
 
     private function clavePrivada(): string
@@ -87,14 +94,14 @@ class AuthOAuthIbareTest extends TestCase
         $this->fakeJwks();
         $funcionario = $this->funcionarioHabilitado();
 
-        $response = $this->withToken($this->token())->getJson('/api/v1/oauth/me');
+        $response = $this->withToken($this->token())->getJson('/api/v1/auth/me');
 
         $response->assertOk()->assertJsonPath('data.id', $funcionario->id);
     }
 
     public function test_sin_token_devuelve_401(): void
     {
-        $this->getJson('/api/v1/oauth/me')->assertStatus(401);
+        $this->getJson('/api/v1/auth/me')->assertStatus(401);
     }
 
     public function test_token_con_firma_de_otra_clave_devuelve_401(): void
@@ -108,7 +115,7 @@ class AuthOAuthIbareTest extends TestCase
             self::KID
         );
 
-        $this->withToken($token)->getJson('/api/v1/oauth/me')->assertStatus(401);
+        $this->withToken($token)->getJson('/api/v1/auth/me')->assertStatus(401);
     }
 
     public function test_token_expirado_devuelve_401(): void
@@ -118,7 +125,7 @@ class AuthOAuthIbareTest extends TestCase
 
         $token = $this->token(['exp' => time() - 10, 'iat' => time() - 20]);
 
-        $this->withToken($token)->getJson('/api/v1/oauth/me')->assertStatus(401);
+        $this->withToken($token)->getJson('/api/v1/auth/me')->assertStatus(401);
     }
 
     public function test_issuer_distinto_devuelve_401(): void
@@ -128,7 +135,7 @@ class AuthOAuthIbareTest extends TestCase
 
         $token = $this->token(['iss' => 'http://evil.example.com']);
 
-        $this->withToken($token)->getJson('/api/v1/oauth/me')->assertStatus(401);
+        $this->withToken($token)->getJson('/api/v1/auth/me')->assertStatus(401);
     }
 
     public function test_funcionario_sin_asignacion_local_devuelve_403(): void
@@ -136,7 +143,7 @@ class AuthOAuthIbareTest extends TestCase
         $this->fakeJwks();
         // Nadie con mamore_id 999999 en canchas
 
-        $this->withToken($this->token())->getJson('/api/v1/oauth/me')
+        $this->withToken($this->token())->getJson('/api/v1/auth/me')
             ->assertStatus(403)
             ->assertJsonPath('error', 'FUNCIONARIO_NO_HABILITADO');
     }
@@ -146,8 +153,8 @@ class AuthOAuthIbareTest extends TestCase
         $this->fakeJwks();
         $this->funcionarioHabilitado();
 
-        $this->withToken($this->token())->getJson('/api/v1/oauth/me')->assertOk();
-        $this->withToken($this->token())->getJson('/api/v1/oauth/me')->assertOk();
+        $this->withToken($this->token())->getJson('/api/v1/auth/me')->assertOk();
+        $this->withToken($this->token())->getJson('/api/v1/auth/me')->assertOk();
 
         Http::assertSentCount(1);
     }

@@ -2,72 +2,29 @@
 
 namespace Tests\Feature;
 
-use App\Models\Funcionario;
-use App\Models\Rol;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
+/**
+ * Superficie de autenticación de la API.
+ *
+ * El login local se eliminó: la autenticación humana pasa por Ibare
+ * (GET /auth/login-redirect → GET /auth/callback, con authorization_code +
+ * PKCE). De la API quedan GET /auth/me y POST /auth/logout.
+ *
+ * La validación del token (firma, expiración, issuer, JWKS cacheado y el 403
+ * del funcionario sin asignación local) la cubre AuthOAuthIbareTest, que es el
+ * único archivo que reactiva VerificaTokenOAuth.
+ */
 class AuthTest extends TestCase
 {
-    use RefreshDatabase;
-
-    private function crearFuncionario(array $overrides = []): Funcionario
+    public function test_logout_cierra_la_sesion(): void
     {
-        $rol = Rol::create([
-            'nombre' => 'admin_parametricas',
-            'descripcion' => 'Rol de prueba',
-            'permisos' => ['*'],
-        ]);
-
-        return Funcionario::create(array_merge([
-            'nombre_completo' => 'Funcionario de Prueba',
-            'ci' => '12345678',
-            'usuario' => 'fprueba',
-            'password_hash' => Hash::make('secret'),
-            'rol_id' => $rol->id,
-            'estado' => 'activo',
-        ], $overrides));
-    }
-
-    public function test_login_correcto_devuelve_200_y_token(): void
-    {
-        $this->crearFuncionario();
-
-        $this->postJson('/api/v1/auth/login', [
-            'usuario' => 'fprueba',
-            'password' => 'secret',
+        $this->withSession([
+            'access_token' => 'token-de-prueba',
+            'refresh_token' => 'refresh-de-prueba',
         ])
+            ->postJson('/api/v1/auth/logout')
             ->assertOk()
-            ->assertJsonStructure([
-                'token',
-                'funcionario' => ['id', 'usuario', 'rol' => ['nombre']],
-            ]);
-    }
-
-    public function test_login_con_funcionario_inactivo_es_rechazado_aunque_la_contrasena_sea_correcta(): void
-    {
-        $this->crearFuncionario(['estado' => 'inactivo']);
-
-        $this->postJson('/api/v1/auth/login', [
-            'usuario' => 'fprueba',
-            'password' => 'secret',
-        ])->assertUnauthorized();
-    }
-
-    public function test_ruta_protegida_sin_token_devuelve_401(): void
-    {
-        $this->getJson('/api/v1/auth/me')->assertUnauthorized();
-    }
-
-    public function test_ruta_protegida_con_token_devuelve_el_funcionario(): void
-    {
-        $funcionario = $this->crearFuncionario();
-        $token = $funcionario->createToken('test')->plainTextToken;
-
-        $this->withHeader('Authorization', "Bearer $token")
-            ->getJson('/api/v1/auth/me')
-            ->assertOk()
-            ->assertJsonPath('funcionario.usuario', 'fprueba');
+            ->assertJsonPath('message', 'Sesion cerrada');
     }
 }
