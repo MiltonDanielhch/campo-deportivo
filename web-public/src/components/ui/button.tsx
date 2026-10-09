@@ -62,6 +62,7 @@ function Button({
     return (
       <ButtonPrimitive
         render={children}
+        nativeButton={false}
         data-slot="button"
         className={classes}
         {...(props as Record<string, unknown>)}

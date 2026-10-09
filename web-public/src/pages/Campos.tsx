@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Card, CardContent } from '@/components/ui/card';
 import { SearchX, Trophy, AlertCircle, RefreshCw } from 'lucide-react';
@@ -19,18 +19,20 @@ const FILTROS_INICIALES: FiltrosEstado = {
 export default function Campos() {
   const [campos, setCampos] = useState<CampoPublico[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [vista, setVista] = useState<VistaModo>('lista');
   const [filtros, setFiltros] = useState<FiltrosEstado>(FILTROS_INICIALES);
   const [meta, setMeta] = useState<CamposResponse['meta'] | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
-
   useEffect(() => {
-    if (abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
+    // AbortController local: cada ejecución tiene el suyo,
+    // y el cleanup lo aborta antes del siguiente efecto.
+    const controller = new AbortController();
 
     setCargando(true);
+    setError(null);
 
+    // Construir query params según filtros activos
     const params: Record<string, string> = {};
     if (filtros.tipoCampoId) params.tipo_campo_id = filtros.tipoCampoId;
     if (filtros.estado) params.estado = filtros.estado;
@@ -39,27 +41,28 @@ export default function Campos() {
     api
       .get<CamposResponse>('/public/campos', {
         params,
-        signal: abortRef.current.signal,
+        signal: controller.signal,
       })
       .then((res) => {
         setCampos(res.data.data);
         setMeta(res.data.meta);
+        setCargando(false);
       })
       .catch((err) => {
-        if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
-          console.error('Error al cargar campos:', err);
+        // Si fue cancelado por cambio de filtros o unmount (StrictMode),
+        // NO tocar el estado: la próxima ejecución del efecto lo hará.
+        if (err.name === 'CanceledError' || err.name === 'AbortError') {
+          return;
         }
-      })
-      .finally(() => {
-        if (!abortRef.current?.signal.aborted) {
-          setCargando(false);
-        }
+        console.error('Error al cargar campos:', err);
+        setError('No se pudieron cargar las canchas. Intenta nuevamente.');
+        setCargando(false);
       });
 
-    return () => abortRef.current?.abort();
+    return () => controller.abort();
   }, [filtros]);
 
-  // Estadísticas de resultados
+  // Estadísticas de resultados (se calcula sobre el array final)
   const totalActivos = campos.filter((c) => c.estado === 'activo').length;
 
   return (
@@ -89,7 +92,7 @@ export default function Campos() {
                   Encontrá y reservá tu cancha en Trinidad, Beni.
                 </p>
               </div>
-              {!cargando && campos.length > 0 && (
+              {!cargando && !error && campos.length > 0 && (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 shadow-sm">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span className="text-sm font-semibold">
@@ -129,6 +132,21 @@ export default function Campos() {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          ) : error ? (
+            <div className="text-center py-24 bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <div className="w-16 h-16 mx-auto rounded-full bg-red-50 flex items-center justify-center mb-5">
+                <AlertCircle className="w-7 h-7 text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">Ocurrió un error</h3>
+              <p className="text-slate-500 max-w-md mx-auto mb-6">{error}</p>
+              <button
+                onClick={() => setFiltros({ ...filtros })}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-600 text-white font-semibold hover:bg-teal-700 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Reintentar
+              </button>
             </div>
           ) : vista === 'lista' ? (
             campos.length > 0 ? (
@@ -183,7 +201,8 @@ export default function Campos() {
                     Precios oficiales sincronizados desde Paitití / SIREB.
                     {meta.sincronizado_en && (
                       <span className="ml-2 text-slate-500">
-                        Última actualización: {new Date(meta.sincronizado_en).toLocaleString('es-BO')}
+                        Última actualización:{' '}
+                        {new Date(meta.sincronizado_en).toLocaleString('es-BO')}
                       </span>
                     )}
                   </p>
