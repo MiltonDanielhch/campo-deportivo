@@ -15,13 +15,17 @@ const nombresDias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const nombresMeses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 /**
- * Selector horizontal de 14 días desde hoy.
- * - En móvil: scroll horizontal con el botón de calendario FIJO a la derecha
- *   (siempre visible, sin tener que deslizar para encontrarlo).
- * - En desktop: todos los días visibles y el botón al final, como siempre.
- * - Si la fecha activa está fuera de los 14 días, el botón fijo muestra
- *   un chip teal con esa fecha (click reabre el calendario).
+ * Genera fecha ISO (yyyy-MM-dd) usando componentes LOCALES.
+ * Reemplaza `new Date().toISOString().split('T')[0]` que convierte a UTC
+ * y rompe el día en zonas horarias negativas (Bolivia UTC-4).
  */
+const fechaLocalISO = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export default function SelectorFechas({
   fechaSeleccionada,
   onFechaChange,
@@ -32,7 +36,7 @@ export default function SelectorFechas({
   for (let i = 0; i < 14; i++) {
     const d = new Date();
     d.setDate(d.getDate() + i);
-    const fechaISO = d.toISOString().split('T')[0];
+    const fechaISO = fechaLocalISO(d); // ← FIX
     dias.push({
       fecha: fechaISO,
       nombreDia: i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : nombresDias[d.getDay()],
@@ -44,17 +48,20 @@ export default function SelectorFechas({
 
   let chipFuera: { nombreDia: string; diaMes: string } | null = null;
   if (!estaEnRango && fechaSeleccionada) {
-    const d = new Date(fechaSeleccionada + 'T00:00:00');
-    if (!isNaN(d.getTime())) {
+    // Parseo seguro usando componentes locales (no UTC)
+    const [y, m, d] = fechaSeleccionada.split('-').map(Number);
+    const parsed = new Date(y, m - 1, d);
+    if (!isNaN(parsed.getTime())) {
       chipFuera = {
-        nombreDia: nombresDias[d.getDay()],
-        diaMes: `${d.getDate()} ${nombresMeses[d.getMonth()]}`,
+        nombreDia: nombresDias[parsed.getDay()],
+        diaMes: `${parsed.getDate()} ${nombresMeses[parsed.getMonth()]}`,
       };
     }
   }
 
-  const fechaDate = fechaSeleccionada
-    ? new Date(fechaSeleccionada + 'T00:00:00')
+  const [fy, fm, fd] = fechaSeleccionada.split('-').map(Number);
+  const fechaDate = fechaSeleccionada && !isNaN(fy)
+    ? new Date(fy, fm - 1, fd)
     : undefined;
 
   const hoy = new Date();
@@ -70,8 +77,8 @@ export default function SelectorFechas({
   return (
     <div className="mb-6 flex items-stretch gap-2">
       {/* ─── Fila de 14 días: scroll horizontal en pantallas chicas ─── */}
-      <div className="-ml-4 min-w-0 flex-1 overflow-x-auto pb-2 pl-4 sm:ml-0 sm:pl-0">
-        <div className="flex w-max items-stretch gap-2 pr-2">
+      <div className="-ml-4 min-w-0 flex-1 overflow-x-auto pb-2 pl-4 sm:ml-0 sm:pl-0 scrollbar-none">
+        <div className="flex w-max items-stretch gap-2 pr-2 snap-x snap-mandatory">
           {dias.map((dia) => {
             const activo = dia.fecha === fechaSeleccionada;
             return (
@@ -79,7 +86,7 @@ export default function SelectorFechas({
                 key={dia.fecha}
                 variant={activo ? 'default' : 'outline'}
                 onClick={() => onFechaChange(dia.fecha)}
-                className={`flex flex-col items-center min-w-[70px] h-auto py-2 ${
+                className={`snap-start flex flex-col items-center min-w-[70px] h-auto py-2 ${
                   activo ? 'bg-teal-600 hover:bg-teal-700' : ''
                 }`}
               >
@@ -91,7 +98,7 @@ export default function SelectorFechas({
         </div>
       </div>
 
-      {/* ─── Botón calendario: FIJO, siempre visible (fuera del scroll) ─── */}
+      {/* ─── Botón calendario: FIJO, siempre visible ─── */}
       <div className="flex-shrink-0 pb-2">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>

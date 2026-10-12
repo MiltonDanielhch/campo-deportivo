@@ -61,7 +61,8 @@ export default function FiltrosCampos({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [textoBusqueda, filtros, onFiltrosChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textoBusqueda]); // ← solo depende del texto, no del objeto completo
 
   // Nombre legible del tipo seleccionado (para el chip)
   const tipoSeleccionadoNombre = tiposCampo.find(

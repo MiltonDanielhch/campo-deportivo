@@ -45,9 +45,9 @@ export default function Hero() {
           <Button
             asChild
             size="lg"
-            className="bg-white text-teal-700 hover:bg-teal-50 shadow-xl shadow-black/20 rounded-full px-8 h-12 text-base font-semibold"
+            className="w-full sm:w-auto bg-white text-teal-700 hover:bg-teal-50 shadow-xl shadow-black/20 rounded-full px-8 h-12 text-base font-semibold"
           >
-            <Link to="/campos" className="flex items-center gap-2">
+            <Link to="/campos" className="flex items-center justify-center gap-2">
               Ver canchas disponibles
               <ArrowRight className="w-4 h-4" />
             </Link>
@@ -56,31 +56,37 @@ export default function Hero() {
             asChild
             variant="outline"
             size="lg"
-            className="bg-transparent border-white/30 text-white hover:bg-white/10 rounded-full px-8 h-12 text-base"
+            className="w-full sm:w-auto bg-transparent border-white/30 text-white hover:bg-white/10 rounded-full px-8 h-12 text-base"
           >
-            <a href="#como-funciona" className="flex items-center gap-2">
+            <a href="#como-funciona" className="flex items-center justify-center gap-2">
               <Play className="w-4 h-4" />
               ¿Cómo funciona?
             </a>
           </Button>
         </div>
 
-        {/* Stats */}
+        {/* Stats — altura uniforme en mobile (min-h evita wrap desigual) */}
         <div className="grid grid-cols-3 gap-4 max-w-xl mx-auto pt-8 border-t border-white/15">
           <div className="text-center">
             <Trophy className="w-5 h-5 mx-auto mb-2 text-emerald-200" />
             <p className="text-2xl md:text-3xl font-bold">3</p>
-            <p className="text-xs md:text-sm text-teal-100">Canchas disponibles</p>
+            <p className="text-xs md:text-sm text-teal-100 min-h-[36px] flex items-center justify-center">
+              Canchas disponibles
+            </p>
           </div>
           <div className="text-center border-x border-white/15">
             <Users className="w-5 h-5 mx-auto mb-2 text-emerald-200" />
             <p className="text-2xl md:text-3xl font-bold">2 min</p>
-            <p className="text-xs md:text-sm text-teal-100">Para reservar</p>
+            <p className="text-xs md:text-sm text-teal-100 min-h-[36px] flex items-center justify-center">
+              Para reservar
+            </p>
           </div>
           <div className="text-center">
             <ShieldCheck className="w-5 h-5 mx-auto mb-2 text-emerald-200" />
             <p className="text-2xl md:text-3xl font-bold">QR</p>
-            <p className="text-xs md:text-sm text-teal-100">Pago seguro</p>
+            <p className="text-xs md:text-sm text-teal-100 min-h-[36px] flex items-center justify-center">
+              Pago seguro
+            </p>
           </div>
         </div>
       </div>

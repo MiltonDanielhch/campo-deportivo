@@ -131,3 +131,21 @@
 
 /* Leaflet map styles */
 @import 'leaflet/dist/leaflet.css';
+
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Aísla los z-index internos de Leaflet dentro del contenedor del mapa */
+.leaflet-container {
+  z-index: 0 !important;
+}
+
+/* Las capas internas siguen teniendo sus z-index altos, pero quedan
+   atrapadas en el stacking context del <div> padre con relative z-0. */

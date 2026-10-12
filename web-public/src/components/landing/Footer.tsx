@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MapPinned, Code2, Mail } from 'lucide-react';
+import { MapPinned, Mail } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -23,16 +23,26 @@ export default function Footer() {
               <a
                 href="mailto:canchas@gadbeni.bo"
                 className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-teal-600 flex items-center justify-center transition-colors"
-                aria-label="Email"
+                aria-label="Email de contacto"
               >
                 <Mail className="w-4 h-4" />
               </a>
+              {/* SVG de Facebook inline (lucide no provee íconos de marca) */}
               <a
                 href="#"
                 className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-teal-600 flex items-center justify-center transition-colors"
-                aria-label="GitHub"
+                aria-label="Facebook GAD Beni"
               >
-                <Code2 className="w-4 h-4" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z" />
+                </svg>
               </a>
             </div>
           </div>
@@ -44,18 +54,12 @@ export default function Footer() {
             </h3>
             <ul className="space-y-3 text-sm">
               <li>
-                <Link
-                  to="/campos"
-                  className="hover:text-teal-400 transition-colors"
-                >
+                <Link to="/campos" className="hover:text-teal-400 transition-colors">
                   Campos disponibles
                 </Link>
               </li>
               <li>
-                <Link
-                  to="/estado"
-                  className="hover:text-teal-400 transition-colors"
-                >
+                <Link to="/estado" className="hover:text-teal-400 transition-colors">
                   Consultar mi reserva
                 </Link>
               </li>

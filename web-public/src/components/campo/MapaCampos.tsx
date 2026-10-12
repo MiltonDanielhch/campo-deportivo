@@ -61,109 +61,110 @@ export default function MapaCampos({ campos }: MapaCamposProps) {
   };
 
   return (
-    <MapContainer
-      center={centroTrinidad}
-      zoom={13}
-      className="h-[500px] md:h-[600px] w-full"
-      scrollWheelZoom={false}
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      {campos.map((campo) => {
-        // Sin coordenadas no hay marcador que ubicar.
-        const { latitud, longitud } = campo;
-        if (latitud == null || longitud == null) return null;
+    <div className="relative z-0 overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+      <MapContainer
+        center={centroTrinidad}
+        zoom={13}
+        className="h-[500px] md:h-[600px] w-full"
+        scrollWheelZoom={false}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        {campos.map((campo) => {
+          const { latitud, longitud } = campo;
+          if (latitud == null || longitud == null) return null;
 
-        const esReservable = campo.reservable_online && campo.estado !== 'mantenimiento';
-        const { diurna, nocturna } = campo.tarifas ?? {
-          diurna: null,
-          nocturna: null,
-        };
+          const esReservable = campo.reservable_online && campo.estado !== 'mantenimiento';
+          const { diurna, nocturna } = campo.tarifas ?? {
+            diurna: null,
+            nocturna: null,
+          };
 
-        return (
-          <Marker
-            key={campo.id}
-            position={[latitud, longitud]}
-            icon={campo.estado === 'activo' ? iconoActivo : iconoMantenimiento}
-            eventHandlers={{
-              click: () => {
-                if (esReservable) {
-                  navigate(`/campos/${campo.id}`);
-                }
-              },
-            }}
-          >
-            <Popup>
-              <div className="min-w-[200px] p-1">
-                <p className="text-xs uppercase tracking-wider text-slate-500 mb-1">
-                  {campo.tipo_campo?.nombre || 'Sin tipo'}
-                </p>
-                <p className="font-bold text-base mb-1">{campo.nombre}</p>
-                <p className="flex items-start gap-1 text-xs text-slate-600 mb-2">
-                  <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                  <span>{campo.direccion}</span>
-                </p>
+          return (
+            <Marker
+              key={campo.id}
+              position={[latitud, longitud]}
+              icon={campo.estado === 'activo' ? iconoActivo : iconoMantenimiento}
+              eventHandlers={{
+                click: () => {
+                  if (esReservable) {
+                    navigate(`/campos/${campo.id}`);
+                  }
+                },
+              }}
+            >
+              <Popup>
+                <div className="min-w-[200px] p-1">
+                  <p className="text-xs uppercase tracking-wider text-slate-500 mb-1">
+                    {campo.tipo_campo?.nombre || 'Sin tipo'}
+                  </p>
+                  <p className="font-bold text-base mb-1">{campo.nombre}</p>
+                  <p className="flex items-start gap-1 text-xs text-slate-600 mb-2">
+                    <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <span>{campo.direccion}</span>
+                  </p>
 
-                {/* Precios */}
-                <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
-                  {campo.fuente_precios === 'SIREB' && campo.sireb ? (
-                    <div className="flex items-center gap-1 text-xs">
-                      <span className="font-semibold">
-                        {formatoPrecioSireb(campo)}
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      {diurna && (
-                        <div className="flex items-center gap-1 text-xs">
-                          <Sun className="w-3 h-3 text-amber-500" />
-                          <span className="font-semibold">
-                            Bs {diurna.precio_por_hora.toFixed(0)}
-                          </span>
-                        </div>
-                      )}
-                      {nocturna && (
-                        <div className="flex items-center gap-1 text-xs">
-                          <Lightbulb className="w-3 h-3 text-indigo-500" />
-                          <span className="font-semibold">
-                            Bs {nocturna.precio_por_hora.toFixed(0)}
-                          </span>
-                        </div>
-                      )}
-                      {!diurna && !nocturna && (
-                        <span className="text-xs text-slate-400 italic">
-                          Consultar precio
+                  {/* Precios */}
+                  <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
+                    {campo.fuente_precios === 'SIREB' && campo.sireb ? (
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="font-semibold">
+                          {formatoPrecioSireb(campo)}
                         </span>
-                      )}
-                    </>
+                      </div>
+                    ) : (
+                      <>
+                        {diurna && (
+                          <div className="flex items-center gap-1 text-xs">
+                            <Sun className="w-3 h-3 text-amber-500" />
+                            <span className="font-semibold">
+                              Bs {diurna.precio_por_hora.toFixed(0)}
+                            </span>
+                          </div>
+                        )}
+                        {nocturna && (
+                          <div className="flex items-center gap-1 text-xs">
+                            <Lightbulb className="w-3 h-3 text-indigo-500" />
+                            <span className="font-semibold">
+                              Bs {nocturna.precio_por_hora.toFixed(0)}
+                            </span>
+                          </div>
+                        )}
+                        {!diurna && !nocturna && (
+                          <span className="text-xs text-slate-400 italic">
+                            Consultar precio
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {campo.mensaje_no_reservable && (
+                    <p className="flex items-start gap-1 text-amber-600 text-xs mt-2">
+                      <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      <span>{campo.mensaje_no_reservable}</span>
+                    </p>
+                  )}
+
+                  {campo.estado === 'mantenimiento' && (
+                    <p className="text-orange-600 text-xs mt-2 font-medium">
+                      En mantenimiento
+                    </p>
+                  )}
+
+                  {esReservable && (
+                    <p className="text-teal-600 text-xs mt-2 font-medium">
+                      Click para ver disponibilidad →
+                    </p>
                   )}
                 </div>
-
-                {campo.mensaje_no_reservable && (
-                  <p className="flex items-start gap-1 text-amber-600 text-xs mt-2">
-                    <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    <span>{campo.mensaje_no_reservable}</span>
-                  </p>
-                )}
-
-                {campo.estado === 'mantenimiento' && (
-                  <p className="text-orange-600 text-xs mt-2 font-medium">
-                    En mantenimiento
-                  </p>
-                )}
-
-                {esReservable && (
-                  <p className="text-teal-600 text-xs mt-2 font-medium">
-                    Click para ver disponibilidad →
-                  </p>
-                )}
-              </div>
-            </Popup>
-          </Marker>
-        );
-      })}
-    </MapContainer>
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MapContainer>
+    </div>
   );
 }

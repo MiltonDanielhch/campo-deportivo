@@ -6,11 +6,12 @@ import {
   MapPin,
   Lightbulb,
   Sun,
-  ImageIcon,
   Calendar,
   Clock,
   Navigation,
   Info,
+  ChevronDown,
+  ExternalLink,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,7 +34,6 @@ interface HorarioAtencion {
 
 interface Campo {
   id: string;
-  /** Código oficial del servicio en SIREB (SEDEDE-CS1, 0005, …). */
   codigo?: string;
   nombre: string;
   nombre_local?: string;
@@ -67,15 +67,31 @@ const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 const formatHora = (hhmmss: string): string => hhmmss.substring(0, 5);
 
+/** Normaliza URLs locales al proxy CORS del backend. */
+const normalizarUrlImagen = (url: string | null): string | null => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/storage/')) {
+    return url.replace('/storage/', '/api/v1/public/storage/');
+  }
+  return url;
+};
+
 export default function CampoDetalle() {
   const { id } = useParams<{ id: string }>();
   const [campo, setCampo] = useState<Campo | null>(null);
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad | null>(null);
-  const [fecha, setFecha] = useState<string>(
-    () => new Date().toISOString().split('T')[0],
-  );
+  const [fecha, setFecha] = useState<string>(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  });
   const [cargandoCampo, setCargandoCampo] = useState(true);
   const [cargandoDisponibilidad, setCargandoDisponibilidad] = useState(true);
+  const [imagenRota, setImagenRota] = useState(false);
+  const [infoAbierta, setInfoAbierta] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -112,13 +128,15 @@ export default function CampoDetalle() {
   // ─── Skeleton ───
   if (cargandoCampo) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="animate-pulse space-y-6">
-          <div className="h-6 bg-slate-200 rounded w-40" />
-          <div className="aspect-[21/9] bg-slate-200 rounded-2xl" />
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="h-60 bg-slate-200 rounded-2xl" />
-            <div className="h-60 bg-slate-200 rounded-2xl" />
+      <div className="container mx-auto px-4 py-6 max-w-6xl">
+        <div className="animate-pulse space-y-4">
+          <div className="h-10 bg-slate-200 rounded-full w-32" />
+          <div className="aspect-[16/7] bg-slate-200 rounded-2xl" />
+          <div className="h-16 bg-slate-200 rounded-xl" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-20 bg-slate-200 rounded-xl" />
+            ))}
           </div>
         </div>
       </div>
@@ -149,6 +167,7 @@ export default function CampoDetalle() {
   const { diurna, nocturna } = campo.tarifas;
   const tieneAlgunaTarifa = diurna !== null || nocturna !== null;
   const horarios = campo.horarios_atencion ?? [];
+  const imagenUrl = normalizarUrlImagen(campo.imagen_url);
 
   return (
     <>
@@ -156,80 +175,67 @@ export default function CampoDetalle() {
         <title>{campo.nombre} - Canchas Deportivas GAD Beni</title>
         <meta
           name="description"
-          content={`Reserva ${campo.nombre} (${campo.tipo_campo?.nombre ?? 'campo deportivo'}) en ${campo.direccion}. Disponible para reserva online.`}
-        />
-        <meta property="og:title" content={campo.nombre} />
-        <meta
-          property="og:description"
-          content={`${campo.tipo_campo?.nombre ?? 'Campo deportivo'} en ${campo.direccion}`}
+          content={`Reserva ${campo.nombre} (${campo.tipo_campo?.nombre ?? 'campo deportivo'}) en ${campo.direccion}.`}
         />
       </Helmet>
 
       <div className="min-h-screen bg-slate-50 pb-28">
-        {/* ─── HERO con foto del campo ─── */}
-        <section className="relative h-[260px] md:h-[360px] overflow-hidden">
-          {/* Imagen de fondo */}
-          {campo.imagen_url ? (
+        {/* ─── HERO COMPACTO ─── */}
+        <section className="relative h-[180px] sm:h-[210px] md:h-[240px] overflow-hidden">
+          {/* Imagen de fondo o fallback con cancha dibujada */}
+          {imagenUrl && !imagenRota ? (
             <img
-              src={campo.imagen_url}
+              src={imagenUrl}
               alt={campo.nombre}
               className="absolute inset-0 w-full h-full object-cover"
+              onError={() => setImagenRota(true)}
             />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-teal-600 via-teal-700 to-emerald-700">
+            <div className="absolute inset-0 bg-gradient-to-br from-teal-600 via-teal-700 to-emerald-800">
               <div
-                className="absolute inset-0 opacity-[0.08]"
+                className="absolute inset-0 opacity-[0.07]"
                 style={{
                   backgroundImage:
                     'repeating-linear-gradient(45deg, white 0, white 1px, transparent 1px, transparent 20px)',
                 }}
               />
-              {!campo.imagen_url && (
-                <div className="absolute inset-0 flex items-center justify-center text-white/40">
-                  <ImageIcon className="w-24 h-24" />
+              {/* Cancha dibujada como marca de agua */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-25">
+                <div className="relative w-40 h-24 md:w-56 md:h-32 rounded-md border-2 border-white">
+                  <div className="absolute inset-x-0 top-1/2 h-0.5 bg-white" />
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 md:w-14 md:h-14 rounded-full border-2 border-white" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-6 h-12 md:w-8 md:h-16 border-2 border-l-0 border-white" />
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-6 h-12 md:w-8 md:h-16 border-2 border-r-0 border-white" />
                 </div>
-              )}
+              </div>
             </div>
           )}
 
-          {/* Overlay gradiente para legibilidad */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
 
-          {/* Volver (flotando sobre el hero) */}
-          <div className="relative container mx-auto px-4 max-w-6xl pt-6">
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="bg-white/10 backdrop-blur border-white/30 text-white hover:bg-white/20 hover:text-white rounded-full"
-            >
-              <Link to="/campos" className="flex items-center gap-1.5">
-                <ArrowLeft className="w-4 h-4" />
-                Volver
-              </Link>
-            </Button>
+          {/* Botón volver superpuesto al hero */}
+          <div className="absolute top-3 left-0 right-0 z-10">
+            <div className="container mx-auto px-4 max-w-6xl">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="bg-white/10 backdrop-blur border-white/25 text-white hover:bg-white/20 hover:text-white rounded-full h-8"
+              >
+                <Link to="/campos" className="flex items-center gap-1.5">
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Volver
+                </Link>
+              </Button>
+            </div>
           </div>
 
-          {/* Contenido sobre el hero */}
-          <div className="absolute bottom-0 left-0 right-0 container mx-auto px-4 pb-6 md:pb-8 max-w-6xl text-white">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="min-w-0">
-                <p className="text-xs md:text-sm font-semibold uppercase tracking-widest text-teal-200 mb-2">
-                  {campo.tipo_campo?.nombre ?? 'Campo deportivo'}
-                </p>
-                <h1 className="text-3xl md:text-5xl font-bold tracking-tight mb-2">
-                  {campo.nombre}
-                </h1>
-                <p className="flex items-center gap-2 text-sm md:text-base text-white/90">
-                  <MapPin className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate">{campo.direccion}</span>
-                </p>
-                {campo.servicio_sireb_codigo && (
-                  <p className="mt-2 font-mono text-xs text-white/70">
-                    Código oficial SIREB: {campo.servicio_sireb_codigo}
-                  </p>
-                )}
-              </div>
+          {/* Contenido sobre el hero: tipo + badge agrupados */}
+          <div className="absolute bottom-0 left-0 right-0 container mx-auto px-4 pb-4 md:pb-5 max-w-6xl text-white">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <p className="text-[10px] md:text-xs font-semibold uppercase tracking-widest text-teal-200">
+                {campo.tipo_campo?.nombre ?? 'Campo deportivo'}
+              </p>
               <Badge
                 variant={esMantenimiento ? 'secondary' : 'default'}
                 className={
@@ -238,14 +244,26 @@ export default function CampoDetalle() {
                     : 'bg-emerald-500 hover:bg-emerald-600 text-white'
                 }
               >
-                {esMantenimiento ? 'En mantenimiento' : campo.estado}
+                {esMantenimiento ? 'Mantenimiento' : campo.estado}
               </Badge>
             </div>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight leading-tight mb-1">
+              {campo.nombre}
+            </h1>
+            <p className="flex items-center gap-1.5 text-xs md:text-sm text-white/90">
+              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">{campo.direccion}</span>
+              {campo.servicio_sireb_codigo && (
+                <span className="hidden sm:inline font-mono text-[10px] text-white/60 ml-2">
+                  {campo.servicio_sireb_codigo}
+                </span>
+              )}
+            </p>
           </div>
         </section>
 
         {/* ─── Contenido principal ─── */}
-        <div className="container mx-auto px-4 py-8 md:py-10 max-w-6xl">
+        <div className="container mx-auto px-4 pt-5 md:pt-8 pb-8 md:pb-10 max-w-6xl">
           {esMantenimiento ? (
             <div className="bg-orange-50 border border-orange-200 rounded-2xl p-8 text-center">
               <div className="w-16 h-16 mx-auto rounded-full bg-orange-100 flex items-center justify-center mb-4">
@@ -260,187 +278,16 @@ export default function CampoDetalle() {
               </p>
             </div>
           ) : (
-            <>
-              {/* ─── Grid de 2 columnas: info + tarifas ─── */}
-              <div className="grid md:grid-cols-5 gap-6 mb-10">
-                {/* IZQ: Horarios + dirección */}
-                <Card className="md:col-span-3 border-slate-200 shadow-sm">
-                  <CardContent className="p-6">
-                    {/* Horarios de atención */}
-                    <div className="mb-6">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
-                          <Clock className="w-4 h-4 text-teal-600" />
-                        </div>
-                        <h2 className="text-lg font-bold tracking-tight">
-                          Horarios de atención
-                        </h2>
-                      </div>
-                      {horarios.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {horarios
-                            .slice()
-                            .sort((a, b) => a.dia_semana - b.dia_semana)
-                            .map((h) => (
-                              <div
-                                key={h.dia_semana}
-                                className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100"
-                              >
-                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                  {DIAS_SEMANA[h.dia_semana]}
-                                </p>
-                                <p className="text-sm font-bold text-slate-900 mt-0.5">
-                                  {h.hora_apertura.slice(0, 5)}–
-                                  {h.hora_cierre.slice(0, 5)}
-                                </p>
-                              </div>
-                            ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-slate-500 italic">
-                          Sin horarios definidos.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Dirección con link a Google Maps */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
-                          <Navigation className="w-4 h-4 text-teal-600" />
-                        </div>
-                        <h2 className="text-lg font-bold tracking-tight">
-                          Cómo llegar
-                        </h2>
-                      </div>
-                      <p className="text-sm text-slate-600 mb-3">
-                        {campo.direccion}
-                      </p>
-                      <a
-                        href={`https://www.google.com/maps?q=${campo.latitud},${campo.longitud}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-600 hover:text-teal-700"
-                      >
-                        Abrir en Google Maps
-                        <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
-                      </a>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* DER: Tarifas */}
-                <Card className="md:col-span-2 border-slate-200 shadow-sm">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                      <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
-                        <Calendar className="w-4 h-4 text-teal-600" />
-                      </div>
-                      <h2 className="text-lg font-bold tracking-tight">
-                        Tarifas por hora
-                      </h2>
-                    </div>
-
-                    {tieneAlgunaTarifa ? (
-                      <div className="space-y-3">
-                        {/* Tarifa regular */}
-                        <div
-                          className={`rounded-xl border p-4 ${
-                            diurna
-                              ? 'border-amber-200 bg-amber-50'
-                              : 'border-slate-200 bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              <Sun
-                                className={`w-4 h-4 ${
-                                  diurna ? 'text-amber-500' : 'text-slate-400'
-                                }`}
-                              />
-                              <span className="text-xs font-semibold uppercase tracking-wide">
-                                Regular
-                              </span>
-                            </div>
-                            {diurna && (
-                              <span className="text-xs text-amber-700">
-                                Antes de {formatHora(campo.hora_inicio_noche)}
-                              </span>
-                            )}
-                          </div>
-                          {diurna ? (
-                            <p className="text-2xl font-bold text-amber-900">
-                              Bs {diurna.precio_por_hora.toFixed(2)}
-                              <span className="text-sm font-medium text-amber-700 ml-1">
-                                /hora
-                              </span>
-                            </p>
-                          ) : (
-                            <p className="text-sm text-slate-500 italic">
-                              Sin tarifa definida
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Tarifa con iluminación */}
-                        <div
-                          className={`rounded-xl border p-4 ${
-                            nocturna
-                              ? 'border-indigo-200 bg-indigo-50'
-                              : 'border-slate-200 bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              <Lightbulb
-                                className={`w-4 h-4 ${
-                                  nocturna
-                                    ? 'text-indigo-500'
-                                    : 'text-slate-400'
-                                }`}
-                              />
-                              <span className="text-xs font-semibold uppercase tracking-wide">
-                                Con iluminación
-                              </span>
-                            </div>
-                            {nocturna && (
-                              <span className="text-xs text-indigo-700">
-                                Desde {formatHora(campo.hora_inicio_noche)}
-                              </span>
-                            )}
-                          </div>
-                          {nocturna ? (
-                            <p className="text-2xl font-bold text-indigo-900">
-                              Bs {nocturna.precio_por_hora.toFixed(2)}
-                              <span className="text-sm font-medium text-indigo-700 ml-1">
-                                /hora
-                              </span>
-                            </p>
-                          ) : (
-                            <p className="text-sm text-slate-500 italic">
-                              Sin tarifa definida
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-slate-500 italic">
-                        Este campo aún no tiene tarifas definidas.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* ─── Reservá tu franja ─── */}
-              <section>
-                <div className="mb-6">
-                  <p className="text-teal-600 font-semibold uppercase tracking-widest text-xs mb-2">
-                    Reservá tu franja
-                  </p>
-                  <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
+            <div className="grid lg:grid-cols-[1fr_340px] gap-6 lg:gap-8">
+              {/* ══════ COLUMNA PRINCIPAL: reserva ══════ */}
+              <div className="min-w-0">
+                <div className="mb-4">
+                  <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900">
                     Elegí fecha y horario
                   </h2>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Tocá una o varias franjas para reservarlas.
+                  </p>
                 </div>
 
                 <SelectorFechas
@@ -449,18 +296,18 @@ export default function CampoDetalle() {
                 />
 
                 {cargandoDisponibilidad ? (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                     {Array.from({ length: 8 }).map((_, i) => (
                       <div
                         key={i}
-                        className="h-16 bg-slate-200 rounded-lg animate-pulse"
+                        className="h-20 bg-slate-200 rounded-xl animate-pulse"
                       />
                     ))}
                   </div>
                 ) : disponibilidad && disponibilidad.abierto ? (
                   <>
-                    {/* Leyenda de colores */}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 text-xs">
+                    {/* Leyenda */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-3 text-xs">
                       <div className="flex items-center gap-1.5">
                         <span className="w-3 h-3 rounded-sm bg-amber-50 border border-amber-300" />
                         <span className="text-slate-600">Regular</span>
@@ -492,39 +339,236 @@ export default function CampoDetalle() {
                       horaInicioNoche={campo.hora_inicio_noche}
                     />
 
-                    {/* Nota integrada (reemplaza la caja azul genérica) */}
-                    <div className="mt-6 flex gap-3 p-4 bg-teal-50/50 border-l-4 border-teal-500 rounded-r-lg">
-                      <Info className="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm text-slate-700 leading-relaxed">
+                    {/* Tip */}
+                    <div className="mt-5 flex gap-3 p-3.5 bg-teal-50/60 border-l-4 border-teal-500 rounded-r-lg">
+                      <Info className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-slate-700">
                         <span className="font-semibold">Tip:</span> podés
-                        seleccionar múltiples franjas a la vez. El precio se
-                        ajusta automáticamente según el horario (regular o con
-                        iluminación). La grilla se actualiza sola cada 45
-                        segundos.
+                        seleccionar múltiples franjas. El precio se ajusta
+                        automáticamente (regular o con iluminación).
                       </p>
                     </div>
                   </>
                 ) : (
-                  <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
-                    <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                  <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
+                    <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
                       <Calendar className="w-6 h-6 text-slate-400" />
                     </div>
                     <h3 className="text-lg font-bold mb-1">
                       Campo cerrado este día
                     </h3>
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-slate-500 max-w-sm mx-auto">
                       No hay horarios de atención para la fecha seleccionada.
                       Probá otro día.
                     </p>
                   </div>
                 )}
-              </section>
-            </>
+
+                {/* ─── Info secundaria: solo mobile, colapsada ─── */}
+                <div className="lg:hidden mt-8">
+                  <button
+                    onClick={() => setInfoAbierta(!infoAbierta)}
+                    className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 text-left flex-wrap">
+                      <Info className="w-4 h-4 text-teal-600" />
+                      <span className="font-semibold text-slate-900">
+                        Información del campo
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        (horarios, tarifas, ubicación)
+                      </span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 text-slate-400 transition-transform flex-shrink-0 ${
+                        infoAbierta ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {infoAbierta && (
+                    <div className="mt-4 space-y-4">
+                      <InfoSecundaria
+                        campo={campo}
+                        horarios={horarios}
+                        diurna={diurna}
+                        nocturna={nocturna}
+                        tieneAlgunaTarifa={tieneAlgunaTarifa}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ══════ COLUMNA LATERAL: info sticky (solo desktop) ══════ */}
+              <aside className="hidden lg:block">
+                <div className="sticky top-6 space-y-4">
+                  <InfoSecundaria
+                    campo={campo}
+                    horarios={horarios}
+                    diurna={diurna}
+                    nocturna={nocturna}
+                    tieneAlgunaTarifa={tieneAlgunaTarifa}
+                  />
+                </div>
+              </aside>
+            </div>
           )}
         </div>
 
         <BarraCarrito />
       </div>
+    </>
+  );
+}
+
+/**
+ * Componente reutilizable para la información secundaria del campo.
+ * Se usa tanto en la columna sticky (desktop) como en el acordeón colapsable (mobile).
+ */
+function InfoSecundaria({
+  campo,
+  horarios,
+  diurna,
+  nocturna,
+  tieneAlgunaTarifa,
+}: {
+  campo: {
+    direccion: string;
+    latitud: number;
+    longitud: number;
+    hora_inicio_noche: string;
+    servicio_sireb_codigo?: string | null;
+  };
+  horarios: Array<{ dia_semana: number; hora_apertura: string; hora_cierre: string }>;
+  diurna: InfoTarifa | null;
+  nocturna: InfoTarifa | null;
+  tieneAlgunaTarifa: boolean;
+}) {
+  return (
+    <>
+      {/* Tarifas compactas */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center">
+              <Calendar className="w-3.5 h-3.5 text-teal-600" />
+            </div>
+            <h3 className="font-bold tracking-tight text-slate-900">
+              Tarifas por hora
+            </h3>
+          </div>
+
+          {tieneAlgunaTarifa ? (
+            <div className="space-y-2">
+              {diurna && (
+                <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <div className="flex items-center gap-2">
+                    <Sun className="w-4 h-4 text-amber-500" />
+                    <div>
+                      <p className="text-xs font-semibold text-amber-900">
+                        Regular
+                      </p>
+                      <p className="text-[10px] text-amber-700">
+                        Antes de {formatHora(campo.hora_inicio_noche)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-lg font-bold text-amber-900">
+                    Bs {diurna.precio_por_hora.toFixed(0)}
+                  </p>
+                </div>
+              )}
+              {nocturna && (
+                <div className="flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                  <div className="flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-indigo-500" />
+                    <div>
+                      <p className="text-xs font-semibold text-indigo-900">
+                        Con iluminación
+                      </p>
+                      <p className="text-[10px] text-indigo-700">
+                        Desde {formatHora(campo.hora_inicio_noche)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-lg font-bold text-indigo-900">
+                    Bs {nocturna.precio_por_hora.toFixed(0)}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 italic">
+              Sin tarifas definidas.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Horarios */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center">
+              <Clock className="w-3.5 h-3.5 text-teal-600" />
+            </div>
+            <h3 className="font-bold tracking-tight text-slate-900">
+              Horarios de atención
+            </h3>
+          </div>
+          {horarios.length > 0 ? (
+            <div className="space-y-1.5">
+              {horarios
+                .slice()
+                .sort((a, b) => a.dia_semana - b.dia_semana)
+                .map((h) => (
+                  <div
+                    key={h.dia_semana}
+                    className="flex items-center justify-between text-sm py-1.5 border-b border-slate-100 last:border-0"
+                  >
+                    <span className="font-medium text-slate-700 w-10">
+                      {DIAS_SEMANA[h.dia_semana]}
+                    </span>
+                    <span className="font-mono text-slate-900">
+                      {h.hora_apertura.slice(0, 5)}–{h.hora_cierre.slice(0, 5)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 italic">
+              Sin horarios definidos.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Cómo llegar */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center">
+              <Navigation className="w-3.5 h-3.5 text-teal-600" />
+            </div>
+            <h3 className="font-bold tracking-tight text-slate-900">
+              Cómo llegar
+            </h3>
+          </div>
+          <p className="text-sm text-slate-600 mb-3 leading-snug">
+            {campo.direccion}
+          </p>
+          <a
+            href={`https://www.google.com/maps?q=${campo.latitud},${campo.longitud}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-600 hover:text-teal-700"
+          >
+            Abrir en Google Maps
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </CardContent>
+      </Card>
     </>
   );
 }

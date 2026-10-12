@@ -105,7 +105,7 @@ class CatalogoSirebController extends Controller
      * - Si el servicio está inactivo, permitir vínculo pero mostrar warning
      * - Si el servicio es sin_tarifa, permitir vínculo pero no será reservable online
      */
-    public function vincular(Request $request, CampoDeportivo $campo): JsonResponse
+    public function vincular(Request $request, CampoDeportivo $campoDeportivo): JsonResponse
     {
         $validated = $request->validate([
             'servicio_sireb_id' => ['required', 'uuid'],
@@ -123,7 +123,7 @@ class CatalogoSirebController extends Controller
 
             // Verificar que el servicio no esté ya vinculado a otro campo
             $otroCampo = CampoDeportivo::where('servicio_sireb_id', $validated['servicio_sireb_id'])
-                ->where('id', '!=', $campo->id)
+                ->where('id', '!=', $campoDeportivo->id)
                 ->first();
 
             if ($otroCampo) {
@@ -135,15 +135,15 @@ class CatalogoSirebController extends Controller
 
             DB::beginTransaction();
 
-            $campo->update([
+            $campoDeportivo->update([
                 'servicio_sireb_id' => $validated['servicio_sireb_id'],
                 'servicio_sireb_codigo' => $servicio['codigo'] ?? null,
             ]);
 
             // Auditoría
             Log::channel('auditoria')->info('Campo vinculado a servicio SIREB', [
-                'campo_id' => $campo->id,
-                'campo_codigo' => $campo->codigo,
+                'campo_id' => $campoDeportivo->id,
+                'campo_codigo' => $campoDeportivo->codigo,
                 'servicio_sireb_id' => $validated['servicio_sireb_id'],
                 'servicio_sireb_codigo' => $servicio['codigo'] ?? null,
                 'usuario' => auth()->id(),
@@ -154,9 +154,9 @@ class CatalogoSirebController extends Controller
             return response()->json([
                 'message' => 'Campo vinculado exitosamente al servicio SIREB',
                 'data' => [
-                    'campo_id' => $campo->id,
-                    'servicio_sireb_id' => $campo->servicio_sireb_id,
-                    'servicio_sireb_codigo' => $campo->servicio_sireb_codigo,
+                    'campo_id' => $campoDeportivo->id,
+                    'servicio_sireb_id' => $campoDeportivo->servicio_sireb_id,
+                    'servicio_sireb_codigo' => $campoDeportivo->servicio_sireb_codigo,
                     'servicio_nombre' => $servicio['nombre'] ?? null,
                     'warning' => $this->generarWarningVinculacion($servicio),
                 ],
@@ -164,7 +164,7 @@ class CatalogoSirebController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::channel('sireb')->error('Error al vincular campo a SIREB', [
-                'campo_id' => $campo->id,
+                'campo_id' => $campoDeportivo->id,
                 'servicio_sireb_id' => $validated['servicio_sireb_id'] ?? null,
                 'error' => $e->getMessage(),
             ]);
@@ -182,9 +182,9 @@ class CatalogoSirebController extends Controller
      * Desvincula un campo de su servicio SIREB.
      * El campo dejará de ser reservable online hasta que se vuelva a vincular.
      */
-    public function desvincular(CampoDeportivo $campo): JsonResponse
+    public function desvincular(CampoDeportivo $campoDeportivo): JsonResponse
     {
-        if (!$campo->servicio_sireb_id) {
+        if (!$campoDeportivo->servicio_sireb_id) {
             return response()->json([
                 'error' => 'Campo no vinculado',
                 'message' => 'Este campo no tiene un servicio SIREB vinculado.',
@@ -194,18 +194,18 @@ class CatalogoSirebController extends Controller
         try {
             DB::beginTransaction();
 
-            $servicioSirebId = $campo->servicio_sireb_id;
-            $servicioSirebCodigo = $campo->servicio_sireb_codigo;
+            $servicioSirebId = $campoDeportivo->servicio_sireb_id;
+            $servicioSirebCodigo = $campoDeportivo->servicio_sireb_codigo;
 
-            $campo->update([
+            $campoDeportivo->update([
                 'servicio_sireb_id' => null,
                 'servicio_sireb_codigo' => null,
             ]);
 
             // Auditoría
             Log::channel('auditoria')->info('Campo desvinculado de servicio SIREB', [
-                'campo_id' => $campo->id,
-                'campo_codigo' => $campo->codigo,
+                'campo_id' => $campoDeportivo->id,
+                'campo_codigo' => $campoDeportivo->codigo,
                 'servicio_sireb_id' => $servicioSirebId,
                 'servicio_sireb_codigo' => $servicioSirebCodigo,
                 'usuario' => auth()->id(),
@@ -216,14 +216,14 @@ class CatalogoSirebController extends Controller
             return response()->json([
                 'message' => 'Campo desvinculado exitosamente del servicio SIREB',
                 'data' => [
-                    'campo_id' => $campo->id,
+                    'campo_id' => $campoDeportivo->id,
                     'aviso' => 'El campo dejará de ser reservable online hasta que se vuelva a vincular.',
                 ],
             ]);
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::channel('sireb')->error('Error al desvincular campo de SIREB', [
-                'campo_id' => $campo->id,
+                'campo_id' => $campoDeportivo->id,
                 'error' => $e->getMessage(),
             ]);
 
