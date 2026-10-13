@@ -1,4 +1,5 @@
 import { Check, MapPin, User, CreditCard } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export type PasoReserva = 1 | 2 | 3;
 
@@ -21,33 +22,48 @@ export default function StepsReserva({ pasoActual }: StepsReservaProps) {
           const activo = paso.num === pasoActual;
           const Icono = paso.icon;
 
-          return (
-            <div key={paso.num} className="flex items-center flex-1 last:flex-none">
-              {/* Nodo */}
-              <div className="flex flex-col items-center flex-shrink-0">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${
-                    completado
+          // Solo el paso 1 (cuando está completado) es un link real a /campos.
+          // Así el usuario puede volver atrás sin perder el carrito.
+          const esLinkAtras = paso.num === 1 && completado;
+
+          const nodo = (
+            <div className="flex flex-col items-center flex-shrink-0">
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${
+                  esLinkAtras
+                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30 hover:bg-emerald-600 cursor-pointer'
+                    : completado
                       ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30'
                       : activo
                         ? 'bg-teal-600 text-white shadow-lg shadow-teal-500/30 ring-4 ring-teal-100'
                         : 'bg-slate-100 text-slate-400 border-2 border-slate-200'
-                  }`}
-                >
-                  {completado ? <Check className="w-5 h-5" /> : <Icono className="w-4 h-4" />}
-                </div>
-                <span
-                  className={`mt-2 text-xs font-medium text-center whitespace-nowrap ${
-                    completado
-                      ? 'text-emerald-700'
-                      : activo
-                        ? 'text-teal-700 font-semibold'
-                        : 'text-slate-400'
-                  }`}
-                >
-                  {paso.label}
-                </span>
+                }`}
+              >
+                {completado ? <Check className="w-5 h-5" /> : <Icono className="w-4 h-4" />}
               </div>
+              <span
+                className={`mt-2 text-xs font-medium text-center whitespace-nowrap ${
+                  completado
+                    ? 'text-emerald-700'
+                    : activo
+                      ? 'text-teal-700 font-semibold'
+                      : 'text-slate-400'
+                }`}
+              >
+                {paso.label}
+              </span>
+            </div>
+          );
+
+          return (
+            <div key={paso.num} className="flex items-center flex-1 last:flex-none">
+              {esLinkAtras ? (
+                <Link to="/campos" aria-label="Volver a elegir canchas">
+                  {nodo}
+                </Link>
+              ) : (
+                nodo
+              )}
 
               {/* Línea conectora */}
               {i < PASOS.length - 1 && (

@@ -24,14 +24,32 @@ export interface MisCamposResponse {
   };
 }
 
+/** Franja devuelta por el verificador (1 por codigo_reserva). */
+export interface FranjaVerificada {
+  id: string;
+  codigo_reserva: string;
+  campo_nombre: string;
+  fecha: string;
+  hora_inicio: string;
+  hora_fin: string;
+  asistencia_marcada_en: string | null;
+}
+
+/** Titular de la solicitud — solo por el canal interno protegido. */
+export interface TitularVerificado {
+  nombre: string | null;
+  ci_nit: string | null;
+  telefono: string | null;
+}
+
 export interface VerificarCodigoResponse {
   data: {
-    codigo_reserva: string;
+    codigo_seguimiento: string;
+    estado_solicitud: string;
+    titular: TitularVerificado;
     campo_id: string;
     campo_nombre: string;
     fecha_reserva: string;
-    hora_inicio: string;
-    hora_fin: string;
-    asistencia_marcada_en: string | null;
+    franjas: FranjaVerificada[];
   };
 }

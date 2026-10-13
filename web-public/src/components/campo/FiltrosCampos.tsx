@@ -5,7 +5,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -62,7 +61,21 @@ export default function FiltrosCampos({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [textoBusqueda]); // ← solo depende del texto, no del objeto completo
+  }, [textoBusqueda]);
+
+  // ─── Etiquetas manuales para los triggers ───
+  // Base UI solo resuelve labels de items montados (el popup está cerrado
+  // al cargar), así que calculamos la etiqueta nosotros.
+  const tipoLabel = filtros.tipoCampoId
+    ? (tiposCampo.find((t) => t.id === filtros.tipoCampoId)?.nombre ?? 'Tipo')
+    : 'Todos los tipos';
+
+  const estadoLabel =
+    filtros.estado === 'activo'
+      ? 'Activos'
+      : filtros.estado === 'mantenimiento'
+        ? 'En mantenimiento'
+        : 'Todos';
 
   // Nombre legible del tipo seleccionado (para el chip)
   const tipoSeleccionadoNombre = tiposCampo.find(
@@ -70,7 +83,9 @@ export default function FiltrosCampos({
   )?.nombre;
 
   const tieneFiltros =
-    filtros.tipoCampoId !== null || filtros.estado !== null || filtros.buscar.trim() !== '';
+    filtros.tipoCampoId !== null ||
+    filtros.estado !== null ||
+    filtros.buscar.trim() !== '';
 
   const limpiarTodo = () => {
     setTextoBusqueda('');
@@ -81,7 +96,7 @@ export default function FiltrosCampos({
     <div className="mb-8 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
       {/* ─── Fila principal: buscador + selects + toggle ─── */}
       <div className="flex flex-col lg:flex-row gap-3">
-        {/* Buscador (ocupa más espacio) */}
+        {/* Buscador */}
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
@@ -101,12 +116,12 @@ export default function FiltrosCampos({
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               aria-label="Limpiar búsqueda"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 h-4" />
             </button>
           )}
         </div>
 
-        {/* Selects */}
+        {/* Selects con etiqueta manual en el trigger */}
         <div className="flex gap-2">
           <Select
             value={filtros.tipoCampoId ?? 'todos'}
@@ -118,7 +133,7 @@ export default function FiltrosCampos({
             }
           >
             <SelectTrigger className="w-full sm:w-44 h-11 bg-slate-50 border-slate-200">
-              <SelectValue placeholder="Tipo" />
+              <span className="flex-1 truncate text-left">{tipoLabel}</span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos los tipos</SelectItem>
@@ -140,7 +155,7 @@ export default function FiltrosCampos({
             }
           >
             <SelectTrigger className="w-full sm:w-44 h-11 bg-slate-50 border-slate-200">
-              <SelectValue placeholder="Estado" />
+              <span className="flex-1 truncate text-left">{estadoLabel}</span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>

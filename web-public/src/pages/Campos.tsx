@@ -63,7 +63,9 @@ export default function Campos() {
   }, [filtros]);
 
   // Estadísticas de resultados (se calcula sobre el array final)
-  const totalActivos = campos.filter((c) => c.estado === 'activo').length;
+  const totalDisponibles = campos.filter(
+    (c) => c.estado === 'activo' && c.reservable_online,
+  ).length;
 
   return (
     <>
@@ -99,7 +101,7 @@ export default function Campos() {
                     {campos.length} {campos.length === 1 ? 'cancha' : 'canchas'}
                   </span>
                   <span className="text-xs text-slate-500">
-                    · {totalActivos} disponibles
+                    · {totalDisponibles} disponibles
                   </span>
                 </div>
               )}

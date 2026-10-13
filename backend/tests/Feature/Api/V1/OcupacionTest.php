@@ -98,7 +98,15 @@ class OcupacionTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $franjasOcupadas->count());
     }
 
-    public function test_verificar_codigo_valido_devuelve_datos_sin_contacto(): void
+    /**
+     * [FIX D-02 / mismatch RES-RSV] El verificador interno DEBE exponer el
+     * titular al funcionario autenticado con acceso al campo, para cruzar el
+     * documento de identidad en sitio. La privacidad del titular se protege
+     * en el canal PÚBLICO (ver SolicitudEstadoControllerTest), no acá.
+     *
+     * Además acepta ambos formatos: RSV- (codigo_reserva) y RES- (seguimiento).
+     */
+    public function test_verificar_codigo_valido_devuelve_titular_para_funcionario_con_acceso(): void
     {
         $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
 
@@ -110,21 +118,25 @@ class OcupacionTest extends TestCase
 
         Sanctum::actingAs($control);
 
+        // Camino A: por codigo_reserva (RSV-)
         $response = $this->getJson("/api/v1/ocupacion/verificar/{$reserva->codigo_reserva}");
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.codigo_reserva', $reserva->codigo_reserva)
-            ->assertJsonPath('data.campo_id', $campo->id)
+            ->assertJsonPath('data.codigo_seguimiento', $solicitud->codigo_seguimiento)
+            ->assertJsonPath('data.franjas.0.codigo_reserva', $reserva->codigo_reserva)
+            ->assertJsonPath('data.franjas.0.id', $reserva->id)
             ->assertJsonPath('data.campo_nombre', 'Cancha Test')
-            ->assertJsonPath('data.fecha_reserva', '2026-10-03')
-            ->assertJsonPath('data.hora_inicio', '18:00')
-            ->assertJsonPath('data.hora_fin', '20:00');
+            ->assertJsonPath('data.titular.nombre', 'Juan Pérez')
+            ->assertJsonPath('data.titular.ci_nit', '1234567')
+            ->assertJsonPath('data.titular.telefono', '70000000');
 
-        // NO debe exponer datos de contacto
-        $content = $response->getContent();
-        $this->assertStringNotContainsString('Juan Pérez', $content);
-        $this->assertStringNotContainsString('70000000', $content);
+        // Camino B: por codigo_seguimiento (RES-) → mismo titular, misma franja
+        $this->getJson("/api/v1/ocupacion/verificar/{$solicitud->codigo_seguimiento}")
+            ->assertOk()
+            ->assertJsonPath('data.codigo_seguimiento', $solicitud->codigo_seguimiento)
+            ->assertJsonCount(1, 'data.franjas')
+            ->assertJsonPath('data.franjas.0.codigo_reserva', $reserva->codigo_reserva);
     }
 
     public function test_verificar_codigo_de_campo_no_asignado_devuelve_404(): void
@@ -163,7 +175,7 @@ class OcupacionTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.codigo_reserva', $reserva->codigo_reserva);
+            ->assertJsonPath('data.franjas.0.codigo_reserva', $reserva->codigo_reserva);
     }
 
     public function test_verificar_codigo_inexistente_devuelve_404(): void
@@ -373,6 +385,111 @@ class OcupacionTest extends TestCase
 
         $meta = $response->json('meta');
         $this->assertEquals(0, $meta['vinculados_sireb']);
+    }
+
+    public function test_verificar_por_codigo_seguimiento_devuelve_todas_las_franjas(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $admin = $this->crearFuncionarioAdminParametricas();
+        $campo = $this->crearCampo('CAMPO-TEST', 'Cancha Test');
+
+        // Solicitud con 2 franjas confirmadas bajo el mismo codigo_seguimiento
+        $solicitud = SolicitudReserva::create([
+            'codigo_seguimiento' => 'RES-20261003-MULTI',
+            'monto_total' => 200,
+            'monto_confirmado' => 200,
+            'nombre_pagador' => 'Ana López',
+            'telefono_pagador' => '71111111',
+            'ci_nit_pagador' => '7654321',
+            'estado' => EstadoSolicitudReserva::Confirmada,
+            'expira_en' => now()->addMinutes(15),
+        ]);
+
+        foreach ([['18:00:00', '19:00:00'], ['19:00:00', '20:00:00']] as [$hi, $hf]) {
+            $detalle = SolicitudReservaDetalle::create([
+                'solicitud_reserva_id' => $solicitud->id,
+                'campo_id' => $campo->id,
+                'fecha_reserva' => '2026-10-03',
+                'hora_inicio' => $hi,
+                'hora_fin' => $hf,
+                'tarifa_aplicada' => 100,
+            ]);
+            $detalle->forceFill([
+                'estado_solicitud' => EstadoSolicitudReserva::Confirmada->value,
+            ])->save();
+
+            Reserva::create([
+                'solicitud_reserva_id' => $solicitud->id,
+                'solicitud_reserva_detalle_id' => $detalle->id,
+                'codigo_reserva' => 'RSV-' . Str::upper(Str::random(5)),
+                'campo_id' => $campo->id,
+                'fecha_reserva' => '2026-10-03',
+                'hora_inicio' => $hi,
+                'hora_fin' => $hf,
+                'monto_pagado' => 100,
+                'confirmado_en' => now(),
+            ]);
+        }
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/v1/ocupacion/verificar/RES-20261003-MULTI')
+            ->assertOk()
+            ->assertJsonPath('data.codigo_seguimiento', 'RES-20261003-MULTI')
+            ->assertJsonCount(2, 'data.franjas')
+            ->assertJsonPath('data.titular.nombre', 'Ana López');
+    }
+
+    public function test_verificar_codigo_seguimiento_no_asignado_devuelve_404_uniforme(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $control = $this->crearFuncionarioControl();
+        $campoAsignado = $this->crearCampo('CAMPO-A', 'Cancha A');
+        $campoNoAsignado = $this->crearCampo('CAMPO-B', 'Cancha B');
+        $this->asignarCampo($control, $campoAsignado);
+
+        // Solicitud RES- en campo NO asignado al control
+        $solicitud = SolicitudReserva::create([
+            'codigo_seguimiento' => 'RES-20261003-NOAS',
+            'monto_total' => 100,
+            'monto_confirmado' => 100,
+            'nombre_pagador' => 'Oculto',
+            'telefono_pagador' => '72222222',
+            'ci_nit_pagador' => '9999999',
+            'estado' => EstadoSolicitudReserva::Confirmada,
+            'expira_en' => now()->addMinutes(15),
+        ]);
+        $detalle = SolicitudReservaDetalle::create([
+            'solicitud_reserva_id' => $solicitud->id,
+            'campo_id' => $campoNoAsignado->id,
+            'fecha_reserva' => '2026-10-03',
+            'hora_inicio' => '18:00:00',
+            'hora_fin' => '19:00:00',
+            'tarifa_aplicada' => 100,
+        ]);
+        $detalle->forceFill([
+            'estado_solicitud' => EstadoSolicitudReserva::Confirmada->value,
+        ])->save();
+        Reserva::create([
+            'solicitud_reserva_id' => $solicitud->id,
+            'solicitud_reserva_detalle_id' => $detalle->id,
+            'codigo_reserva' => 'RSV-NOASIGN',
+            'campo_id' => $campoNoAsignado->id,
+            'fecha_reserva' => '2026-10-03',
+            'hora_inicio' => '18:00:00',
+            'hora_fin' => '19:00:00',
+            'monto_pagado' => 100,
+            'confirmado_en' => now(),
+        ]);
+
+        Sanctum::actingAs($control);
+
+        // 404 uniforme: no filtra existencia ni expone el titular 'Oculto'
+        $this->getJson('/api/v1/ocupacion/verificar/RES-20261003-NOAS')
+            ->assertNotFound()
+            ->assertJsonPath('message', 'Código de reserva no encontrado.');
     }
 
     // ─────────────────────────────────────────────

@@ -1,4 +1,4 @@
-﻿import { Lock, Lightbulb, Sun, AlertCircle } from 'lucide-react';
+﻿import { Lock, Lightbulb, Sun, AlertCircle, Clock } from 'lucide-react';
 import { useCarritoStore, type FranjaCarrito } from '@/store/carritoStore';
 
 interface InfoTarifa {
@@ -9,7 +9,8 @@ interface InfoTarifa {
 interface Bloque {
   hora_inicio: string;
   hora_fin: string;
-  estado: 'libre' | 'ocupada' | 'bloqueada_temporal';
+  // 'pasada' = estado derivado del tiempo (hoy + hora Bolivia), no de solicitud.
+  estado: 'libre' | 'ocupada' | 'bloqueada_temporal' | 'pasada';
 }
 
 interface GrillaDisponibilidadProps {
@@ -60,6 +61,7 @@ export default function GrillaDisponibilidad({
     );
 
   const toggleBloque = (bloque: Bloque) => {
+    // 'pasada', 'ocupada' y 'bloqueada_temporal' caen acá: no se seleccionan.
     if (bloque.estado !== 'libre') return;
 
     const tipo = determinarTipo(bloque.hora_inicio, horaInicioNoche);
@@ -87,6 +89,10 @@ export default function GrillaDisponibilidad({
     tarifa: InfoTarifa | null,
     tipo: TipoTarifa,
   ) => {
+    // 'pasada' tiene prioridad: gris neutro, no rojo/naranja.
+    if (bloque.estado === 'pasada') {
+      return 'bg-slate-100 border-slate-200 cursor-not-allowed opacity-60';
+    }
     if (bloque.estado === 'ocupada') {
       return 'bg-red-50 border-red-200 cursor-not-allowed opacity-70';
     }
@@ -124,11 +130,13 @@ export default function GrillaDisponibilidad({
               tipo,
             )}`}
             title={
-              !tarifa && bloque.estado === 'libre'
-                ? tipo === 'nocturna'
-                  ? 'Sin tarifa con iluminación definida'
-                  : 'Sin tarifa regular definida'
-                : undefined
+              bloque.estado === 'pasada'
+                ? 'Esta franja ya comenzó'
+                : !tarifa && bloque.estado === 'libre'
+                  ? tipo === 'nocturna'
+                    ? 'Sin tarifa con iluminación definida'
+                    : 'Sin tarifa regular definida'
+                  : undefined
             }
           >
             {/* Franja lateral de color por tipo (solo si es libre y tiene tarifa) */}
@@ -152,12 +160,18 @@ export default function GrillaDisponibilidad({
                   }`}
                 />
               )}
-              <span>
+              <span className={bloque.estado === 'pasada' ? 'text-slate-400' : ''}>
                 {bloque.hora_inicio.slice(0, 5)}–{bloque.hora_fin.slice(0, 5)}
               </span>
             </div>
 
             <div className="text-xs mt-1.5">
+              {bloque.estado === 'pasada' && (
+                <span className="flex items-center justify-center gap-1 text-slate-500 font-medium">
+                  <Clock className="w-3 h-3" />
+                  Pasada
+                </span>
+              )}
               {bloque.estado === 'ocupada' && (
                 <span className="flex items-center justify-center gap-1 text-red-700 font-medium">
                   <Lock className="w-3 h-3" />

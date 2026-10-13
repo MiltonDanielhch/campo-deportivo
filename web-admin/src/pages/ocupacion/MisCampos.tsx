@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, MapPin, RefreshCw, Search, UserCheck } from 'lucide-react';
+import { Calendar, Clock, MapPin, RefreshCw, Search, UserCheck, CheckCircle2, User, IdCard, Phone, Undo2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ocupacionService } from '@/services/ocupacionService';
-import type { CampoOcupacion, Franja, VerificarCodigoResponse } from '@/types/ocupacion';
+import { asistenciaService } from '@/services/asistenciaService';
+import type { CampoOcupacion, Franja, FranjaVerificada, VerificarCodigoResponse } from '@/types/ocupacion';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -20,6 +21,7 @@ export default function MisCampos() {
   const [resultadoVerificacion, setResultadoVerificacion] =
     useState<VerificarCodigoResponse['data'] | null>(null);
   const [verificando, setVerificando] = useState(false);
+  const [marcandoId, setMarcandoId] = useState<string | null>(null);
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(null);
 
   const cargarOcupacion = useCallback(async () => {
@@ -71,6 +73,36 @@ export default function MisCampos() {
       setResultadoVerificacion(null);
     } finally {
       setVerificando(false);
+    }
+  };
+
+  /** Refetch silencioso del verificador (tras marcar/revocar) sin parpadear. */
+  const recargarResultado = useCallback(async () => {
+    if (!codigoBusqueda.trim()) return;
+    try {
+      const response = await ocupacionService.verificarCodigo(codigoBusqueda.trim());
+      setResultadoVerificacion(response.data);
+    } catch {
+      /* el estado ya cambió en backend; el próximo click lo trae */
+    }
+  }, [codigoBusqueda]);
+
+  const handleMarcarAsistencia = async (f: FranjaVerificada, marcar: boolean) => {
+    try {
+      setMarcandoId(f.id);
+      await asistenciaService.marcar(f.id, marcar);
+      toast.success(marcar ? 'Asistencia marcada' : 'Asistencia revocada');
+      // Refrescamos desde el backend para reflejar lo persistido (incluye la
+      // validación de ventana temporal que hace MarcarAsistenciaService).
+      await recargarResultado();
+    } catch (err: any) {
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.errors?.reserva?.[0] ||
+        'No se pudo actualizar la asistencia';
+      toast.error(msg);
+    } finally {
+      setMarcandoId(null);
     }
   };
 
@@ -177,7 +209,7 @@ export default function MisCampos() {
         <CardContent className="space-y-4">
           <div className="flex gap-2">
             <Input
-              placeholder="Ej: RSV-ABC123"
+              placeholder="Ej: RES-20261012-XXXXXX o RSV-…"
               value={codigoBusqueda}
               onChange={(e) => setCodigoBusqueda(e.target.value.toUpperCase())}
               onKeyPress={handleKeyPress}
@@ -187,49 +219,109 @@ export default function MisCampos() {
               {verificando ? 'Verificando...' : 'Verificar'}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Acepta el código del QR del comprobante (RES-…) o el código de franja
+            que ves en la grilla (RSV-…).
+          </p>
 
           {resultadoVerificacion && (
             <Alert className="border-green-200 bg-green-50">
-              <AlertDescription className="space-y-2">
-                <div className="font-semibold text-green-900">
-                  ✓ Reserva válida
+              <AlertDescription className="space-y-3">
+                {/* Cabecera del resultado */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold text-green-900 flex items-center gap-2 min-w-0">
+                    <CheckCircle2 className="size-4 flex-shrink-0" />
+                    <span className="truncate">
+                      Reserva válida · {resultadoVerificacion.codigo_seguimiento}
+                    </span>
+                  </div>
+                  <Badge className="bg-green-100 text-green-800 border-green-300 flex-shrink-0">
+                    {resultadoVerificacion.franjas.length}{' '}
+                    {resultadoVerificacion.franjas.length === 1 ? 'franja' : 'franjas'}
+                  </Badge>
                 </div>
-                <div className="space-y-1 text-sm">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="size-4 text-green-700" />
-                    <span className="font-medium">
-                      {resultadoVerificacion.campo_nombre}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="size-4 text-green-700" />
-                    <span>
-                      {format(
-                        parseISO(resultadoVerificacion.fecha_reserva),
-                        "d 'de' MMMM, yyyy",
-                        { locale: es }
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="size-4 text-green-700" />
-                    <span>
-                      {resultadoVerificacion.hora_inicio} -{' '}
-                      {resultadoVerificacion.hora_fin}
-                    </span>
-                  </div>
-                  {resultadoVerificacion.asistencia_marcada_en && (
-                    <div className="flex items-center gap-2">
-                      <UserCheck className="size-4 text-green-700" />
-                      <span className="text-xs">
-                        Asistencia marcada:{' '}
-                        {format(
-                          parseISO(resultadoVerificacion.asistencia_marcada_en),
-                          'HH:mm'
-                        )}
+
+                {/* Titular — para cruzar con el carnet */}
+                <div className="rounded-lg border border-green-200 bg-white/70 p-3 space-y-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-green-700 flex items-center gap-1.5">
+                    <User className="size-3" />
+                    Titular (cruzá con su documento de identidad)
+                  </p>
+                  <p className="font-bold text-slate-900">
+                    {resultadoVerificacion.titular.nombre ?? '—'}
+                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <IdCard className="size-3.5 text-slate-400" />
+                      CI / NIT:{' '}
+                      <span className="font-mono font-semibold text-slate-800">
+                        {resultadoVerificacion.titular.ci_nit ?? '—'}
                       </span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Phone className="size-3.5 text-slate-400" />
+                      {resultadoVerificacion.titular.telefono ?? '—'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Franjas de la solicitud + acción de asistencia */}
+                <div className="space-y-2">
+                  {resultadoVerificacion.franjas.map((f) => (
+                    <div
+                      key={f.codigo_reserva}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-green-200 bg-white/70 p-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">
+                          {f.campo_nombre}
+                        </p>
+                        <p className="text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="size-3 text-slate-400" />
+                            {format(parseISO(f.fecha), "d 'de' MMM, yyyy", { locale: es })}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="size-3 text-slate-400" />
+                            {f.hora_inicio}–{f.hora_fin}
+                          </span>
+                        </p>
+                        <p className="text-[10px] font-mono text-slate-400 mt-0.5">
+                          {f.codigo_reserva}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                        {f.asistencia_marcada_en ? (
+                          <>
+                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 gap-1">
+                              <UserCheck className="size-3" />
+                              {format(parseISO(f.asistencia_marcada_en), 'HH:mm')}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={marcandoId === f.id}
+                              onClick={() => handleMarcarAsistencia(f, false)}
+                              className="h-8 text-xs"
+                            >
+                              <Undo2 className="size-3.5 mr-1" />
+                              {marcandoId === f.id ? 'Revocando…' : 'Revocar'}
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            disabled={marcandoId === f.id}
+                            onClick={() => handleMarcarAsistencia(f, true)}
+                            className="h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white"
+                          >
+                            <UserCheck className="size-3.5 mr-1" />
+                            {marcandoId === f.id ? 'Marcando…' : 'Marcar asistencia'}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               </AlertDescription>
             </Alert>

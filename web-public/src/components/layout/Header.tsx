@@ -10,9 +10,11 @@ export default function Header() {
           to="/"
           className="flex items-center gap-2 font-bold text-teal-700 hover:text-teal-800 transition-colors min-w-0"
         >
-          <div className="w-8 h-8 flex-shrink-0 rounded-lg bg-teal-600 text-white flex items-center justify-center shadow-sm">
-            <MapPinned className="w-4 h-4" />
-          </div>
+          <img
+            src="/img/logo-gad-beni.png"
+            alt="Logo GAD Beni"
+            className="w-36 h-40 flex-shrink-0 object-contain"
+          />
           {/* whitespace-nowrap evita el wrap a 2 líneas; min-w-0 + truncate
               corta el texto en lugar de romper el layout en pantallas muy chicas */}
           <span className="text-sm sm:text-base whitespace-nowrap overflow-hidden text-ellipsis">

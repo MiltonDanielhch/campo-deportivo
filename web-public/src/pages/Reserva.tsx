@@ -46,7 +46,7 @@ export default function Reserva() {
       const res = await api.post('/public/solicitudes-reserva', payload);
       const codigoSeguimiento = res.data.data.codigo_seguimiento;
 
-      limpiar();
+      // limpiar();
       navigate(`/pago/${codigoSeguimiento}`);
     } catch (err: any) {
       const status = err.response?.status;
@@ -88,7 +88,7 @@ export default function Reserva() {
             <p className="text-slate-500 mb-6">
               Seleccioná al menos una franja horaria para continuar con la reserva.
             </p>
-            <Button asChild className="rounded-full">
+            <Button asChild className="rounded-full bg-teal-600 hover:bg-teal-700 text-white">
               <Link to="/campos">Ver canchas disponibles</Link>
             </Button>
           </div>
@@ -158,9 +158,9 @@ export default function Reserva() {
               <FormularioSolicitante onSubmit={handleEnviar} cargando={cargando} />
             </div>
 
-            {/* DER: Resumen sticky */}
+            {/* DER: Resumen sticky + card explicativo */}
             <div className="lg:col-span-2">
-              <div className="lg:sticky lg:top-24">
+              <div className="lg:sticky lg:top-24 space-y-4">
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
@@ -188,6 +188,39 @@ export default function Reserva() {
                       <span>Datos protegidos y cifrados</span>
                     </div>
                   </div>
+                </div>
+
+                {/* ─── Card secundario "¿Cómo sigue?" (llena el hueco derecho) ─── */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                  <h3 className="font-bold text-slate-900 mb-3">
+                    ¿Cómo sigue?
+                  </h3>
+                  <ol className="space-y-2.5 text-sm text-slate-600">
+                    <li className="flex items-start gap-2.5">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-teal-50 text-teal-700 text-xs font-bold flex items-center justify-center mt-0.5">
+                        1
+                      </span>
+                      <span>Confirmás tus datos.</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-teal-50 text-teal-700 text-xs font-bold flex items-center justify-center mt-0.5">
+                        2
+                      </span>
+                      <span>Emitimos la orden de cobro oficial.</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-teal-50 text-teal-700 text-xs font-bold flex items-center justify-center mt-0.5">
+                        3
+                      </span>
+                      <span>Pagás con QR bancario o en ventanilla.</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-teal-50 text-teal-700 text-xs font-bold flex items-center justify-center mt-0.5">
+                        4
+                      </span>
+                      <span>Recibís tu comprobante digital al instante.</span>
+                    </li>
+                  </ol>
                 </div>
               </div>
             </div>

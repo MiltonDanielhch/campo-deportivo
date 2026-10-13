@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -15,11 +15,17 @@ import {
   CreditCard,
   Ban,
   Clock,
+  Download,
+  Smartphone,
+  ScanLine,
+  MessageCircle,
+  Info,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { api } from '@/lib/api';
+import { useCarritoStore } from '@/store/carritoStore';
 import CuentaRegresiva from '@/components/pago/CuentaRegresiva';
 import StepsReserva from '@/components/layout/StepsReserva';
 
@@ -63,7 +69,6 @@ function normalizarCobro(raw: EstadoPago | null): CobroNormalizado | null {
   return { codigoPublico: codigoFinal, qrString: qrFinal };
 }
 
-// ─── NUEVO: Mapeo de motivos de rechazo a mensajes específicos ───
 interface MensajeRechazo {
   titulo: string;
   descripcion: string;
@@ -114,7 +119,6 @@ function obtenerMensajeRechazo(motivo: string | null | undefined): MensajeRechaz
         color: 'orange',
       };
     default:
-      // Mensaje genérico para motivos desconocidos o null
       return {
         titulo: 'Tu solicitud no pudo completarse',
         descripcion:
@@ -135,21 +139,28 @@ type Vista =
 export default function Pago() {
   const { codigo } = useParams<{ codigo: string }>();
   const navigate = useNavigate();
+  const { limpiar } = useCarritoStore();
   const [vista, setVista] = useState<Vista>('cargando');
   const [estado, setEstado] = useState<EstadoPago | null>(null);
-  const [copiado, setCopiado] = useState(false);
+  const [copiadoCodigo, setCopiadoCodigo] = useState(false);
+  const [copiadoLink, setCopiadoLink] = useState(false);
+  const qrRef = useRef<HTMLDivElement>(null);
 
   const cobro = useMemo(() => normalizarCobro(estado), [estado]);
-
-  // ─── NUEVO: Obtener mensaje específico según motivo_rechazo ───
   const mensajeRechazo = useMemo(
     () => obtenerMensajeRechazo(estado?.motivo_rechazo),
-    [estado?.motivo_rechazo]
+    [estado?.motivo_rechazo],
   );
 
   const SIREB_PANEL_URL =
     import.meta.env.VITE_SIREB_PANEL_URL ||
     'https://test.sireb.beni.gob.bo/panel/liquidaciones';
+
+  // ─── FIX: limpiar carrito al montar (la reserva ya fue creada en backend) ───
+  useEffect(() => {
+    limpiar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const consultarEstado = useCallback(async () => {
     if (!codigo) return;
@@ -189,12 +200,54 @@ export default function Pago() {
   const handleCopiarCodigo = () => {
     if (cobro?.codigoPublico) {
       navigator.clipboard.writeText(cobro.codigoPublico);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 2000);
+      setCopiadoCodigo(true);
+      setTimeout(() => setCopiadoCodigo(false), 2000);
     }
   };
 
-  // ─── Helper para clases de color ───
+  const handleCopiarLink = () => {
+    if (cobro?.qrString) {
+      navigator.clipboard.writeText(cobro.qrString);
+      setCopiadoLink(true);
+      setTimeout(() => setCopiadoLink(false), 2000);
+    }
+  };
+
+  // ─── NUEVO: descargar el QR como PNG ───
+  const handleDescargarQR = () => {
+    if (!qrRef.current || !codigo) return;
+    const svgElement = qrRef.current.querySelector('svg');
+    if (!svgElement) return;
+
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      // Escalamos a 1024x1024 para alta calidad al imprimir
+      canvas.width = 1024;
+      canvas.height = 1024;
+      ctx?.drawImage(img, 0, 0, 1024, 1024);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `qr-pago-${codigo}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+        },
+        'image/png',
+      );
+      URL.revokeObjectURL(svgUrl);
+    };
+    img.src = svgUrl;
+  };
+
   const getColorClasses = (color: string) => {
     if (color === 'red') {
       return {
@@ -215,6 +268,14 @@ export default function Pago() {
   const colorClasses = getColorClasses(mensajeRechazo.color);
   const IconoRechazo = mensajeRechazo.icono;
 
+  // URL para compartir por WhatsApp
+  const whatsappShareUrl =
+    cobro && estado
+      ? `https://wa.me/?text=${encodeURIComponent(
+          `Reserva Canchas GAD Beni\nCódigo: ${estado.codigo_seguimiento}\nMonto: Bs ${estado.monto_total.toFixed(2)}\nCódigo de pago: ${cobro.codigoPublico}\nQR: ${cobro.qrString}`,
+        )}`
+      : null;
+
   return (
     <>
       <Helmet>
@@ -234,7 +295,8 @@ export default function Pago() {
                 Pagá en ventanilla o escaneá el QR
               </h1>
               <p className="text-slate-600">
-                Generamos tu orden de cobro. Detectamos el pago automáticamente en cuanto lo valides en el banco.
+                Generamos tu orden de cobro. Detectamos el pago automáticamente
+                en cuanto lo valides en el banco.
               </p>
             </div>
           )}
@@ -286,16 +348,43 @@ export default function Pago() {
 
                   {cobro && (
                     <div className="space-y-6">
-                      <div className="flex justify-center">
-                        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
-                          <QRCodeSVG
-                            value={cobro.qrString}
-                            size={200}
-                            level="H"
-                          />
+                      {/* ─── QR con marco decorativo + ref para descargar ─── */}
+                      <div className="flex justify-center" ref={qrRef}>
+                        <div className="relative p-6 bg-white rounded-2xl shadow-lg shadow-slate-200/60">
+                          {/* Esquinas decorativas teal */}
+                          <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-teal-600 rounded-tl-xl" />
+                          <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-teal-600 rounded-tr-xl" />
+                          <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-teal-600 rounded-bl-xl" />
+                          <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-teal-600 rounded-br-xl" />
+                          <QRCodeSVG value={cobro.qrString} size={220} level="H" />
                         </div>
                       </div>
 
+                      {/* ─── Botones de acción sobre el QR ─── */}
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDescargarQR}
+                          className="rounded-full"
+                        >
+                          <Download className="w-4 h-4 mr-1.5" />
+                          Descargar QR
+                        </Button>
+                        {whatsappShareUrl && (
+                          <a
+                            href={whatsappShareUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-4 h-9 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-sm font-medium text-slate-700 transition-colors"
+                          >
+                            <MessageCircle className="w-4 h-4 text-emerald-600" />
+                            Enviar por WhatsApp
+                          </a>
+                        )}
+                      </div>
+
+                      {/* ─── Código de ventanilla + botón copiar ─── */}
                       <div className="text-center space-y-3">
                         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                           Código de pago en ventanilla
@@ -311,7 +400,7 @@ export default function Pago() {
                             className="h-9 w-9 text-slate-500 hover:text-teal-600"
                             title="Copiar código"
                           >
-                            {copiado ? (
+                            {copiadoCodigo ? (
                               <Check className="w-4 h-4 text-green-500" />
                             ) : (
                               <Copy className="w-4 h-4" />
@@ -323,6 +412,78 @@ export default function Pago() {
                           <strong>Banco Unión</strong> junto con tu CI para pagar
                           tu reserva.
                         </p>
+                      </div>
+
+                      {/* ─── Card alternativo para mobile ─── */}
+                      <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4">
+                        <div className="flex items-start gap-2.5 mb-3">
+                          <Smartphone className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm font-semibold text-slate-900">
+                            ¿Estás en el celular?
+                          </p>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-3">
+                          No podés escanear un QR de tu propia pantalla. Usá una de
+                          estas opciones:
+                        </p>
+                        <div className="space-y-2">
+                          <button
+                            onClick={handleCopiarLink}
+                            className="w-full flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 hover:border-teal-400 hover:bg-teal-50/30 transition-colors text-left"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0">
+                              {copiadoLink ? (
+                                <Check className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-teal-600" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">
+                                {copiadoLink ? '¡Copiado!' : 'Copiar link de pago'}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                Pegalo en la app de tu banco para pagar desde ahí.
+                              </p>
+                            </div>
+                          </button>
+
+                          <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                              <ScanLine className="w-4 h-4 text-slate-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">
+                                Escanear desde otro dispositivo
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                Abrí esta página en la compu y escaneá con el celu.
+                              </p>
+                            </div>
+                          </div>
+
+                          {whatsappShareUrl && (
+                            <a
+                              href={whatsappShareUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/30 transition-colors"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  Enviar por WhatsApp
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  Compartilo con vos mismo o con alguien que pueda
+                                  pagar.
+                                </p>
+                              </div>
+                            </a>
+                          )}
+                        </div>
                       </div>
 
                       <div className="pt-4 border-t border-slate-100 text-center">
@@ -341,6 +502,7 @@ export default function Pago() {
                 </CardContent>
               </Card>
 
+              {/* Pill de polling */}
               <div className="flex items-center justify-center gap-2 py-3 px-4 bg-white/60 backdrop-blur rounded-full border border-slate-200 mx-auto w-fit">
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
@@ -350,15 +512,18 @@ export default function Pago() {
                 <span className="text-xs font-medium text-slate-700">
                   Esperando confirmación del pago…
                 </span>
+                <Info className="w-3 h-3 text-slate-400 ml-1" title="Verificamos cada 5 segundos" />
               </div>
             </div>
           )}
 
-          {/* ─── Expirada ─── ─── NUEVO: Usa mensaje específico según motivo ─── */}
+          {/* ─── Expirada ─── */}
           {vista === 'expirada' && (
             <Card className={colorClasses.border}>
               <CardContent className="py-16 text-center">
-                <div className={`w-20 h-20 mx-auto rounded-full ${colorClasses.iconBg} flex items-center justify-center mb-5`}>
+                <div
+                  className={`w-20 h-20 mx-auto rounded-full ${colorClasses.iconBg} flex items-center justify-center mb-5`}
+                >
                   {estado?.motivo_rechazo === 'expirada_sin_pago' ? (
                     <IconoRechazo className={`w-10 h-10 ${colorClasses.icon}`} />
                   ) : (
@@ -375,7 +540,10 @@ export default function Pago() {
                     ? mensajeRechazo.descripcion
                     : 'Tu solicitud quedó sin pago. Las franjas que habías reservado vuelven a estar disponibles.'}
                 </p>
-                <Button asChild className="rounded-full">
+                <Button
+                  asChild
+                  className="rounded-full bg-teal-600 hover:bg-teal-700 text-white"
+                >
                   <Link to="/campos" className="flex items-center gap-2">
                     Volver a elegir franjas
                     <ArrowRight className="w-4 h-4" />
@@ -385,11 +553,13 @@ export default function Pago() {
             </Card>
           )}
 
-          {/* ─── Rechazada ─── ─── NUEVO: Usa mensaje específico según motivo ─── */}
+          {/* ─── Rechazada ─── */}
           {vista === 'rechazada' && (
             <Card className={colorClasses.border}>
               <CardContent className="py-16 text-center">
-                <div className={`w-20 h-20 mx-auto rounded-full ${colorClasses.iconBg} flex items-center justify-center mb-5`}>
+                <div
+                  className={`w-20 h-20 mx-auto rounded-full ${colorClasses.iconBg} flex items-center justify-center mb-5`}
+                >
                   <IconoRechazo className={`w-10 h-10 ${colorClasses.icon}`} />
                 </div>
                 <h1 className="text-2xl font-bold mb-2 tracking-tight">
@@ -398,7 +568,10 @@ export default function Pago() {
                 <p className="text-slate-600 mb-6 max-w-md mx-auto">
                   {mensajeRechazo.descripcion}
                 </p>
-                <Button asChild className="rounded-full">
+                <Button
+                  asChild
+                  className="rounded-full bg-teal-600 hover:bg-teal-700 text-white"
+                >
                   <Link to="/campos" className="flex items-center gap-2">
                     Volver a elegir franjas
                     <ArrowRight className="w-4 h-4" />

@@ -1,4 +1,4 @@
-import { Calendar, Clock, Trash2, MapPin } from 'lucide-react';
+import { Calendar, Clock, Trash2, MapPin, Sun, Lightbulb } from 'lucide-react';
 import { useCarritoStore } from '@/store/carritoStore';
 
 const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -14,11 +14,25 @@ function formatearFecha(fechaISO: string): string {
   return `${dia} ${d} ${MESES[m - 1]}`;
 }
 
-interface ResumenCarritoProps {
-  compacto?: boolean;
+/** Heurística: si la hora de inicio es >= horaCorte, es nocturna. */
+function esNocturna(horaInicio: string, horaCorte: string): boolean {
+  const minutos = (hhmm: string) => {
+    const [h, m = 0] = hhmm.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+  return minutos(horaInicio) >= minutos(horaCorte);
 }
 
-export default function ResumenCarrito({ compacto = false }: ResumenCarritoProps) {
+interface ResumenCarritoProps {
+  compacto?: boolean;
+  /** Hora en la que empieza la tarifa nocturna (default "18:00"). */
+  horaInicioNoche?: string;
+}
+
+export default function ResumenCarrito({
+  compacto = false,
+  horaInicioNoche = '18:00',
+}: ResumenCarritoProps) {
   const { franjas, quitarFranja, calcularTotal } = useCarritoStore();
 
   if (franjas.length === 0) return null;
@@ -55,42 +69,55 @@ export default function ResumenCarrito({ compacto = false }: ResumenCarritoProps
 
           {/* Lista de franjas del grupo */}
           <div className="space-y-2 pl-10">
-            {items.map((franja) => (
-              <div
-                key={`${franja.campoId}-${franja.fecha}-${franja.horaInicio}`}
-                className="flex items-center justify-between gap-2 bg-white rounded-lg p-2.5 border border-slate-100"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="flex flex-col flex-shrink-0">
-                    <div className="flex items-center gap-1 text-xs text-slate-500">
-                      <Calendar className="w-3 h-3" />
-                      <span>{formatearFecha(franja.fecha)}</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-sm font-semibold text-slate-900 mt-0.5">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>
-                        {franja.horaInicio.slice(0, 5)}–{franja.horaFin.slice(0, 5)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0 text-right">
-                    <p className="font-bold text-slate-900">
-                      Bs {franja.precio?.toFixed(2) ?? '—'}
-                    </p>
-                  </div>
-                </div>
+            {items.map((franja) => {
+              const nocturna = esNocturna(franja.horaInicio, horaInicioNoche);
+              const IconoTarifa = nocturna ? Lightbulb : Sun;
+              const colorTarifa = nocturna ? 'text-indigo-500' : 'text-amber-500';
+              const etiquetaTarifa = nocturna ? 'Con luces' : 'Regular';
 
-                {!compacto && (
+              return (
+                <div
+                  key={`${franja.campoId}-${franja.fecha}-${franja.horaInicio}`}
+                  className="flex items-center justify-between gap-2 bg-white rounded-lg p-2.5 border border-slate-100"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex flex-col flex-shrink-0">
+                      <div className="flex items-center gap-1 text-xs text-slate-500">
+                        <Calendar className="w-3 h-3" />
+                        <span>{formatearFecha(franja.fecha)}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-sm font-semibold text-slate-900 mt-0.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>
+                          {franja.horaInicio.slice(0, 5)}–{franja.horaFin.slice(0, 5)}
+                        </span>
+                        {/* Ícono de tipo de tarifa */}
+                        <IconoTarifa
+                          className={`w-3 h-3 ml-1 ${colorTarifa}`}
+                          title={etiquetaTarifa}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0 text-right">
+                      <p className="font-bold text-slate-900">
+                        Bs {franja.precio?.toFixed(2) ?? '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* X para quitar: siempre visible, tamaño compacto en modo compacto */}
                   <button
                     onClick={() => quitarFranja(franja)}
-                    className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0"
+                    className={`rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0 ${
+                      compacto ? 'p-1' : 'p-1.5'
+                    }`}
                     aria-label="Quitar franja"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className={compacto ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
                   </button>
-                )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       ))}

@@ -9,7 +9,7 @@ use App\Models\Reserva;
 use App\Models\SolicitudReservaDetalle;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-
+use App\Models\SolicitudReserva;
 /**
  * Servicio de ocupación para control en sitio (HU-F1).
  *
@@ -50,48 +50,115 @@ class OcupacionService
     }
 
     /**
-     * Verifica un código de reserva.
+     * Verifica un código de reserva. Acepta AMBOS formatos:
+     *   - RSV-… (codigo_reserva, 1 franja)  → lo que muestra la grilla del panel
+     *   - RES-… (codigo_seguimiento, N franjas) → lo que trae el QR del comprobante
      *
      * Regla de seguridad: si el funcionario es funcionario_control y el campo
-     * no está entre sus asignados, responde 404 igual que si el código no existiera.
-     * Esto evita filtrar existencia de reservas en campos ajenos.
+     * no está entre sus asignados, responde null (→ 404 uniforme) igual que si
+     * el código no existiera. Para RES- multi-franja, filtra SOLO las franjas
+     * de sus campos: no expone existencia ni datos de franjas ajenas.
      *
-     * @return array<string, mixed>|null Devuelve null si no existe o no tiene acceso.
+     * [FIX #2a] Expone el titular (nombre + CI/NIT + teléfono) al funcionario
+     * autenticado con acceso, porque la verificación de identidad en sitio
+     * exige cruzar el carnet. El endpoint PÚBLICO (SolicitudEstadoResource)
+     * sigue SIN exponerlos; este es el canal interno protegido.
+     *
+     * @return array<string, mixed>|null null si no existe o no tiene acceso.
      */
-    public function verificarCodigo(string $codigoReserva, Funcionario $funcionario): ?array
+    public function verificarCodigo(string $codigo, Funcionario $funcionario): ?array
     {
+        $codigo = strtoupper(trim($codigo));
+        if ($codigo === '') {
+            return null;
+        }
+
+        $esAdmin = $this->esAdministrador($funcionario);
+
+        // ── Camino A: código de franja (RSV-…) ──
         $reserva = Reserva::with(['solicitud', 'campo', 'detalle'])
-            ->where('codigo_reserva', $codigoReserva)
+            ->where('codigo_reserva', $codigo)
             ->first();
 
-        if (! $reserva) {
-            return null;
-        }
-
-        // Verificar que la solicitud esté confirmada
-        if ($reserva->solicitud->estado !== EstadoSolicitudReserva::Confirmada) {
-            return null;
-        }
-
-        // Restricción server-side para funcionario_control
-        if (! $this->esAdministrador($funcionario)) {
-            $asignado = $this->campoAsignado($funcionario, $reserva->campo_id);
-
-            if (! $asignado) {
-                // Responder 404 uniforme, no filtrar existencia
+        if ($reserva) {
+            if ($reserva->solicitud->estado !== EstadoSolicitudReserva::Confirmada) {
                 return null;
+            }
+            if (! $esAdmin && ! $this->campoAsignado($funcionario, $reserva->campo_id)) {
+                return null;
+            }
+
+            return $this->armarResultadoVerificacion($reserva->solicitud, $reserva->campo, [$reserva]);
+        }
+
+        // ── Camino B: código de seguimiento (RES-…) → solicitud con N franjas ──
+        $solicitud = SolicitudReserva::with(['detalles.reserva.campo'])
+            ->where('codigo_seguimiento', $codigo)
+            ->where('estado', EstadoSolicitudReserva::Confirmada)
+            ->first();
+
+        if (! $solicitud) {
+            return null;
+        }
+
+        /** @var Collection<int, Reserva> $reservas */
+        $reservas = $solicitud->detalles
+            ->pluck('reserva')
+            ->filter()
+            ->values();
+
+        if ($reservas->isEmpty()) {
+            return null;
+        }
+
+        // Filtro por asignación para funcionario_control: solo sus franjas.
+        if (! $esAdmin) {
+            $reservas = $reservas
+                ->filter(fn (Reserva $r) => $this->campoAsignado($funcionario, $r->campo_id))
+                ->values();
+
+            if ($reservas->isEmpty()) {
+                return null; // sin acceso a NINGUNA franja → 404 uniforme
             }
         }
 
+        $primerCampo = $reservas->first()?->campo;
+
+        return $this->armarResultadoVerificacion($solicitud, $primerCampo, $reservas->all());
+    }
+
+    /**
+     * Arma la respuesta unificada del verificador (1 o N franjas).
+     * Cada franja incluye `id` (PK de reservas) porque el POST de asistencia
+     * (/admin/reservas/{id}/asistencia) la requiere, no el codigo_reserva.
+     *
+     * @param  array<int, Reserva>  $reservas
+     */
+    private function armarResultadoVerificacion(
+        SolicitudReserva $solicitud,
+        ?CampoDeportivo $campoReferencia,
+        array $reservas,
+    ): array {
         return [
-            'codigo_reserva' => $reserva->codigo_reserva,
-            'campo_id' => $reserva->campo_id,
-            'campo_nombre' => $reserva->campo?->nombre,
-            'fecha_reserva' => $reserva->fecha_reserva?->toDateString(),
-            'hora_inicio' => substr((string) $reserva->hora_inicio, 0, 5),
-            'hora_fin' => substr((string) $reserva->hora_fin, 0, 5),
-            'asistencia_marcada_en' => $reserva->asistencia_marcada_en?->toIso8601String(),
-            // NO exponer: nombre_pagador, telefono_pagador, ci_nit_pagador
+            'codigo_seguimiento' => $solicitud->codigo_seguimiento,
+            'estado_solicitud'   => $solicitud->estado->value,
+            'titular' => [
+                'nombre'   => $solicitud->nombre_pagador,
+                'ci_nit'   => $solicitud->ci_nit_pagador,
+                'telefono' => $solicitud->telefono_pagador,
+            ],
+            'campo_id'      => $campoReferencia?->id,
+            'campo_nombre'  => $campoReferencia?->nombre,
+            'fecha_reserva' => $reservas[0]->fecha_reserva?->toDateString(),
+            'franjas' => array_map(fn (Reserva $r) => [
+                'id' => $r->id,
+                'codigo_reserva'        => $r->codigo_reserva,
+                'campo_nombre'          => $r->campo?->nombre,
+                'fecha'                 => $r->fecha_reserva?->toDateString(),
+                'hora_inicio'           => substr((string) $r->hora_inicio, 0, 5),
+                'hora_fin'              => substr((string) $r->hora_fin, 0, 5),
+                'asistencia_marcada_en' => $r->asistencia_marcada_en?->toIso8601String(),
+            ], $reservas),
         ];
     }
 

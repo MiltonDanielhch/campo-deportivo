@@ -1,4 +1,5 @@
-import { ImageIcon, MapPin, ArrowRight, Sun, Lightbulb, AlertCircle, BadgeCheck } from 'lucide-react';
+import { useState } from 'react';
+import { MapPin, ArrowRight, Sun, Lightbulb, AlertCircle, BadgeCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { CardContent } from '@/components/ui/card';
@@ -8,15 +9,39 @@ interface CampoCardProps {
   campo: CampoPublico;
 }
 
+/** Normaliza URLs locales al proxy CORS del backend. */
+const normalizarUrlImagen = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/storage/')) {
+    return url.replace('/storage/', '/api/v1/public/storage/');
+  }
+  return url;
+};
+
+/** Fallback visual: cancha dibujada (coherente con landing y detalle). */
+function CampoSinFoto() {
+  return (
+    <div className="w-full h-full bg-gradient-to-br from-teal-600 to-emerald-700 flex items-center justify-center">
+      <div className="relative w-28 h-16 md:w-36 md:h-20 rounded-sm border-2 border-white/70 opacity-80">
+        <div className="absolute inset-x-0 top-1/2 h-0.5 bg-white/70" />
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 md:w-10 md:h-10 rounded-full border-2 border-white/70" />
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-8 md:w-6 md:h-12 border-2 border-l-0 border-white/70" />
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-8 md:w-6 md:h-12 border-2 border-r-0 border-white/70" />
+      </div>
+    </div>
+  );
+}
+
 export default function CampoCard({ campo }: CampoCardProps) {
+  const [imagenRota, setImagenRota] = useState(false);
   const esMantenimiento = campo.estado === 'mantenimiento';
   const esReservable = campo.reservable_online && !esMantenimiento;
   const { diurna, nocturna } = campo.tarifas ?? { diurna: null, nocturna: null };
 
-  // El nombre y el código son los oficiales de SIREB cuando el campo está
-  // vinculado; el backend ya los resuelve, acá solo se muestran.
   const esOficial = campo.fuente_precios === 'SIREB' && campo.sireb != null;
   const codigoOficial = campo.sireb?.codigo ?? campo.servicio_sireb_codigo;
+  const imagenUrl = normalizarUrlImagen(campo.imagen_url);
 
   // Helper para formatear precio desde SIREB
   const formatoPrecioSireb = (): string => {
@@ -47,29 +72,27 @@ export default function CampoCard({ campo }: CampoCardProps) {
   return (
     <Link
       to={esReservable ? `/campos/${campo.id}` : '#'}
-      className={`group block rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 ${
+      className={`group flex h-full flex-col rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 ${
         !esReservable
           ? 'opacity-70 cursor-not-allowed'
           : 'hover:shadow-xl hover:-translate-y-1'
       }`}
     >
-      {/* ─── Imagen 16:9 ─── */}
+      {/* ─── Imagen 16:9 con fallback ─── */}
       <div className="relative aspect-video w-full bg-slate-100 overflow-hidden">
-        {campo.imagen_url ? (
+        {imagenUrl && !imagenRota ? (
           <img
-            src={campo.imagen_url}
+            src={imagenUrl}
             alt={campo.nombre}
+            onError={() => setImagenRota(true)}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             loading="lazy"
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center text-slate-400">
-            <ImageIcon className="mb-1 h-10 w-10" />
-            <span className="text-xs">Sin foto</span>
-          </div>
+          <CampoSinFoto />
         )}
 
-        {/* Badge de estado */}
+        {/* Badges de estado */}
         <div className="absolute top-3 right-3 flex flex-col items-end gap-2">
           {esOficial && (
             <Badge className="gap-1 bg-white/95 text-teal-700 hover:bg-white shadow-sm backdrop-blur">
@@ -90,8 +113,8 @@ export default function CampoCard({ campo }: CampoCardProps) {
         </div>
       </div>
 
-      {/* ─── Contenido ─── */}
-      <CardContent className="p-5">
+      {/* ─── Contenido (flex-col para alinear CTA abajo) ─── */}
+      <CardContent className="p-5 flex flex-1 flex-col">
         <div className="flex items-center justify-between gap-2 mb-1">
           <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
             {campo.tipo_campo?.nombre ?? 'Campo deportivo'}
@@ -110,8 +133,8 @@ export default function CampoCard({ campo }: CampoCardProps) {
           {campo.direccion}
         </p>
 
-        {/* ─── Fila de precios ─── */}
-        <div className="flex items-center gap-3 pb-4 mb-4 border-b border-slate-100 min-h-[28px]">
+        {/* ─── Fila de precios (mt-auto la ancla al fondo) ─── */}
+        <div className="flex items-center gap-3 mt-auto pb-4 mb-4 border-b border-slate-100 min-h-[28px]">
           {esOficial ? (
             <div className="flex items-center gap-1.5 text-sm">
               <span className="font-semibold">{formatoPrecioSireb()}</span>
@@ -146,24 +169,20 @@ export default function CampoCard({ campo }: CampoCardProps) {
           )}
         </div>
 
-        {/* ─── Botón CTA ─── */}
+        {/* ─── CTA o mensaje único de no reservable ─── */}
         {esReservable ? (
           <div className="flex items-center justify-between text-sm font-semibold text-teal-600 group-hover:text-teal-700">
             <span>Ver disponibilidad</span>
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </div>
         ) : (
-          <div className="space-y-1">
-            {campo.mensaje_no_reservable && (
-              <p className="text-xs text-slate-500 italic flex items-start gap-1">
-                <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                {campo.mensaje_no_reservable}
-              </p>
-            )}
-            <p className="text-sm text-orange-600 italic">
-              {esMantenimiento ? 'No disponible temporalmente' : 'No disponible para reserva online'}
-            </p>
-          </div>
+          <p className="text-sm text-orange-600 italic flex items-start gap-1">
+            <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+            {esMantenimiento
+              ? 'No disponible temporalmente'
+              : campo.mensaje_no_reservable ||
+                'No disponible para reserva online'}
+          </p>
         )}
       </CardContent>
     </Link>

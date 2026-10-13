@@ -17,10 +17,23 @@ use Illuminate\Support\Collection;
  *
  * La grilla es INFORMATIVA: la garantía anti-doble-reserva sigue siendo
  * la restricción EXCLUDE a nivel BD, no este endpoint.
+ *
+ * [FIX #1 grilla] Además de 'libre'/'ocupada'/'bloqueada_temporal', la grilla
+ * puede devolver 'pasada': un bloque cuyo hora_inicio ya corrió según el
+ * reloj oficial de Bolivia, cuando la fecha consultada es HOY. Es un estado
+ * DERIVADO DEL TIEMPO (no de una solicitud) que sirve para que el frontend
+ * no ofrezca franjas que el backend rechazaría con 422 en
+ * SolicitudReservaService::validarFranjaFutura(). Ambos usan el mismo tz y
+ * la misma regla (inicio <= ahora), así grilla y gate están siempre alineados.
  */
 class DisponibilidadService
 {
     public const TAMANO_BLOQUE_MINUTOS = 60;
+
+    // [FIX #1 grilla] Mantener en sync con SolicitudReservaService::TIMEZONE_BOLIVIA.
+    // TODO: extraer a un helper común (App\Support\FechaBolivia) para no duplicar
+    // el tz en dos services.
+    private const TIMEZONE_BOLIVIA = 'America/La_Paz';
 
     /**
      * Estados de solicitud que ocupan/bloquean una franja de la grilla.
@@ -68,9 +81,21 @@ class DisponibilidadService
         $precioPorHora = $campo->tarifas->first()?->precio_por_hora;
         $precioFloat = $precioPorHora !== null ? (float) $precioPorHora : null;
 
+        // [FIX #1 grilla] ¿La fecha pedida es HOY en hora Bolivia? Si sí,
+        // los bloques cuyo inicio ya corrió se marcan 'pasada'. Comparamos
+        // día calendario (toDateString) para que no importe cómo se parseó
+        // $fecha en el caller: el día es el día.
+        $ahoraBolivia = Carbon::now(self::TIMEZONE_BOLIVIA);
+        $esHoyBolivia = $fecha->toDateString() === $ahoraBolivia->toDateString();
+        $ahoraSeg = $esHoyBolivia ? self::aSegundos($ahoraBolivia->format('H:i:s')) : -1;
+
         // ── Paso 4: etiquetar cada bloque cruzando con las solicitudes ──
-        $bloques = $bloques->map(function ($bloque) use ($solicitudesActivas, $precioFloat) {
-            $estado = $this->calcularEstadoDelBloque($bloque, $solicitudesActivas);
+        $bloques = $bloques->map(function ($bloque) use ($solicitudesActivas, $precioFloat, $esHoyBolivia, $ahoraSeg) {
+            // El gate temporal tiene prioridad: una franja de hoy que ya
+            // comenzó es 'pasada' aunque estuviera libre/ocupada/en cobro.
+            $estado = ($esHoyBolivia && self::aSegundos($bloque['hora_inicio']) <= $ahoraSeg)
+                ? 'pasada'
+                : $this->calcularEstadoDelBloque($bloque, $solicitudesActivas);
 
             return [
                 'hora_inicio' => $bloque['hora_inicio'],
@@ -118,6 +143,9 @@ class DisponibilidadService
      * - 'libre': sin superposición con ninguna solicitud activa.
      * - 'ocupada': superposición con al menos una solicitud 'confirmada'.
      * - 'bloqueada_temporal': superposición con 'pendiente' (sin 'confirmada' previa).
+     *
+     * Nota: 'pasada' NO se calcula acá; se aplica antes en calcularGrilla
+     * porque depende del reloj, no de las solicitudes.
      */
     private function calcularEstadoDelBloque(array $bloque, Collection $solicitudes): string
     {
@@ -145,5 +173,14 @@ class DisponibilidadService
         if ($confirmada) return 'ocupada';
         if ($pendiente) return 'bloqueada_temporal';
         return 'libre';
+    }
+
+    // [FIX #1 grilla] Mismo helper que SolicitudReservaService::aSegundos.
+    // TODO: unificar en el helper común de tz/fechas.
+    private static function aSegundos(string $hora): int
+    {
+        $partes = array_map('intval', explode(':', $hora));
+
+        return ($partes[0] * 3600) + ($partes[1] * 60) + ($partes[2] ?? 0);
     }
 }

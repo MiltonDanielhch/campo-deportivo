@@ -9,9 +9,13 @@ export default function Footer() {
           {/* Marca */}
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 font-bold text-white mb-4">
-              <div className="w-9 h-9 rounded-lg bg-teal-600 flex items-center justify-center">
-                <MapPinned className="w-5 h-5" />
-              </div>
+            <div className="w-9 h-9 rounded-lg bg-white p-1 flex items-center justify-center">
+              <img
+                src="/img/logo-gad-beni.png"
+                alt="Logo GAD Beni"
+                className="h-18 w-auto object-contain"
+              />
+            </div>
               <span className="text-lg">Canchas GAD Beni</span>
             </div>
             <p className="text-sm leading-relaxed max-w-sm text-slate-400">

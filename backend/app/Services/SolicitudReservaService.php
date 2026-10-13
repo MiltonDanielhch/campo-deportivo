@@ -52,6 +52,12 @@ class SolicitudReservaService
 
     private const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+    // [FIX #2 tz] Zona horaria oficial de Bolivia (UTC-4, sin DST). Todo el
+    // path de creación calcula "hoy/ahora/día" en este tz explícito, sin
+    // depender de APP_TIMEZONE del servidor (que en Docker suele ser UTC y
+    // rompe la ventana de 20:00 a 23:59 hora local).
+    private const TIMEZONE_BOLIVIA = 'America/La_Paz';
+
     public function __construct(
         private DisponibilidadService $disponibilidad,
         private RecaudacionesApiClientInterface $recaudaciones,
@@ -229,7 +235,8 @@ class SolicitudReservaService
 
     /**
      * Capa 1: valida estado del campo, tarifa vigente, ventana de fechas,
-     * horario de atención y disponibilidad de cada franja contra la grilla.
+     * horario de atención, disponibilidad de cada franja contra la grilla
+     * y que la franja no haya comenzado aún.
      *
      * @param  FranjaSolicitadaDTO[]  $franjas
      * @return array<string, array{tarifas: Collection<string, \App\Models\TarifaCampo>, inicio_noche: int}>
@@ -264,7 +271,10 @@ class SolicitudReservaService
                 'inicio_noche' => self::aSegundos($campo->hora_inicio_noche ?? '18:00:00'),
             ];
 
-            $fecha = Carbon::parse($primera->fecha)->startOfDay();
+            // [FIX #2 tz] Parsear la fecha pedida en hora Bolivia para que
+            // dayOfWeek/toDateString (usados por la grilla) y la ventana
+            // comparen siempre en el mismo tz.
+            $fecha = Carbon::parse($primera->fecha, self::TIMEZONE_BOLIVIA)->startOfDay();
             $this->validarVentana($fecha);
 
             $this->validarSolapeInterno($grupo->all());
@@ -279,6 +289,11 @@ class SolicitudReservaService
             }
 
             foreach ($grupo as $franja) {
+                // [FIX #1 franja pasada] Gate temporal ANTES de cruzar con la
+                // grilla: si la franja ya comenzó (hora Bolivia), no se puede
+                // reservar ni crear hold.
+                $this->validarFranjaFutura($franja);
+
                 $this->verificarFranjaEnGrilla($franja, $grilla);
             }
         }
@@ -322,6 +337,41 @@ class SolicitudReservaService
     }
 
     /**
+     * [FIX #1 franja pasada] Rechaza franjas cuyo inicio ya pasó según el
+     * reloj oficial de Bolivia. Compara el datetime (fecha + hora_inicio) en
+     * America/La_Paz contra ahoraBolivia(), de modo que el resultado no
+     * depende del tz del servidor.
+     *
+     * Regla: no se puede reservar una franja que ya comenzó (incluso en este
+     * mismo segundo). Una franja que empieza dentro de unos minutos SÍ se
+     * permite; si el PO quiere exigir margen de anticipación, subir el
+     * umbral en MARGEN_ANTICIPACION_MINUTOS (ver más abajo).
+     */
+    private function validarFranjaFutura(FranjaSolicitadaDTO $franja): void
+    {
+        $inicioFranja = Carbon::parse(
+            "{$franja->fecha} {$franja->horaInicio}",
+            self::TIMEZONE_BOLIVIA,
+        );
+
+        // Margen opcional (default 0 = basta que no haya comenzado).
+        $umbral = $this->ahoraBolivia()->addMinutes(self::MARGEN_ANTICIPACION_MINUTOS);
+
+        if ($inicioFranja->lessThanOrEqualTo($umbral)) {
+            throw ValidationException::withMessages([
+                'franjas' => "La franja {$franja->horaInicio}-{$franja->horaFin} del {$franja->fecha} ya comenzó. Elegí un horario futuro.",
+            ]);
+        }
+    }
+
+    /**
+     * [FIX #1] Minutos de anticipación mínima exigidos para reservar una
+     * franja. 0 = se puede reservar hasta el segundo en que empieza. Subilo
+     * (ej. 15) si el PO quiere garantizar tiempo de pago antes del inicio.
+     */
+    private const MARGEN_ANTICIPACION_MINUTOS = 0;
+
+    /**
      * @param  FranjaSolicitadaDTO[]  $franjas
      */
     private function validarSolapeInterno(array $franjas): void
@@ -346,7 +396,8 @@ class SolicitudReservaService
 
     private function validarVentana(Carbon $fecha): void
     {
-        $hoy = Carbon::today();
+        // [FIX #2 tz] "hoy" en hora Bolivia, no en tz del servidor.
+        $hoy = $this->ahoraBolivia()->startOfDay();
 
         if ($fecha->lt($hoy) || $fecha->gt($hoy->copy()->addDays(self::VENTANA_DIAS))) {
             throw ValidationException::withMessages([
@@ -407,6 +458,14 @@ class SolicitudReservaService
         $partes = array_map('intval', explode(':', $hora));
 
         return ($partes[0] * 3600) + ($partes[1] * 60) + ($partes[2] ?? 0);
+    }
+
+    /**
+     * [FIX #2 tz] Reloj oficial de Bolivia, independiente de APP_TIMEZONE.
+     */
+    private function ahoraBolivia(): Carbon
+    {
+        return Carbon::now(self::TIMEZONE_BOLIVIA);
     }
 
 

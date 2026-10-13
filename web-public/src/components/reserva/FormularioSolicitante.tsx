@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { User, Phone, CreditCard as IdCard } from 'lucide-react';
+import { User, Phone, CreditCard as IdCard, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -18,8 +18,6 @@ const schema = z.object({
     .trim()
     .regex(/^[0-9]{8}$/, 'El teléfono debe tener 8 dígitos'),
 
-  // SIREB v1: CI/NIT obligatorio para crear liquidaciones.
-  // Puede ser CI de persona natural o NIT de asociación/empresa.
   ci_nit_pagador: z
     .string()
     .trim()
@@ -81,6 +79,7 @@ export default function FormularioSolicitante({
             {...register('nombre_pagador')}
             placeholder="Ej.: Juan Pérez o Asociación Deportiva San José"
             disabled={cargando}
+            autoComplete="name"
             className={errors.nombre_pagador ? 'border-red-300' : ''}
           />
           {errors.nombre_pagador && (
@@ -90,6 +89,7 @@ export default function FormularioSolicitante({
             </p>
           )}
         </div>
+
         {/* Teléfono */}
         <div>
           <Label htmlFor="telefono_pagador" className="flex items-center gap-1.5 mb-2">
@@ -102,8 +102,10 @@ export default function FormularioSolicitante({
             id="telefono_pagador"
             {...register('telefono_pagador')}
             placeholder="70000000"
+            inputMode="tel"
             maxLength={8}
             disabled={cargando}
+            autoComplete="tel"
             className={errors.telefono_pagador ? 'border-red-300' : ''}
           />
           {errors.telefono_pagador && (
@@ -114,7 +116,7 @@ export default function FormularioSolicitante({
           )}
         </div>
 
-        {/* CI / NIT / identificación de la asociación */}
+        {/* CI / NIT */}
         <div>
           <Label htmlFor="ci_nit_pagador" className="flex items-center gap-1.5 mb-2">
             <IdCard className="w-3.5 h-3.5 text-slate-400" />
@@ -127,6 +129,7 @@ export default function FormularioSolicitante({
             id="ci_nit_pagador"
             {...register('ci_nit_pagador')}
             placeholder="Ej.: 1234567 o 1234567890"
+            inputMode="numeric"
             disabled={cargando}
             className={errors.ci_nit_pagador ? 'border-red-300' : ''}
           />
@@ -142,12 +145,20 @@ export default function FormularioSolicitante({
           </p>
         </div>
 
+        {/* Botón teal con spinner de carga */}
         <Button
           type="submit"
-          className="w-full h-12 rounded-xl font-semibold shadow-md shadow-teal-500/20"
           disabled={cargando}
+          className="w-full h-12 rounded-xl font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-lg shadow-teal-500/20 disabled:bg-slate-400 disabled:shadow-none"
         >
-          {cargando ? 'Creando reserva…' : 'Continuar al pago'}
+          {cargando ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              Creando reserva…
+            </>
+          ) : (
+            'Continuar al pago'
+          )}
         </Button>
       </form>
     </div>
