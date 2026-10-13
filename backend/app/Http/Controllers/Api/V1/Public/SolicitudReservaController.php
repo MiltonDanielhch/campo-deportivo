@@ -29,7 +29,10 @@ class SolicitudReservaController extends Controller
      */
     public function store(StoreSolicitudReservaRequest $request): JsonResponse
     {
-        $dto = SolicitudReservaDTO::desdeArray($request->validated());
+        $validated = $request->validated();
+        $validated['ip_cobrador'] = $request->ip();
+
+        $dto = SolicitudReservaDTO::desdeArray($validated);
 
         $resultado = $this->service->crear($dto);
 

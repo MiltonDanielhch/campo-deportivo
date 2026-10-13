@@ -23,7 +23,7 @@ class StoreSolicitudReservaRequest extends FormRequest
                 'max:20',
                 'regex:/^[\d\-\.]+$/',   // solo dígitos, guiones y puntos
             ],
-            'franjas' => ['required', 'array', 'min:1', 'max:10'],
+            'franjas' => ['required', 'array', 'min:1', 'max:6'],
             'franjas.*.campo_id' => ['required', 'uuid', 'exists:campos_deportivos,id'],
             'franjas.*.fecha' => ['required', 'date_format:Y-m-d'],
             'franjas.*.hora_inicio' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/'],
@@ -50,7 +50,7 @@ class StoreSolicitudReservaRequest extends FormRequest
 
             'franjas.required' => 'Debés seleccionar al menos una franja horaria.',
             'franjas.min' => 'Debés seleccionar al menos una franja horaria.',
-            'franjas.max' => 'No podés reservar más de 10 franjas en una sola solicitud.',
+            'franjas.max' => 'No podés reservar más de 6 franjas en una sola solicitud.',
 
             'franjas.*.campo_id.required' => 'Cada franja debe indicar el campo deportivo.',
             'franjas.*.campo_id.uuid' => 'El identificador del campo es inválido.',

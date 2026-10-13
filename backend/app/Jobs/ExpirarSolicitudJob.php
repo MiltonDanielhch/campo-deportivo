@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Enums\EstadoSolicitudReserva;
 use App\Exceptions\RecaudacionesApiException;
 use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
+use App\Models\ParametroSistema;
 use App\Models\SolicitudReserva;
 use App\Services\AuditoriaService;
 use Illuminate\Bus\Queueable;
@@ -13,6 +14,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Expira una solicitud pendiente al vencer su timer.
@@ -43,26 +45,68 @@ class ExpirarSolicitudJob implements ShouldQueue
             return;
         }
 
-        // Si la liquidación ya tiene pago activo, no expiramos:
-        // el polling se encargará de confirmar cuando SIREB valide.
-        if (! empty($solicitud->liquidacion_id)
-            && ! $this->intentarAnularEnSireb($solicitud, $client)) {
-            return;
+        // Intentar anular en SIREB (si tiene liquidacion_id)
+        $sePuedeExpirar = true;
+        if (! empty($solicitud->liquidacion_id)) {
+            $sePuedeExpirar = $this->intentarAnularEnSireb($solicitud, $client);
         }
 
-        $solicitud->update([
-            'estado' => EstadoSolicitudReserva::Expirada,
-            'motivo_rechazo' => 'expirada_sin_pago',
-        ]);
+        // Marcar como expirada solo si SIREB lo permite
+        if ($sePuedeExpirar) {
+            $solicitud->update([
+                'estado' => EstadoSolicitudReserva::Expirada,
+                'motivo_rechazo' => 'expirada_sin_pago',
+            ]);
 
-        AuditoriaService::registrar(
-            'solicitudes_reserva',
-            $solicitud->id,
-            'expirar_automaticamente',
-            null,
-            ['estado' => 'pendiente'],
-            ['estado' => 'expirada', 'motivo_rechazo' => 'expirada_sin_pago'],
-        );
+            AuditoriaService::registrar(
+                'solicitudes_reserva',
+                $solicitud->id,
+                'expirar_automaticamente',
+                null,
+                ['estado' => 'pendiente'],
+                ['estado' => 'expirada', 'motivo_rechazo' => 'expirada_sin_pago'],
+            );
+
+            // ← SIEMPRE registrar expiración para M3 (anti-hoarding)
+            if ($solicitud->ip_cobrador) {
+                $this->registrarExpiracionIp($solicitud->ip_cobrador);
+            }
+        }
+    }
+
+    /**
+     * Incrementa el contador de expiraciones de la IP (TTL 1 hora). Si llega al
+     * umbral, bloquea la IP por los minutos configurados en parametros_sistema.
+     */
+    private function registrarExpiracionIp(string $ip): void
+    {
+        $umbral = (int) (ParametroSistema::where('clave', 'umbral_expiraciones_cooldown')->value('valor') ?: 3);
+        $cooldownMin = (int) (ParametroSistema::where('clave', 'cooldown_expiracion_minutos')->value('valor') ?: 30);
+
+        $counterKey = 'hoard:counter:'.md5($ip);
+        $cooldownKey = 'hoard:cooldown:'.md5($ip);
+
+        $ttlContadorSeg = 3600;
+        $ttlCooldownSeg = $cooldownMin * 60;
+
+        // Obtener el valor actual del cache (puede ser null si no existe)
+        $contadorActual = Cache::get($counterKey);
+
+        // Si es null, empezar desde 0; si no, incrementar
+        $contador = ($contadorActual === null) ? 1 : ((int) $contadorActual + 1);
+
+        // Guardar el nuevo valor con TTL
+        Cache::put($counterKey, $contador, $ttlContadorSeg);
+
+        if ($contador >= $umbral) {
+            Cache::put($cooldownKey, $cooldownMin, $ttlCooldownSeg);
+
+            Log::channel('sireb')->warning('IP bloqueada por hoarding (expiraciones repetidas)', [
+                'ip_hash' => md5($ip),
+                'expiraciones_ultima_hora' => $contador,
+                'cooldown_minutos' => $cooldownMin,
+            ]);
+        }
     }
 
     /**

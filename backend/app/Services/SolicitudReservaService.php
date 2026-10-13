@@ -27,6 +27,7 @@ use App\Models\Funcionario;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Generator;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Creación de solicitudes de reserva multi-franja (HU-D1, HU-D2, HU-D3, HU-D8).
@@ -68,6 +69,9 @@ class SolicitudReservaService
 
     public function crear(SolicitudReservaDTO $datos): SolicitudCreadaDTO
     {
+        // ── Gate anti-hoarding (antes de cualquier hold o consulta a BD) ──
+        $this->validarAntiHoarding($datos);
+
         // ── Capa 1: verificación rápida (aplicativa) ──
         $campos = $this->verificarFranjas($datos->franjas);
 
@@ -82,6 +86,7 @@ class SolicitudReservaService
                     'nombre_pagador' => $datos->nombrePagador,
                     'telefono_pagador' => $datos->telefonoPagador,
                     'ci_nit_pagador' => $datos->ciNitPagador,
+                    'ip_cobrador' => $datos->ipCobrador,  // ← NUEVO
                     'estado' => EstadoSolicitudReserva::Pendiente,
                     'expira_en' => now()->addMinutes($expiracionMinutos),
                 ]);
@@ -100,9 +105,6 @@ class SolicitudReservaService
             });
         } catch (QueryException $e) {
             if ($e->getCode() === '23P01') {
-                // La restricción EXCLUDE decidió. Re-corremos la verificación
-                // rápida contra datos ya commiteados para identificar CUÁL
-                // franja perdió y devolvérsela estructurada a la app.
                 try {
                     $this->verificarFranjas($datos->franjas);
                 } catch (FranjaNoDisponibleException $especifica) {
@@ -116,13 +118,9 @@ class SolicitudReservaService
             throw $e;
         }
 
-        // ── Capa 3: crear liquidación en SIREB ──
         try {
             $this->crearLiquidacionEnSireb($solicitud);
         } catch (\Throwable $e) {
-            // En vez de rechazar de inmediato, despachamos job de reintento.
-            // La solicitud queda pendiente y libera la franja solo si todos
-            // los reintentos fallan (lo decide el job).
             Log::channel('sireb')->warning(
                 'Creación de liquidación falló, despachando reintento',
                 [
@@ -134,7 +132,6 @@ class SolicitudReservaService
             ReintentarSolicitudJob::dispatch($solicitud->id);
         }
 
-        // ── Despachar jobs de expiración y polling ──
         ExpirarSolicitudJob::dispatch($solicitud->id)->delay($solicitud->expira_en);
 
         $intervaloPolling = (int) ParametroSistema::where(
@@ -144,7 +141,6 @@ class SolicitudReservaService
         PollingSolicitudJob::dispatch($solicitud->id)
             ->delay(now()->addSeconds($intervaloPolling ?: 20));
 
-        // ── Devolver respuesta al frontend ──
         return $this->construirRespuesta($solicitud);
     }
 
@@ -438,6 +434,58 @@ class SolicitudReservaService
             ->value('valor');
 
         return (int) ($valor ?? 15);
+    }
+
+    /**
+     * Gate anti-hoarding: 3 chequeos que corren ANTES de crear el hold.
+     * Todos leen de parametros_sistema para que el GAD los ajuste sin redeploy.
+     *
+     *  M1 dinámico: techo de franjas por solicitud (el validator ya corta en 6).
+     *  M2: techo de solicitudes pendientes activas por IP.
+     *  M3: IP en cooldown por expiraciones repetidas.
+     *
+     * @throws ValidationException
+     */
+    private function validarAntiHoarding(SolicitudReservaDTO $datos): void
+    {
+        if (! $datos->ipCobrador) {
+            return; // sin IP no se puede aplicar (no debería pasar con TrustProxies)
+        }
+
+        // ── M1 dinámico: tope configurable ──
+        $maxFranjas = (int) ParametroSistema::where('clave', 'max_franjas_por_solicitud')->value('valor') ?: 6;
+        if (count($datos->franjas) > $maxFranjas) {
+            throw ValidationException::withMessages([
+                'franjas' => "No podés reservar más de {$maxFranjas} franjas en una sola solicitud.",
+            ]);
+        }
+
+        // ── M3: cooldown por expiraciones (se chequea antes que M2, es más barato) ──
+        $cooldownKey = $this->cooldownKey($datos->ipCobrador);
+        if (Cache::has($cooldownKey)) {
+            $minutosRestantes = (int) Cache::get($cooldownKey, 0);
+            throw ValidationException::withMessages([
+                'franjas' => "Esta IP fue bloqueada temporalmente por reservas sin pagar. Intentá nuevamente en {$minutosRestantes} minutos.",
+            ]);
+        }
+
+        // ── M2: tope de pendientes activas por IP ──
+        $maxPendientes = (int) ParametroSistema::where('clave', 'max_pendientes_por_ip')->value('valor') ?: 3;
+        $pendientesActivas = SolicitudReserva::where('ip_cobrador', $datos->ipCobrador)
+            ->where('estado', EstadoSolicitudReserva::Pendiente)
+            ->where('expira_en', '>', now())
+            ->count();
+
+        if ($pendientesActivas >= $maxPendientes) {
+            throw ValidationException::withMessages([
+                'franjas' => "Tenés {$pendientesActivas} reservas pendientes por pagar. Confirmá o esperá a que expiren antes de crear una nueva.",
+            ]);
+        }
+    }
+
+    private function cooldownKey(string $ip): string
+    {
+        return 'hoard:cooldown:'.md5($ip);
     }
 
     private function generarCodigoSeguimiento(): string
