@@ -584,6 +584,8 @@ class _GrillaHoraria extends StatelessWidget {
   });
 
   Color _colorEstado(BloqueDisponibilidad bloque, bool seleccionado, bool esNocturno) {
+    // 'pasada' primero: prioridad sobre todo (espeja backend + web).
+    if (bloque.estaPasada) return Colors.grey[300]!;
     if (bloque.estaOcupada) return Colors.red[100]!;
     if (bloque.estaBloqueadaTemporal) return Colors.orange[100]!;
     if (seleccionado) return Colors.teal[100]!;
@@ -591,6 +593,7 @@ class _GrillaHoraria extends StatelessWidget {
   }
 
   Color _colorBorde(BloqueDisponibilidad bloque, bool seleccionado, bool esNocturno) {
+    if (bloque.estaPasada) return Colors.grey[400]!;
     if (bloque.estaOcupada) return Colors.red;
     if (bloque.estaBloqueadaTemporal) return Colors.orange;
     if (seleccionado) return Colors.teal;
@@ -598,12 +601,14 @@ class _GrillaHoraria extends StatelessWidget {
   }
 
   IconData _iconoEstado(BloqueDisponibilidad bloque, bool esNocturno) {
+    if (bloque.estaPasada) return Icons.schedule; // reloj, equivale al Clock del web
     if (bloque.estaOcupada) return Icons.lock;
     if (bloque.estaBloqueadaTemporal) return Icons.hourglass_empty;
     return esNocturno ? Icons.lightbulb : Icons.wb_sunny;
   }
 
   String _textoEstado(BloqueDisponibilidad bloque, bool esNocturno, double? precio) {
+    if (bloque.estaPasada) return 'Pasada';
     if (bloque.estaOcupada) return 'Ocupada';
     if (bloque.estaBloqueadaTemporal) return 'En proceso';
     if (precio == null) return 'Sin tarifa';
@@ -626,7 +631,6 @@ class _GrillaHoraria extends StatelessWidget {
       itemBuilder: (context, index) {
         final bloque = bloques[index];
 
-        // Calcular si es nocturno y el precio
         final esNocturno = campo.esHoraNocturna(bloque.horaInicio);
         final precio = campo.precioParaBloque(bloque.horaInicio);
 
@@ -640,53 +644,60 @@ class _GrillaHoraria extends StatelessWidget {
         );
 
         final seleccionado = carrito.esta(franja);
-        final esLibre = bloque.estaLibre && precio != null;
+
+        // [FIX contrato] esSeleccionable (regla de oro del modelo) en vez de
+        // estaLibre: un estado desconocido cae en no-seleccionable, no en
+        // "parece libre". precio != null sigue siendo requisito extra.
+        final esSeleccionable = bloque.esSeleccionable && precio != null;
 
         return InkWell(
-          onTap: esLibre ? () => carrito.toggle(franja) : null,
+          onTap: esSeleccionable ? () => carrito.toggle(franja) : null,
           borderRadius: BorderRadius.circular(8),
-          child: Container(
-            decoration: BoxDecoration(
-              color: _colorEstado(bloque, seleccionado, esNocturno),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: _colorBorde(bloque, seleccionado, esNocturno),
-                width: 2,
+          child: Opacity(
+            opacity: bloque.estaPasada ? 0.6 : 1.0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _colorEstado(bloque, seleccionado, esNocturno),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _colorBorde(bloque, seleccionado, esNocturno),
+                  width: 2,
+                ),
               ),
-            ),
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(_iconoEstado(bloque, esNocturno),
-                        size: 16, color: _colorBorde(bloque, seleccionado, esNocturno)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${bloque.horaInicio.substring(0, 5)} - ${bloque.horaFin.substring(0, 5)}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(_iconoEstado(bloque, esNocturno),
+                          size: 16, color: _colorBorde(bloque, seleccionado, esNocturno)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${bloque.horaInicio.substring(0, 5)} - ${bloque.horaFin.substring(0, 5)}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _textoEstado(bloque, esNocturno, precio),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _colorBorde(bloque, seleccionado, esNocturno),
-                    fontWeight: FontWeight.w500,
+                    ],
                   ),
-                ),
-                if (seleccionado) ...[
-                  const SizedBox(height: 2),
-                  const Icon(Icons.check, size: 16, color: Colors.teal),
+                  const SizedBox(height: 4),
+                  Text(
+                    _textoEstado(bloque, esNocturno, precio),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _colorBorde(bloque, seleccionado, esNocturno),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (seleccionado) ...[
+                    const SizedBox(height: 2),
+                    const Icon(Icons.check, size: 16, color: Colors.teal),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
