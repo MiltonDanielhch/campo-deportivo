@@ -95,6 +95,18 @@ export interface CambioEstadoCampoPayload {
 
 export type TipoTarifa = 'diurna' | 'nocturna';
 
+export type ClasificacionTarifa =
+  | 'diurna'
+  | 'nocturna'
+  | 'unica'
+  | 'no_clasificada';
+
+export type PerfilTarifa =
+  | 'mayor_12'
+  | 'menor_12'
+  | 'institucion'
+  | string;
+
 // ─── Resumen de funcionario (usado en auditorías de tarifas) ─────────
 
 export interface FuncionarioResumen {
@@ -106,25 +118,105 @@ export interface FuncionarioResumen {
 export interface TarifaCampo {
   id: string;
   campo_id: string;
-  tipo_tarifa: TipoTarifa;
+
+  /**
+   * Columna legacy. Puede ser null en tarifas únicas o no clasificadas.
+   */
+  tipo_tarifa: TipoTarifa | null;
+
+  /**
+   * Clasificación canónica derivada del espejo SIREB.
+   */
+  clasificacion?: ClasificacionTarifa | null;
+
+  /**
+   * Perfil ortogonal al horario: piscina, instituciones, etc.
+   * Si es distinto de null, la tarifa NO debe entrar a grilla horaria de canchas.
+   */
+  perfil?: PerfilTarifa | null;
+
+  /**
+   * Etiqueta cruda enviada por SIREB.
+   */
+  etiqueta_sireb?: string | null;
+
+  /**
+   * UUID de la tarifa en SIREB. Es la llave real del espejo/upsert.
+   */
+  tarifa_sireb_id?: string | null;
+
+  /**
+   * UUID del servicio SIREB asociado.
+   */
+  servicio_sireb_id?: string | null;
+
+  /**
+   * Indica si SIREB permite liquidar esta tarifa.
+   */
+  liquidable?: boolean;
+
+  /**
+   * Estado del tarifario en SIREB: vigente, programado, derogado, etc.
+   */
+  tarifario_estado?: string | null;
+
+  /**
+   * Estado de la tarifa en SIREB: activo, inactivo, etc.
+   */
+  estado_tarifa_sireb?: string | null;
+
+  rango_desde?: string | null;
+  rango_hasta?: string | null;
+
+  /**
+   * Categorías crudas de SIREB. Hoy SEDEDE suele mandar [], pero el schema las prevé.
+   */
+  categorias_sireb?: unknown[] | null;
+
+  /**
+   * Cuándo se espejó esta tarifa desde SIREB.
+   * No confundir con vigente_desde, que es desde cuándo rige en el espejo local.
+   */
+  sincronizado_en?: string | null;
+
   precio_por_hora: string;
   vigente_desde: string;
   vigente_hasta: string | null;
+
   /**
    * Funcionario que registró la tarifa. Es null en las tarifas espejadas
    * desde SIREB por el job de sincronización (no las carga una persona).
-   * Hoy todas las altas vienen de SIREB, así que en la práctica es null.
    */
   creado_por: FuncionarioResumen | string | null;
 }
 
 /** Respuesta del endpoint GET /campos-deportivos/{id}/tarifas */
 export interface HistorialTarifas {
-  hora_inicio_noche: string;
+  hora_inicio_noche: string | null;
+
+  /**
+   * Última sincronización desde SIREB para este campo.
+   */
+  sincronizado_en?: string | null;
+
+  /**
+   * Tarifas activas ofrecibles en grilla horaria.
+   */
   activas: {
     diurna: TarifaCampo | null;
     nocturna: TarifaCampo | null;
+    unica?: TarifaCampo | null;
   };
+
+  /**
+   * Tarifas espejadas desde SIREB que NO deben entrar a grilla horaria:
+   * piscina, instituciones, perfiles o no clasificadas.
+   */
+  no_horarias?: TarifaCampo[];
+
+  /**
+   * Historial completo, incluyendo versiones cerradas.
+   */
   historial: TarifaCampo[];
 }
 

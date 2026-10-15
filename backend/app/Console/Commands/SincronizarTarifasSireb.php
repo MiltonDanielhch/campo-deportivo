@@ -2,174 +2,112 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\TipoTarifaSireb;
 use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Models\CampoDeportivo;
 use App\Models\TarifaCampo;
 use App\Services\AuditoriaService;
+use App\Services\Sireb\ClasificacionTarifa;
+use App\Services\Sireb\ClasificadorTarifaSireb;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Alinea tarifas_campo con el tarifario vigente de SIREB.
- *
- * Regla de oro del contrato: SIREB es la fuente de verdad de precios.
- * La tabla local queda como ESPEJO VALIDADO para que la estimación
- * que ve el ciudadano antes del submit coincida con la liquidación real.
- *
- * Ninguna persona fija precios en este sistema: el endpoint manual se
- * eliminó y el formulario del panel pasó a solo lectura. Lo único que
- * escribe tarifas_campo es este comando, y siempre con creado_por = null.
- *
- * Por cada campo con servicio_sireb_id mapeado:
- *  - etiqueta SIREB "Diurno"   → tipo_tarifa 'diurna'
- *  - etiqueta SIREB "Nocturno" → tipo_tarifa 'nocturna'
- *  - si la tarifa local activa difiere → cierra la versión vigente y crea
- *    una nueva, así el historial conserva el precio anterior
- *  - si no existe → la crea
- *  - discrepancias de estructura → se reportan, no se tocan
- */
 class SincronizarTarifasSireb extends Command
 {
-    protected $signature = 'sireb:sincronizar-tarifas
-        {--dry-run : Solo reporta discrepancias sin escribir nada}';
-
+    protected $signature = 'sireb:sincronizar-tarifas {--dry-run : Solo reporta sin escribir}';
     protected $description = 'Alinea tarifas_campo con el tarifario vigente de SIREB (espejo validado)';
 
-    public function handle(RecaudacionesApiClientInterface $client): int
+    public function handle(RecaudacionesApiClientInterface $client, ClasificadorTarifaSireb $clasificador): int
     {
         try {
             $catalogo = $client->listarCatalogo(pagina: 1, porPagina: 100);
         } catch (\Throwable $e) {
             $this->error('No se pudo obtener el catálogo de SIREB: '.$e->getMessage());
-
             return self::FAILURE;
         }
 
         $serviciosPorId = collect($catalogo)->keyBy('id');
         $dryRun = (bool) $this->option('dry-run');
         $filas = [];
-
-        $campos = CampoDeportivo::whereNotNull('servicio_sireb_id')
-            ->where('estado', 'activo')
-            ->get();
+        $campos = CampoDeportivo::whereNotNull('servicio_sireb_id')->where('estado', 'activo')->get();
 
         foreach ($campos as $campo) {
             $servicio = $serviciosPorId->get($campo->servicio_sireb_id);
-
             if (! $servicio) {
-                $filas[] = [$campo->codigo, '—', '—', '—', 'Servicio no encontrado en catálogo'];
+                $filas[] = [$campo->codigo, '—', '—', '—', '—', 'Servicio no encontrado'];
                 continue;
             }
-
             foreach ($servicio['tarifas'] ?? [] as $tarifaSireb) {
-                $tipo = $this->tipoDesdeEtiqueta($tarifaSireb['etiqueta'] ?? '');
-
-                if ($tipo === null) {
-                    $filas[] = [$campo->codigo, $tarifaSireb['etiqueta'], '—', $tarifaSireb['monto'], 'Etiqueta no reconocida (se ignora)'];
+                $clas = $clasificador->clasificar($tarifaSireb, $servicio);
+                $precioSireb = (float) ($tarifaSireb['monto'] ?? 0);
+                $tarifaSirebId = $tarifaSireb['id'] ?? null;
+                if ($tarifaSirebId === null) {
+                    $filas[] = [$campo->codigo, $tarifaSireb['etiqueta'] ?? '—', '—', $precioSireb, $clas->tipo->value, 'Sin tarifa_sireb_id'];
                     continue;
                 }
-
-                $precioSireb = (float) $tarifaSireb['monto'];
-
-                $local = TarifaCampo::where('campo_id', $campo->id)
-                    ->where('tipo_tarifa', $tipo)
-                    ->whereNull('vigente_hasta')
-                    ->first();
-
-                if ($local === null) {
-                    if (! $dryRun) {
-                        $this->crearVersion($campo, $tipo, $precioSireb, null);
-                    }
-                    $filas[] = [$campo->codigo, $tipo, '—', $precioSireb, $dryRun ? 'FALTANTE (dry-run)' : 'Creada desde SIREB'];
-                    continue;
+                $local = TarifaCampo::where('campo_id', $campo->id)->where('tarifa_sireb_id', $tarifaSirebId)->whereNull('vigente_hasta')->first();
+                $difiere = $local && (
+                    abs((float) $local->precio_por_hora - $precioSireb) > 0.005
+                    || $local->clasificacion !== $clas->tipo->value
+                    || ($local->perfil ?? null) !== $clas->perfil
+                );
+                $accion = match (true) {
+                    $local === null => $dryRun ? 'FALTANTE (dry-run)' : 'Creada desde SIREB',
+                    $difiere => $dryRun ? 'CAMBIA (dry-run)' : 'Nueva versión desde SIREB',
+                    default => 'OK',
+                };
+                if (! $dryRun && ($local === null || $difiere)) {
+                    $this->espejar($campo, $servicio, $tarifaSireb, $clas, $precioSireb, $local);
                 }
-
-                $precioLocal = (float) $local->precio_por_hora;
-
-                if (abs($precioLocal - $precioSireb) <= 0.005) {
-                    $filas[] = [$campo->codigo, $tipo, $precioLocal, $precioSireb, 'OK'];
-                    continue;
-                }
-
-                if (! $dryRun) {
-                    $this->crearVersion($campo, $tipo, $precioSireb, $local);
-                }
-
-                $filas[] = [
-                    $campo->codigo,
-                    $tipo,
-                    $precioLocal,
-                    $precioSireb,
-                    $dryRun ? 'DIFIERE (dry-run)' : 'Nueva versión desde SIREB',
-                ];
+                $filas[] = [$campo->codigo, $tarifaSireb['etiqueta'] ?? '—', $local ? (float) $local->precio_por_hora : '—', $precioSireb, $clas->tipo->value.($clas->perfil ? " ({$clas->perfil})" : ''), $accion];
             }
         }
 
-        $this->table(['Campo', 'Tipo', 'Precio local', 'Precio SIREB', 'Acción'], $filas);
-
-        Log::channel('sireb')->info('sireb:sincronizar-tarifas ejecutado', [
-            'dry_run' => $dryRun,
-            'campos_procesados' => $campos->count(),
-        ]);
-
+        $this->table(['Campo', 'Etiqueta SIREB', 'Precio local', 'Precio SIREB', 'Clasificación', 'Acción'], $filas);
+        $noClas = collect($filas)->filter(fn ($f) => str_starts_with((string) $f[4], 'no_clasificada'))->count();
+        if ($noClas > 0) {
+            $this->warn("{$noClas} tarifa(s) no_clasificada(s): no entran a grilla horaria.");
+        }
+        Log::channel('sireb')->info('sireb:sincronizar-tarifas', ['dry_run' => $dryRun, 'campos' => $campos->count(), 'no_clasificadas' => $noClas]);
         return self::SUCCESS;
     }
 
-    /**
-     * Cierra la versión vigente (si la hay) y crea la nueva.
-     *
-     * No se actualiza el precio en sitio: así el historial sigue mostrando
-     * cuánto costaba antes y desde cuándo rige el precio nuevo. creado_por
-     * va en null porque el precio lo define SIREB, no un funcionario.
-     */
-    private function crearVersion(
-        CampoDeportivo $campo,
-        string $tipo,
-        float $precio,
-        ?TarifaCampo $anterior,
-    ): TarifaCampo {
-        return DB::transaction(function () use ($campo, $tipo, $precio, $anterior): TarifaCampo {
-            $snapshotAnterior = $anterior?->only([
-                'id', 'tipo_tarifa', 'precio_por_hora', 'vigente_desde', 'vigente_hasta',
-            ]);
-
+    private function espejar(CampoDeportivo $campo, array $servicio, array $tarifaSireb, ClasificacionTarifa $clas, float $precio, ?TarifaCampo $anterior): TarifaCampo
+    {
+        return DB::transaction(function () use ($campo, $servicio, $tarifaSireb, $clas, $precio, $anterior): TarifaCampo {
+            $snapshot = $anterior?->only(['id', 'tipo_tarifa', 'clasificacion', 'perfil', 'precio_por_hora', 'vigente_desde', 'vigente_hasta', 'tarifario_estado', 'liquidable']);
             if ($anterior) {
                 $anterior->update(['vigente_hasta' => now()]);
             }
-
+            $tipoViejo = match ($clas->tipo) {
+                TipoTarifaSireb::Diurna => 'diurna',
+                TipoTarifaSireb::Nocturna => 'nocturna',
+                default => null,
+            };
+            $ahora = now();
             $nueva = TarifaCampo::create([
                 'campo_id' => $campo->id,
-                'tipo_tarifa' => $tipo,
+                'tarifa_sireb_id' => $tarifaSireb['id'],
+                'servicio_sireb_id' => $servicio['id'] ?? $campo->servicio_sireb_id,
+                'etiqueta_sireb' => $tarifaSireb['etiqueta'] ?? null,
+                'liquidable' => (bool) ($tarifaSireb['liquidable'] ?? true),
+                'tarifario_estado' => $tarifaSireb['tarifario_estado'] ?? null,
+                'estado_tarifa_sireb' => $tarifaSireb['estado'] ?? null,
+                'rango_desde' => $tarifaSireb['rango_desde'] ?? null,
+                'rango_hasta' => $tarifaSireb['rango_hasta'] ?? null,
+                'categorias_sireb' => $tarifaSireb['categorias'] ?? [],
+                'perfil' => $clas->perfil,
+                'clasificacion' => $clas->tipo->value,
+                'tipo_tarifa' => $tipoViejo,
                 'precio_por_hora' => $precio,
-                'vigente_desde' => now(),
+                'vigente_desde' => $ahora,
                 'vigente_hasta' => null,
+                'sincronizado_en' => $ahora,
                 'creado_por' => null,
             ]);
-
-            AuditoriaService::registrar(
-                tabla: 'tarifas_campo',
-                registroId: $nueva->id,
-                accion: 'sincronizar_tarifa_sireb',
-                usuarioId: null,
-                datosAnteriores: $snapshotAnterior,
-                datosNuevos: $nueva->only([
-                    'id', 'tipo_tarifa', 'precio_por_hora', 'vigente_desde', 'vigente_hasta',
-                ]),
-            );
-
+            AuditoriaService::registrar(tabla: 'tarifas_campo', registroId: $nueva->id, accion: 'sincronizar_tarifa_sireb', usuarioId: null, datosAnteriores: $snapshot, datosNuevos: $nueva->only(['id', 'tarifa_sireb_id', 'clasificacion', 'perfil', 'precio_por_hora', 'vigente_desde', 'vigente_hasta', 'tarifario_estado', 'liquidable', 'sincronizado_en']));
             return $nueva;
         });
-    }
-
-    private function tipoDesdeEtiqueta(string $etiqueta): ?string
-    {
-        $e = mb_strtolower($etiqueta);
-
-        return match (true) {
-            str_contains($e, 'nocturn') => 'nocturna',
-            str_contains($e, 'diurn') => 'diurna',
-            default => null,
-        };
     }
 }

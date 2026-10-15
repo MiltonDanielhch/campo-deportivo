@@ -9,6 +9,12 @@ const BASE = '/v1/campos-deportivos';
  * El precio lo define SIREB (fuente de verdad del contrato de recaudaciones)
  * y el backend lo espeja con `sireb:sincronizar-tarifas`. No existe método
  * para crear ni modificar tarifas desde el panel.
+ *
+ * El endpoint devuelve:
+ *  - activas horarias: diurna / nocturna / unica.
+ *  - no_horarias: tarifas con perfil o no clasificadas, espejadas desde SIREB.
+ *  - historial completo.
+ *  - sincronizado_en: última sincronización desde SIREB.
  */
 export const tarifasService = {
   /**

@@ -36,7 +36,6 @@ import type {
   CampoDeportivo,
   HistorialTarifas,
   TarifaCampo,
-  TipoTarifa,
 } from '@/types/parametricas';
 
 /**
@@ -58,7 +57,31 @@ const formatearFecha = (iso: string) =>
     timeStyle: 'short',
   });
 
-/** Fecha relativa corta: "hace 3 días", "hace 2 meses", "hoy" */
+type ClasificacionVisible = 'diurna' | 'nocturna' | 'unica';
+
+const clasDe = (tarifa: TarifaCampo): ClasificacionVisible | 'no_clasificada' | null =>
+  (tarifa.clasificacion ?? tarifa.tipo_tarifa ?? null) as
+    | ClasificacionVisible
+    | 'no_clasificada'
+    | null;
+
+const esTarifaHoraria = (tarifa: TarifaCampo): boolean =>
+  !tarifa.perfil && clasDe(tarifa) !== 'no_clasificada';
+
+const perfilLabel = (perfil?: string | null): string => {
+  switch (perfil) {
+    case 'mayor_12':
+      return 'Mayores de 12';
+    case 'menor_12':
+      return 'Menores de 12';
+    case 'institucion':
+      return 'Institución';
+    default:
+      return perfil ?? 'Perfil';
+  }
+};
+
+  /** Fecha relativa corta: "hace 3 días", "hace 2 meses", "hoy" */
 const fechaRelativa = (iso: string): string => {
   const diff = Date.now() - new Date(iso).getTime();
   const minutos = Math.floor(diff / 60_000);
@@ -74,7 +97,8 @@ const fechaRelativa = (iso: string): string => {
   return formatearFecha(iso);
 };
 
-const horaParaInput = (hora: string | undefined): string => {
+
+const horaParaInput = (hora: string | null | undefined): string => {
   if (!hora) return '18:00';
   return hora.substring(0, 5);
 };
@@ -184,22 +208,46 @@ function BarraDia24h({ horaCorte }: { horaCorte: string }) {
 // ─── Columna de tarifa (card con activa, form, historial con deltas) ──
 
 interface PropsColumna {
-  tipo: TipoTarifa;
+  tipo: ClasificacionVisible;
   activa: TarifaCampo | null;
   historial: TarifaCampo[];
 }
 
 function ColumnaTarifa({ tipo, activa, historial }: PropsColumna) {
   const esDiurna = tipo === 'diurna';
-  const Icono = esDiurna ? Sun : Lightbulb;
-  const colorIcono = esDiurna
-    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-    : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400';
-  const colorPunto = esDiurna ? 'bg-amber-500' : 'bg-indigo-500';
+  const esUnica = tipo === 'unica';
 
-  const labelTarifa = esDiurna ? 'regular' : 'con iluminación';
+  const Icono = esUnica ? Clock : esDiurna ? Sun : Lightbulb;
 
-  const historialFiltrado = historial.filter((t) => t.tipo_tarifa === tipo);
+  const colorIcono = esUnica
+    ? 'bg-primary/10 text-primary'
+    : esDiurna
+      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+      : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400';
+
+  const colorPunto = esUnica
+    ? 'bg-primary'
+    : esDiurna
+      ? 'bg-amber-500'
+      : 'bg-indigo-500';
+
+  const titulo = esUnica
+    ? 'Tarifa única'
+    : esDiurna
+      ? 'Tarifa regular'
+      : 'Tarifa con iluminación';
+
+  const descripcion = esUnica
+    ? 'Aplica a cualquier horario; SIREB la definió sin corte diurno/nocturno.'
+    : esDiurna
+      ? 'Bloques que inician antes de la hora de iluminación'
+      : 'Bloques que inician desde la hora de iluminación (luces encendidas)';
+
+  const labelTarifa = esUnica ? 'única' : esDiurna ? 'regular' : 'con iluminación';
+
+  const historialFiltrado = historial.filter(
+    (t) => esTarifaHoraria(t) && clasDe(t) === tipo,
+  );
 
   return (
     <Card className="flex flex-col overflow-hidden">
@@ -209,14 +257,8 @@ function ColumnaTarifa({ tipo, activa, historial }: PropsColumna) {
             <Icono className="size-5" />
           </div>
           <div className="flex-1">
-            <CardTitle className="text-lg">
-              {esDiurna ? 'Tarifa regular' : 'Tarifa con iluminación'}
-            </CardTitle>
-            <CardDescription className="text-xs">
-              {esDiurna
-                ? 'Bloques que inician antes de la hora de iluminación'
-                : 'Bloques que inician desde la hora de iluminación (luces encendidas)'}
-            </CardDescription>
+            <CardTitle className="text-lg">{titulo}</CardTitle>
+            <CardDescription className="text-xs">{descripcion}</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -226,9 +268,11 @@ function ColumnaTarifa({ tipo, activa, historial }: PropsColumna) {
         {activa ? (
           <div
             className={`rounded-xl border-2 p-5 ${
-              esDiurna
-                ? 'bg-amber-50/50 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30'
-                : 'bg-indigo-50/50 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30'
+              esUnica
+                ? 'bg-primary/5 border-primary/20 dark:bg-primary/10'
+                : esDiurna
+                  ? 'bg-amber-50/50 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30'
+                  : 'bg-indigo-50/50 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
@@ -240,15 +284,31 @@ function ColumnaTarifa({ tipo, activa, historial }: PropsColumna) {
                 Vigente
               </Badge>
             </div>
+
             <p className="text-3xl font-bold tracking-tight tabular-nums">
               {formatearPrecio(activa.precio_por_hora)}
               <span className="text-base font-medium text-muted-foreground ml-1">
                 /hora
               </span>
             </p>
+
+            {activa.etiqueta_sireb && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Etiqueta SIREB:{' '}
+                <strong className="text-foreground">{activa.etiqueta_sireb}</strong>
+              </p>
+            )}
+
             <p className="text-xs text-muted-foreground mt-2">
               Desde {formatearFecha(activa.vigente_desde)}
             </p>
+
+            {activa.sincronizado_en && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Espejada desde SIREB: {formatearFecha(activa.sincronizado_en)}
+              </p>
+            )}
+
             <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
               <Avatar className="size-4">
                 <AvatarFallback className="text-[9px] font-semibold">
@@ -262,10 +322,11 @@ function ColumnaTarifa({ tipo, activa, historial }: PropsColumna) {
           <div className="rounded-xl border-2 border-dashed border-border bg-muted/30 p-5 text-center">
             <Icono className="size-8 mx-auto mb-2 text-muted-foreground/50" />
             <p className="text-sm font-medium text-muted-foreground">
-              SIREB no tiene tarifa {labelTarifa} para este servicio
+              SIREB no tiene tarifa {labelTarifa} horaria para este servicio
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Los bloques de este tipo aparecerán deshabilitados en la web pública.
+              Si el servicio usa tarifa única o tarifas con perfil, revisá la
+              sección de tarifas espejadas no horarias.
             </p>
           </div>
         )}
@@ -370,8 +431,17 @@ function ColumnaTarifa({ tipo, activa, historial }: PropsColumna) {
                       <Clock className="size-3" />
                       <span>{fechaRelativa(tarifa.vigente_desde)}</span>
                       <span className="text-muted-foreground/50">·</span>
-                      <span className="truncate">{formatearFecha(tarifa.vigente_desde)}</span>
+                      <span className="truncate">
+                        {formatearFecha(tarifa.vigente_desde)}
+                      </span>
                     </p>
+
+                    {tarifa.etiqueta_sireb && (
+                      <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                        SIREB: {tarifa.etiqueta_sireb}
+                      </p>
+                    )}
+
                     <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
                       <Avatar className="size-4">
                         <AvatarFallback className="text-[9px] font-semibold">
@@ -514,6 +584,15 @@ export default function Tarifas() {
             </code>{' '}
             · {campo?.tipo_campo?.nombre ?? ''}
           </p>
+
+          {historial?.sincronizado_en && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Última sincronización desde SIREB:{' '}
+              <strong className="text-foreground">
+                {formatearFecha(historial.sincronizado_en)}
+              </strong>
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" className="rounded-full" asChild>
@@ -608,20 +687,120 @@ export default function Tarifas() {
         </CardContent>
       </Card>
 
-      {/* ─── Dos columnas: diurna y nocturna ─── */}
+      {/* ─── Columnas horarias: diurna, nocturna y unica si aplica ─── */}
       {historial ? (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <ColumnaTarifa
-            tipo="diurna"
-            activa={historial.activas.diurna}
-            historial={historial.historial}
-          />
-          <ColumnaTarifa
-            tipo="nocturna"
-            activa={historial.activas.nocturna}
-            historial={historial.historial}
-          />
-        </div>
+        <>
+          {(() => {
+            const noHorarias = historial.no_horarias ?? [];
+            const hayUnica =
+              Boolean(historial.activas.unica) ||
+              historial.historial.some(
+                (t) => esTarifaHoraria(t) && clasDe(t) === 'unica',
+              );
+
+            return (
+              <>
+                <div
+                  className={`grid grid-cols-1 gap-6 ${
+                    hayUnica ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+                  }`}
+                >
+                  <ColumnaTarifa
+                    tipo="diurna"
+                    activa={historial.activas.diurna}
+                    historial={historial.historial}
+                  />
+                  <ColumnaTarifa
+                    tipo="nocturna"
+                    activa={historial.activas.nocturna}
+                    historial={historial.historial}
+                  />
+
+                  {hayUnica && (
+                    <ColumnaTarifa
+                      tipo="unica"
+                      activa={historial.activas.unica ?? null}
+                      historial={historial.historial}
+                    />
+                  )}
+                </div>
+
+                {noHorarias.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <ShieldCheck className="size-4" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-base">
+                            Tarifas espejadas no horarias
+                          </CardTitle>
+                          <CardDescription className="text-xs">
+                            Estas tarifas existen en SIREB pero no se ofrecen en
+                            la grilla horaria de canchas. Sirven para escenarios
+                            con perfil (piscina, instituciones) o tarifas sin
+                            clasificación horaria fiable.
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {noHorarias.map((tarifa) => (
+                          <div
+                            key={tarifa.id}
+                            className="rounded-xl border bg-muted/30 p-4"
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <p className="text-sm font-semibold truncate">
+                                {tarifa.etiqueta_sireb ?? 'Tarifa sin etiqueta'}
+                              </p>
+                              <Badge variant="outline" className="shrink-0">
+                                {clasDe(tarifa) ?? 'no_clasificada'}
+                              </Badge>
+                            </div>
+
+                            <p className="text-2xl font-bold tabular-nums">
+                              {formatearPrecio(tarifa.precio_por_hora)}
+                            </p>
+
+                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              {tarifa.perfil && (
+                                <Badge variant="secondary">
+                                  {perfilLabel(tarifa.perfil)}
+                                </Badge>
+                              )}
+
+                              <Badge variant="outline">
+                                {tarifa.liquidable ? 'Liquidable' : 'No liquidable'}
+                              </Badge>
+
+                              <Badge variant="outline">
+                                {tarifa.tarifario_estado ?? 'sin estado'}
+                              </Badge>
+                            </div>
+
+                            <p className="text-xs text-muted-foreground mt-3">
+                              Desde {formatearFecha(tarifa.vigente_desde)}
+                            </p>
+
+                            {tarifa.sincronizado_en && (
+                              <p className="text-[11px] text-muted-foreground mt-1">
+                                Espejada: {formatearFecha(tarifa.sincronizado_en)}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            );
+          })()}
+        </>
       ) : null}
     </div>
   );

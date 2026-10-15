@@ -63,6 +63,18 @@ import { catalogoSirebService } from '@/services/catalogoSirebService';
 import type { CampoDeportivo, EstadoCampo } from '@/types/parametricas';
 import type { CatalogoSirebItem } from '@/services/catalogoSirebService';
 
+// ── Invariante de catálogo (decisión de arquitectura) ──────────────────────
+// SIREB/Paitití es la FUENTE DE VERDAD de servicios. La única vía legítima de
+// alta es DESDE el Catálogo SIREB (botón "+ Crear campo" por fila): pre-pobló
+// el código/servicio de recaudaciones y vos sumás solo lo local (coords, tipo,
+// horarios, hora nocturna). Un "+ Nuevo campo" libre crearía un campo que puede
+// no tener servicio en SIREB jamás → huérfano. Peor: hoy el path de reserva
+// (SolicitudReservaService::verificarFranjas) valida contra tarifa LOCAL, así
+// que un huérfano con tarifa local aparecería reservable con precio fantasma.
+// Se oculta hasta que el resolvedor dependa del mirror de SIREB. Regla:
+//   reservable ⟺ servicio_sireb_id con al menos una tarifa liquidable vigente.
+const PERMITIR_ALTA_LIBRE_DE_CAMPO = false;
+
 const TODOS = 'todos';
 
 const ESTADO_CONFIG: Record<
@@ -121,6 +133,11 @@ export default function CamposDeportivos() {
   const [valoresIniciales, setValoresIniciales] = useState<{
     codigo?: string;
     nombre?: string;
+    // FIX (Estrategia B): uuid del servicio SIREB de la fila del catálogo.
+    // Se lo pasamos al dialog para que, tras crear el campo, lo vincule con
+    // camposService.vincularSireb(id, uuid). Sin esto el dialog crea el campo
+    // y lo deja "Sin vincular" (consistente, pero no enlaza).
+    servicioSirebId?: string | null;
   } | null>(null);
 
   // ─── Vinculación SIREB ───
@@ -224,6 +241,10 @@ export default function CamposDeportivos() {
     setValoresIniciales({
       codigo: `SIR-${item.sireb.codigo}`,
       nombre: item.sireb.nombre,
+      // FIX (Estrategia B): llevamos el uuid del servicio para que el dialog
+      // vincule tras crear. item.sireb.id es el uuid de SIREB (el mismo que
+      // usa nombreServicioSireb para casar campo↔servicio).
+      servicioSirebId: item.sireb.id,
     });
     setDialogAbierto(true);
   };
@@ -231,6 +252,8 @@ export default function CamposDeportivos() {
   const abrirEditar = (campo: CampoDeportivo) => {
     setModo('editar');
     setCampoEditando(campo);
+    // FIX (Estrategia B): en editar NO hace falta pasar el uuid por acá: el
+    // dialog lo lee de campo.servicio_sireb_id. valoresIniciales queda null.
     setValoresIniciales(null);
     setDialogAbierto(true);
   };
@@ -311,7 +334,7 @@ export default function CamposDeportivos() {
 
   return (
     <div className="space-y-6 p-6 max-w-[1600px] mx-auto">
-      {/* ─── Header ─── */}
+      {/* ─── Header ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
@@ -357,10 +380,11 @@ export default function CamposDeportivos() {
             <RefreshCw className={`mr-2 h-4 w-4 ${sincronizando ? 'animate-spin' : ''}`} />
             {sincronizando ? 'Sincronizando...' : 'Sincronizar tarifas'}
           </Button>
-          <Button onClick={abrirNuevo} className="rounded-full shadow-md">
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo campo
-          </Button>
+          {PERMITIR_ALTA_LIBRE_DE_CAMPO && (
+            <Button onClick={abrirNuevo}>
+              <Plus className="mr-2 h-4 w-4" /> Nuevo campo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -407,7 +431,7 @@ export default function CamposDeportivos() {
         </div>
       </div>
 
-      {/* ─── Toolbar ─── */}
+      {/* ─── Toolbar ── */}
       <div className="flex flex-col sm:flex-row gap-3 rounded-xl border bg-card p-3">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

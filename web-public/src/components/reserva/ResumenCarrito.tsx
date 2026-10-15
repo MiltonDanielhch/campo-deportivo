@@ -88,13 +88,13 @@ export default function ResumenCarrito({
                       </div>
                       <div className="flex items-center gap-1 text-sm font-semibold text-slate-900 mt-0.5">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>
+                        <span title={etiquetaTarifa}>
                           {franja.horaInicio.slice(0, 5)}–{franja.horaFin.slice(0, 5)}
                         </span>
                         {/* Ícono de tipo de tarifa */}
                         <IconoTarifa
                           className={`w-3 h-3 ml-1 ${colorTarifa}`}
-                          title={etiquetaTarifa}
+
                         />
                       </div>
                     </div>

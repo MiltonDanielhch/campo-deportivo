@@ -69,12 +69,30 @@ class SolicitudReservaCobroTest extends TestCase
             ]);
         }
 
+        $this->campo->update([
+            'servicio_sireb_id' => '01a0f3e8-33bc-7130-9614-85a23ea26caf',
+            'servicio_sireb_codigo' => 'SEDEDE-CS1',
+        ]);
+
         TarifaCampo::create([
             'campo_id' => $this->campo->id,
+            'servicio_sireb_id' => '01a0f3e8-33bc-7130-9614-85a23ea26caf',
+            'tarifa_sireb_id' => '01a0f3f8-29e8-71f8-acca-a3c23716c69f',
+            'etiqueta_sireb' => 'Diurno',
+            'liquidable' => true,
+            'tarifario_estado' => 'vigente',
+            'estado_tarifa_sireb' => 'activo',
+            'rango_desde' => null,
+            'rango_hasta' => null,
+            'categorias_sireb' => [],
+            'perfil' => null,
+            'clasificacion' => 'diurna',
             'tipo_tarifa' => 'diurna',
-            'precio_por_hora' => 150,
+            'precio_por_hora' => 50.00,
             'vigente_desde' => now(),
-            'creado_por' => $admin->id,
+            'vigente_hasta' => null,
+            'sincronizado_en' => now(),
+            'creado_por' => null,
         ]);
     }
 

@@ -34,16 +34,29 @@ class RecaudacionesApiClientSimulado implements RecaudacionesApiClientInterface
 
     /** Catálogo fake: un servicio con tarifa diurna (150) y nocturna (200). */
     private const CATALOGO_FAKE = [
-        [
-            'id' => self::SERVICIO_ID,
-            'codigo' => 'SIM-CS1',
-            'nombre' => 'Cancha Simulada 1',
-            'unidad_medida' => 'hora',
-            'tarifas' => [
-                ['id' => self::TARIFA_DIURNA_ID, 'monto' => '150.00', 'etiqueta' => 'Diurno', 'categorias' => []],
-                ['id' => self::TARIFA_NOCTURNA_ID, 'monto' => '200.00', 'etiqueta' => 'Nocturno', 'categorias' => []],
-            ],
-        ],
+        ['id' => '01a12200-1793-72c5-8ed5-533f4f63aaec', 'codigo' => 'SEDEDE-CS3', 'nombre' => 'Cancha Sintetica N° 3', 'descripcion' => 'Cancha', 'unidad_medida' => 'hora', 'rubro' => 'alquiler_espacio', 'modo_tarifa' => 'fija', 'requiere_factura' => false, 'normativa_referencia' => null, 'plazo_pago_dias' => 3, 'estado' => 'activo', 'tarifas' => [
+            ['id' => '01a12205-e640-71de-9fbc-1ade3fc8c46b', 'monto' => '60.00', 'etiqueta' => null, 'rango_desde' => '0.00', 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+        ]],
+        ['id' => '01a0f3e8-33bc-7130-9614-85a23ea26caf', 'codigo' => 'SEDEDE-CS1', 'nombre' => 'Cancha Sintética N° 1', 'descripcion' => 'Alquiler de cancha sintética por hora', 'unidad_medida' => 'hora', 'rubro' => 'alquiler_espacio', 'modo_tarifa' => 'fija', 'requiere_factura' => false, 'normativa_referencia' => 'Resolución SEDEDE de aranceles', 'plazo_pago_dias' => 3, 'estado' => 'activo', 'tarifas' => [
+            ['id' => '01a0f3f8-29e8-71f8-acca-a3c23716c69f', 'monto' => '50.00', 'etiqueta' => 'Diurno', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+            ['id' => '01a0f3f8-6266-723a-bb4a-2e97a059c5a4', 'monto' => '100.00', 'etiqueta' => 'Nocturno', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+        ]],
+        ['id' => '01a0f3fc-b135-7119-9507-9546fcfcba7f', 'codigo' => 'SEDEDE-CS2', 'nombre' => 'Cancha Sintética N° 2', 'descripcion' => 'Alquiler de cancha sintética por hora', 'unidad_medida' => 'hora', 'rubro' => 'alquiler_espacio', 'modo_tarifa' => 'fija', 'requiere_factura' => false, 'normativa_referencia' => null, 'plazo_pago_dias' => 3, 'estado' => 'activo', 'tarifas' => [
+            ['id' => '01a0f3fe-c387-7105-986b-07312f5a13f6', 'monto' => '50.00', 'etiqueta' => 'Diurno', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+            ['id' => '01a0f3fe-f94e-737e-96c5-a8d36e6d498d', 'monto' => '100.00', 'etiqueta' => 'Nocturno', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+        ]],
+        ['id' => '01a0f3fd-a930-7389-b094-bb9847f4774d', 'codigo' => 'SEDEDE-EGM-ENTREN', 'nombre' => 'Estadio Gran Mamoré - Alquiler', 'descripcion' => 'Campo de juego para  fútbol', 'unidad_medida' => 'hora', 'rubro' => 'alquiler_espacio', 'modo_tarifa' => 'fija', 'requiere_factura' => false, 'normativa_referencia' => null, 'plazo_pago_dias' => 3, 'estado' => 'activo', 'tarifas' => [
+            ['id' => '01a0f3ff-412a-73fa-b0cd-7fcbbce1ab11', 'monto' => '100.00', 'etiqueta' => 'Diurno', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+            ['id' => '01a0f3ff-75cc-702d-9e74-decc6bcd6acd', 'monto' => '400.00', 'etiqueta' => 'Nocturno', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+        ]],
+        ['id' => '01a0fe36-def0-7064-8bb9-7cb18b626c69', 'codigo' => '0005', 'nombre' => 'H. PISCINA OLIMPICA', 'descripcion' => 'Bañista mayores de 12 años', 'unidad_medida' => 'hora', 'rubro' => 'alquiler_espacio', 'modo_tarifa' => 'fija', 'requiere_factura' => false, 'normativa_referencia' => null, 'plazo_pago_dias' => 3, 'estado' => 'activo', 'tarifas' => [
+            ['id' => '01a13c1b-b704-7235-a650-2f7611a63da9', 'monto' => '10.00', 'etiqueta' => 'Bañista mayores de 12 (diurno)', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+            ['id' => '01a13c1b-fe9e-73ab-8f0b-124275fc85e0', 'monto' => '15.00', 'etiqueta' => 'Bañista mayores de 12 (nocturno)', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+            ['id' => '01a13c1c-4392-70ba-948b-17ff44d0d705', 'monto' => '10.00', 'etiqueta' => 'Bañista menores de 12 (diurno)', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+            ['id' => '01a13c1c-cb41-7274-9bae-b6faaff072c2', 'monto' => '10.00', 'etiqueta' => 'Bañista menores de 12 (nocturno)', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+            ['id' => '01a13c1d-9b62-7269-9a7e-c5832d60134e', 'monto' => '20.00', 'etiqueta' => 'Institución (diurno)', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+            ['id' => '01a13c1d-d53d-723c-9bdc-cd112649aa86', 'monto' => '30.00', 'etiqueta' => 'Institución (nocturno)', 'rango_desde' => null, 'rango_hasta' => null, 'sucursal_id' => null, 'estado' => 'activo', 'tarifario_estado' => 'vigente', 'liquidable' => true, 'categorias' => []],
+        ]],
     ];
 
     // ── Legacy (Módulo 4): se conserva por compatibilidad, ya no lo usa el service ──
@@ -198,7 +211,7 @@ class RecaudacionesApiClientSimulado implements RecaudacionesApiClientInterface
             'items' => $itemsRespuesta,
         ];
     }
-    
+
     public function consultarLiquidacionPorCodigo(string $codigoPublico): ?array
     {
         $estado = config('services.recaudaciones.simulado_liquidacion_estado', 'pendiente');

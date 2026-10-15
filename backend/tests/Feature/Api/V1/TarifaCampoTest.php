@@ -122,26 +122,64 @@ class TarifaCampoTest extends TestCase
         $activas = TarifaCampo::where('campo_id', $this->campo->id)
             ->whereNull('vigente_hasta')
             ->get()
-            ->keyBy('tipo_tarifa');
+            ->keyBy('tarifa_sireb_id');
 
         $this->assertCount(2, $activas);
-        $this->assertEquals(50.0, (float) $activas['diurna']->precio_por_hora);
-        $this->assertEquals(100.0, (float) $activas['nocturna']->precio_por_hora);
+
+        $diurna = $activas['bbbbbbbb-0000-4000-8000-000000000001'];
+        $nocturna = $activas['bbbbbbbb-0000-4000-8000-000000000002'];
+
+        $this->assertEquals(50.0, (float) $diurna->precio_por_hora);
+        $this->assertEquals(100.0, (float) $nocturna->precio_por_hora);
+
+        $this->assertSame('diurna', $diurna->clasificacion);
+        $this->assertSame('nocturna', $nocturna->clasificacion);
+
+        $this->assertSame('Diurno', $diurna->etiqueta_sireb);
+        $this->assertSame('Nocturno', $nocturna->etiqueta_sireb);
+
+        $this->assertTrue($diurna->liquidable);
+        $this->assertTrue($nocturna->liquidable);
+
+        $this->assertSame('vigente', $diurna->tarifario_estado);
+        $this->assertSame('vigente', $nocturna->tarifario_estado);
+
+        $this->assertSame(self::SERVICIO_SIREB_ID, $diurna->servicio_sireb_id);
+        $this->assertSame(self::SERVICIO_SIREB_ID, $nocturna->servicio_sireb_id);
+
+        // Compatibilidad con lectores viejos.
+        $this->assertSame('diurna', $diurna->tipo_tarifa);
+        $this->assertSame('nocturna', $nocturna->tipo_tarifa);
 
         // Nada de lo que escribe la sincronización tiene funcionario creador.
-        $this->assertNull($activas['diurna']->creado_por);
-        $this->assertNull($activas['nocturna']->creado_por);
+        $this->assertNull($diurna->creado_por);
+        $this->assertNull($nocturna->creado_por);
     }
 
     public function test_sincronizacion_versiona_el_cambio_de_precio(): void
     {
-        // Precio vigente que quedó de una carga vieja, con funcionario.
+        $tarifaSirebId = 'bbbbbbbb-0000-4000-8000-000000000001';
+
+        // Precio vigente que quedó de una carga vieja, pero ahora como espejo SIREB.
+        // El sync nuevo versionea por tarifa_sireb_id, no por tipo_tarifa.
         $anterior = TarifaCampo::create([
             'campo_id' => $this->campo->id,
+            'servicio_sireb_id' => self::SERVICIO_SIREB_ID,
+            'tarifa_sireb_id' => $tarifaSirebId,
+            'etiqueta_sireb' => 'Diurno',
+            'liquidable' => true,
+            'tarifario_estado' => 'vigente',
+            'estado_tarifa_sireb' => 'activo',
+            'rango_desde' => null,
+            'rango_hasta' => null,
+            'categorias_sireb' => [],
+            'perfil' => null,
+            'clasificacion' => 'diurna',
             'tipo_tarifa' => 'diurna',
             'precio_por_hora' => 50.00,
             'vigente_desde' => now()->subDay(),
             'vigente_hasta' => null,
+            'sincronizado_en' => now()->subDay(),
             'creado_por' => $this->admin->id,
         ]);
 
@@ -154,13 +192,18 @@ class TarifaCampoTest extends TestCase
         $this->assertEquals(50.0, (float) $anterior->fresh()->precio_por_hora);
 
         $nueva = TarifaCampo::where('campo_id', $this->campo->id)
-            ->where('tipo_tarifa', 'diurna')
+            ->where('tarifa_sireb_id', $tarifaSirebId)
             ->whereNull('vigente_hasta')
             ->first();
 
         $this->assertNotNull($nueva);
         $this->assertNotSame($anterior->id, $nueva->id);
         $this->assertEquals(75.0, (float) $nueva->precio_por_hora);
+
+        $this->assertSame('diurna', $nueva->clasificacion);
+        $this->assertSame('Diurno', $nueva->etiqueta_sireb);
+        $this->assertTrue($nueva->liquidable);
+        $this->assertSame('vigente', $nueva->tarifario_estado);
         $this->assertNull($nueva->creado_por);
 
         // Queda la traza de auditoría, sin usuario: la hizo el sistema.
@@ -186,29 +229,78 @@ class TarifaCampoTest extends TestCase
 
     // ─── Reglas de la tabla ──────────────────────────────────────────────
 
-    public function test_indice_unico_parcial_impide_dos_tarifas_activas(): void
+    public function test_indice_unico_parcial_impide_dos_activas_de_la_misma_tarifa_sireb(): void
     {
-        // Intentar insertar dos tarifas activas saltándose el Service
-        // Debe fallar por el índice único parcial uq_tarifa_activa_por_tipo
         $this->expectException(\Illuminate\Database\QueryException::class);
 
-        TarifaCampo::create([
+        $datos = [
             'campo_id' => $this->campo->id,
+            'servicio_sireb_id' => self::SERVICIO_SIREB_ID,
+            'tarifa_sireb_id' => 'cccccccc-0000-4000-8000-000000000001',
+            'etiqueta_sireb' => 'Diurno',
+            'liquidable' => true,
+            'tarifario_estado' => 'vigente',
+            'estado_tarifa_sireb' => 'activo',
+            'rango_desde' => null,
+            'rango_hasta' => null,
+            'categorias_sireb' => [],
+            'perfil' => null,
+            'clasificacion' => 'diurna',
             'tipo_tarifa' => 'diurna',
             'precio_por_hora' => 100.00,
             'vigente_desde' => now(),
             'vigente_hasta' => null,
+            'sincronizado_en' => now(),
             'creado_por' => $this->admin->id,
-        ]);
+        ];
 
-        TarifaCampo::create([
-            'campo_id' => $this->campo->id,
-            'tipo_tarifa' => 'diurna',
+        TarifaCampo::create($datos);
+
+        // Misma campo_id + misma tarifa_sireb_id + vigente_hasta null → violación.
+        TarifaCampo::create(array_merge($datos, [
             'precio_por_hora' => 150.00,
+        ]));
+    }
+
+    public function test_tarifas_sireb_distintas_si_pueden_estar_activas_a_la_vez(): void
+    {
+        $base = [
+            'campo_id' => $this->campo->id,
+            'servicio_sireb_id' => self::SERVICIO_SIREB_ID,
+            'liquidable' => true,
+            'tarifario_estado' => 'vigente',
+            'estado_tarifa_sireb' => 'activo',
+            'rango_desde' => null,
+            'rango_hasta' => null,
+            'categorias_sireb' => [],
+            'perfil' => null,
             'vigente_desde' => now(),
-            'vigente_hasta' => null, // Ambas activas → violación del índice
-            'creado_por' => $this->admin->id,
-        ]);
+            'vigente_hasta' => null,
+            'sincronizado_en' => now(),
+            'creado_por' => null,
+        ];
+
+        TarifaCampo::create(array_merge($base, [
+            'tarifa_sireb_id' => 'dddddddd-0000-4000-8000-000000000001',
+            'etiqueta_sireb' => 'Diurno',
+            'clasificacion' => 'diurna',
+            'tipo_tarifa' => 'diurna',
+            'precio_por_hora' => 50.00,
+        ]));
+
+        TarifaCampo::create(array_merge($base, [
+            'tarifa_sireb_id' => 'dddddddd-0000-4000-8000-000000000002',
+            'etiqueta_sireb' => 'Nocturno',
+            'clasificacion' => 'nocturna',
+            'tipo_tarifa' => 'nocturna',
+            'precio_por_hora' => 100.00,
+        ]));
+
+        $activas = TarifaCampo::where('campo_id', $this->campo->id)
+            ->whereNull('vigente_hasta')
+            ->count();
+
+        $this->assertSame(2, $activas);
     }
 
     public function test_cambiar_estado_de_campo_registra_auditoria(): void
@@ -238,6 +330,10 @@ class TarifaCampoTest extends TestCase
     /**
      * Reemplaza el cliente de recaudaciones por uno que devuelve el catálogo
      * indicado para el servicio vinculado al campo de prueba.
+     *
+     * IMPORTANTE: ahora devuelve el shape real de SIREB, incluyendo
+     * liquidable, tarifario_estado, rango y categorias, porque el sync nuevo
+     * espeja esas señales y el resolvedor las exige.
      */
     private function simularCatalogoSireb(float $diurna, float $nocturna): void
     {
@@ -245,10 +341,39 @@ class TarifaCampoTest extends TestCase
             'id' => self::SERVICIO_SIREB_ID,
             'codigo' => 'SEDEDE-CS1',
             'nombre' => 'Cancha Sintética N° 1',
+            'descripcion' => 'Alquiler de cancha sintética por hora',
+            'unidad_medida' => 'hora',
+            'rubro' => 'alquiler_espacio',
+            'modo_tarifa' => 'fija',
+            'requiere_factura' => false,
+            'normativa_referencia' => 'Resolución SEDEDE de aranceles',
+            'plazo_pago_dias' => 3,
             'estado' => 'activo',
             'tarifas' => [
-                ['id' => 'bbbbbbbb-0000-4000-8000-000000000001', 'etiqueta' => 'Diurno', 'monto' => number_format($diurna, 2, '.', '')],
-                ['id' => 'bbbbbbbb-0000-4000-8000-000000000002', 'etiqueta' => 'Nocturno', 'monto' => number_format($nocturna, 2, '.', '')],
+                [
+                    'id' => 'bbbbbbbb-0000-4000-8000-000000000001',
+                    'monto' => number_format($diurna, 2, '.', ''),
+                    'etiqueta' => 'Diurno',
+                    'rango_desde' => null,
+                    'rango_hasta' => null,
+                    'sucursal_id' => null,
+                    'estado' => 'activo',
+                    'tarifario_estado' => 'vigente',
+                    'liquidable' => true,
+                    'categorias' => [],
+                ],
+                [
+                    'id' => 'bbbbbbbb-0000-4000-8000-000000000002',
+                    'monto' => number_format($nocturna, 2, '.', ''),
+                    'etiqueta' => 'Nocturno',
+                    'rango_desde' => null,
+                    'rango_hasta' => null,
+                    'sucursal_id' => null,
+                    'estado' => 'activo',
+                    'tarifario_estado' => 'vigente',
+                    'liquidable' => true,
+                    'categorias' => [],
+                ],
             ],
         ];
 

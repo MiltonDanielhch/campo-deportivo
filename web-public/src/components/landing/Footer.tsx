@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MapPinned, Mail } from 'lucide-react';
+import { Mail } from 'lucide-react';
 
 export default function Footer() {
   return (

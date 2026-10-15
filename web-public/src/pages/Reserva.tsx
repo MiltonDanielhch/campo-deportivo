@@ -18,7 +18,7 @@ import StepsReserva from '@/components/layout/StepsReserva';
 
 export default function Reserva() {
   const navigate = useNavigate();
-  const { franjas, limpiar } = useCarritoStore();
+  const { franjas } = useCarritoStore();
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

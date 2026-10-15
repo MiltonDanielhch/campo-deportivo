@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import {
@@ -8,6 +8,7 @@ import {
   Loader2,
   XCircle,
   ArrowRight,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,12 +19,16 @@ import type { EstadoSolicitudPublico } from '@/types/reserva';
 import ComprobantePDF from '@/components/comprobante/ComprobantePDF';
 import EstadoReserva from '@/components/comprobante/EstadoReserva';
 
+const POLLING_INTERVAL_MS = 10000; // Verificar cada 10 segundos
+
 export default function ConsultarEstado() {
   const [codigo, setCodigo] = useState('');
   const [datos, setDatos] = useState<EstadoSolicitudPublico | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
   const [yaConsulto, setYaConsulto] = useState(false);
+  const [pollingActivo, setPollingActivo] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const consultar = async () => {
     const limpio = codigo.trim().toUpperCase();
@@ -49,6 +54,57 @@ export default function ConsultarEstado() {
       setCargando(false);
     }
   };
+
+  // Configurar polling cuando la solicitud está pendiente
+  useEffect(() => {
+    // Solo hacer polling si hay datos, está pendiente, y no expiró
+    if (!datos || datos.estado !== 'pendiente') {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+        setPollingActivo(false);
+      }
+      return;
+    }
+
+    // Verificar si aún no expiró
+    if (datos.expira_en && new Date(datos.expira_en) < new Date()) {
+      return;
+    }
+
+    // Iniciar polling
+    if (!pollingRef.current) {
+      setPollingActivo(true);
+      pollingRef.current = setInterval(async () => {
+        try {
+          const res = await api.get(`/public/solicitudes-reserva/${codigo.trim().toUpperCase()}/estado`);
+          const nuevosDatos = res.data.data;
+
+          setDatos(nuevosDatos);
+
+          // Si cambió a confirmada, detener polling
+          if (nuevosDatos.estado === 'confirmada') {
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current);
+              pollingRef.current = null;
+              setPollingActivo(false);
+            }
+          }
+        } catch (err) {
+          // Silenciar errores de polling para no interrumpir al usuario
+          console.error('Error en polling de estado:', err);
+        }
+      }, POLLING_INTERVAL_MS);
+    }
+
+    // Cleanup
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [datos, codigo]);
 
   return (
     <>
@@ -175,6 +231,14 @@ export default function ConsultarEstado() {
 
           {datos && (
             <div className="space-y-6">
+              {/* Indicador de polling activo */}
+              {pollingActivo && datos.estado === 'pendiente' && (
+                <div className="flex items-center gap-2 text-sm text-teal-700 bg-teal-50 px-4 py-2 rounded-lg border border-teal-200">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Verificando estado de pago automáticamente...</span>
+                </div>
+              )}
+
               <EstadoReserva
                 estado={datos.estado}
                 montoTotal={datos.monto_total}
@@ -182,6 +246,31 @@ export default function ConsultarEstado() {
                 codigoSeguimiento={datos.codigo_seguimiento}
                 mostrarAcciones
               />
+
+              {/* Botón para refrescar manualmente */}
+              {datos.estado === 'pendiente' && (
+                <div className="text-center">
+                  <Button
+                    onClick={consultar}
+                    variant="outline"
+                    size="sm"
+                    disabled={cargando}
+                    className="rounded-full"
+                  >
+                    {cargando ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Verificando...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Verificar estado ahora
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
 
               {datos.estado === 'confirmada' && (
                 <>

@@ -7,6 +7,7 @@ import {
   ExternalLink,
   FileText,
   ImageIcon,
+  Lock, // readonly SIREB: candadito en código/nombre
   MapPin,
   Trash2,
   Upload,
@@ -30,7 +31,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import {
   Table,
@@ -76,7 +76,17 @@ interface CampoFormDialogProps {
    * Se usa, por ejemplo, para dar de alta el campo local de un servicio
    * del catálogo de SIREB que todavía no existe en el satélite.
    */
-  valoresIniciales?: { codigo?: string; nombre?: string } | null;
+  valoresIniciales?: {
+    codigo?: string;
+    nombre?: string;
+    /**
+     * FIX (Estrategia B): UUID del servicio SIREB de la fila del catálogo.
+     * Si viene, el campo se CREA y luego se VINCULA en dos pasos, sin tocar
+     * el backend (camposService.vincularSireb ya existe y apunta al PATCH
+     * /vinculo-sireb). La pantalla debe pasarlo en abrirNuevoDesdeSireb.
+     */
+    servicioSirebId?: string | null;
+  } | null;
   onGuardado: () => void;
 }
 
@@ -132,6 +142,8 @@ export default function CampoFormDialog({
   const [latitud, setLatitud] = useState(LAT_TRINIDAD);
   const [longitud, setLongitud] = useState(LNG_TRINIDAD);
   const [horarios, setHorarios] = useState<FilaHorario[]>(horariosIniciales());
+  // FIX (Estrategia B): uuid del servicio SIREB a vincular tras crear.
+  const [servicioSirebId, setServicioSirebId] = useState('');
 
   // ─── Imagen ───
   const [imagenFile, setImagenFile] = useState<File | null>(null);
@@ -151,15 +163,18 @@ export default function CampoFormDialog({
     setImagenFile(null);
     setQuitarImagen(false);
     setDragOver(false);
+    // FIX carrera: arrancá el tipo vacío en TODA apertura, para no heredar el
+    // uuid de una apertura anterior (Radix pinta el value crudo si no hay item).
+    setTipoCampoId('');
 
     if (modo === 'editar' && campo) {
-      setTipoCampoId(campo.tipo_campo_id);
       setCodigo(campo.codigo);
       setNombre(campo.nombre);
       setDireccion(campo.direccion);
       setLatitud(String(campo.latitud));
       setLongitud(String(campo.longitud));
       setImagenPersistida(campo.imagen_url ?? null);
+      setServicioSirebId(campo.servicio_sireb_id ?? '');
 
       if (campo.horarios_atencion?.length) {
         setHorarios(
@@ -181,7 +196,6 @@ export default function CampoFormDialog({
         setHorarios(horariosIniciales());
       }
     } else {
-      setTipoCampoId('');
       setCodigo(valoresIniciales?.codigo ?? '');
       setNombre(valoresIniciales?.nombre ?? '');
       setDireccion('');
@@ -189,12 +203,25 @@ export default function CampoFormDialog({
       setLongitud(LNG_TRINIDAD);
       setImagenPersistida(null);
       setHorarios(horariosIniciales());
+      setServicioSirebId(valoresIniciales?.servicioSirebId ?? '');
     }
 
+    // FIX carrera: el tipo del campo en edición se setea SOLO DESPUÉS de cargar
+    // la lista. Así siempre existe el <SelectItem> que le da el label y Radix
+    // nunca pinta el UUID crudo (el bug que veías en pantalla).
     tiposCampoService
       .listarActivos()
-      .then(setTiposActivos)
-      .catch(() => toast.error('No se pudieron cargar los tipos de campo'));
+      .then((tipos) => {
+        setTiposActivos(tipos);
+        if (modo === 'editar' && campo) {
+          setTipoCampoId(campo.tipo_campo_id);
+        }
+      })
+      .catch(() => {
+        toast.error('No se pudieron cargar los tipos de campo');
+        // Sin lista no hay label fiable: dejamos vacío (placeholder) y el
+        // guardado pedirá elegir tipo, en vez de mandar un tipo no verificado.
+      });
   }, [open, modo, campo, valoresIniciales]);
 
   // ─── Imagen: helpers ───
@@ -229,6 +256,29 @@ export default function CampoFormDialog({
     setQuitarImagen(false);
   };
 
+  // FIX carrera (pieza 2): ítem "sombra" para el tipo del campo en edición
+  // aunque ya esté inactivo (no vendría en /activos). Evita que Radix pinte el
+  // uuid si el tipo fue inhabilitado pero el campo todavía lo referencia.
+  const opcionesTipo = useMemo(() => {
+    const base = tiposActivos.map((t) => ({
+      id: t.id,
+      nombre: t.nombre,
+      _off: false,
+    }));
+    if (
+      modo === 'editar' &&
+      campo?.tipo_campo &&
+      !tiposActivos.some((t) => t.id === campo.tipo_campo!.id)
+    ) {
+      base.unshift({
+        id: campo.tipo_campo.id,
+        nombre: campo.tipo_campo.nombre,
+        _off: true,
+      });
+    }
+    return base;
+  }, [tiposActivos, modo, campo]);
+
   // ─── Horarios: acciones rápidas ───
   const diasHabilitados = horarios.filter((h) => h.habilitado).length;
 
@@ -254,6 +304,16 @@ export default function CampoFormDialog({
       prev.map((h) => (h.dia === dia ? { ...h, ...cambios } : h)),
     );
   };
+
+  // readonly SIREB: lo que sabe el servicio de recaudaciones (código, nombre)
+  // va frozen; lo que solo sabe tu sistema (dirección, coords, tipo, horarios,
+  // foto, hora-noche) queda editable. En 'crear' el único camino vivo es el
+  // Catálogo SIREB (botón global oculto), así que valoresIniciales.codigo SIEMPRE
+  // espeja a SIREB. En 'editar' miramos el vínculo real del campo.
+  const espejaSireb =
+    modo === 'editar'
+      ? Boolean(campo?.servicio_sireb_id)
+      : Boolean(valoresIniciales?.codigo);
 
   // ─── Submit ───
   const handleSubmit = async (e: React.FormEvent) => {
@@ -284,8 +344,8 @@ export default function CampoFormDialog({
         longitud: parseFloat(longitud),
         horarios: habilitados.map((h) => ({
           dia_semana: h.dia,
-          hora_apertura: h.apertura,
-          hora_cierre: h.cierre,
+          hora_apertura: h.apertura, // ← h.apertura, NO h.hora_apertura
+          hora_cierre: h.cierre,     // ← h.cierre,   NO h.hora_cierre
         })),
         imagen: imagenFile ?? undefined,
         quitar_imagen: quitarImagen && !imagenFile ? true : undefined,
@@ -295,8 +355,26 @@ export default function CampoFormDialog({
         await camposService.actualizar(campo.id, payload);
         toast.success('Campo deportivo actualizado');
       } else {
-        await camposService.crear(payload);
-        toast.success('Campo deportivo creado con sus horarios de atención');
+        const nuevo = await camposService.crear(payload);
+
+        // FIX (Estrategia B): crear + vincular en dos pasos, frontend-only.
+        // El uuid viene de la fila del catálogo (valoresIniciales.servicioSirebId).
+        if (servicioSirebId) {
+          try {
+            await camposService.vincularSireb(nuevo.id, servicioSirebId);
+            toast.success('Campo deportivo creado y vinculado a SIREB');
+          } catch {
+            // Opción 1 (decisión de diseño): el campo YA existe con este código;
+            // reintentar crear daría duplicado. Cerramos con warning y dejamos
+            // que el usuario vincule manualmente desde la fila (el parent ya
+            // sabe mostrar "Sin vincular" y tiene el menú "Vincular a SIREB").
+            toast.warning(
+              'Campo creado, pero no se pudo vincular a SIREB. Vinculalo manualmente desde la fila del catálogo.',
+            );
+          }
+        } else {
+          toast.success('Campo deportivo creado con sus horarios de atención');
+        }
       }
 
       onOpenChange(false);
@@ -325,8 +403,12 @@ export default function CampoFormDialog({
             </DialogTitle>
             <DialogDescription className="text-xs">
               {modo === 'editar'
-                ? 'Modificá datos, foto, ubicación y horarios. Los cambios se aplican al guardar.'
-                : 'El campo y sus horarios se crean en una única transacción.'}
+                ? espejaSireb
+                  ? 'Datos locales editables. Código y nombre espejan al servicio SIREB y no se modifican acá.'
+                  : 'Modificá datos, foto, ubicación y horarios. Los cambios se aplican al guardar.'
+                : espejaSireb
+                  ? `Alta del campo local para el servicio SIREB ${codigo}. Completá tipo, dirección, ubicación y horarios; el cobro lo define SIREB.`
+                  : 'El campo y sus horarios se crean en una única transacción.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -457,12 +539,25 @@ export default function CampoFormDialog({
                   </Label>
                   <Select value={tipoCampoId} onValueChange={setTipoCampoId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un tipo" />
+                      <span className={tipoCampoId ? '' : 'text-muted-foreground'}>
+                        {tipoCampoId
+                          ? (opcionesTipo.find((t) => t.id === tipoCampoId)?.nombre ?? tipoCampoId)
+                          : 'Selecciona un tipo'}
+                      </span>
                     </SelectTrigger>
                     <SelectContent>
-                      {tiposActivos.map((tipo) => (
-                        <SelectItem key={tipo.id} value={tipo.id}>
+                      {opcionesTipo.map((tipo) => (
+                        <SelectItem
+                          key={tipo.id}
+                          value={tipo.id}
+                          disabled={tipo._off}
+                        >
                           {tipo.nombre}
+                          {tipo._off && (
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              (inactivo)
+                            </span>
+                          )}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -472,32 +567,61 @@ export default function CampoFormDialog({
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold">
+                  <Label className="flex items-center gap-1.5 text-xs font-semibold">
                     Código <span className="text-destructive">*</span>
+                    {espejaSireb && (
+                      <Badge variant="secondary" className="ml-1 gap-1 text-[10px] font-normal">
+                        <Lock className="size-3" /> SIREB
+                      </Badge>
+                    )}
                   </Label>
                   <Input
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value)}
                     placeholder="CD-001"
-                    className="font-mono uppercase"
+                    readOnly={espejaSireb}
+                    className={
+                      espejaSireb
+                        ? 'bg-muted font-mono uppercase text-muted-foreground'
+                        : 'font-mono uppercase'
+                    }
                     required
                   />
-                  {errores.codigo && (
-                    <p className="text-xs text-destructive">{errores.codigo[0]}</p>
+                  {espejaSireb ? (
+                    <p className="text-xs text-muted-foreground">
+                      Traído del catálogo SIREB · no editable.
+                    </p>
+                  ) : (
+                    errores.codigo && (
+                      <p className="text-xs text-destructive">{errores.codigo[0]}</p>
+                    )
                   )}
                 </div>
                 <div className="space-y-2 sm:col-span-2">
-                  <Label className="text-xs font-semibold">
+                  <Label className="flex items-center gap-1.5 text-xs font-semibold">
                     Nombre <span className="text-destructive">*</span>
+                    {espejaSireb && (
+                      <Badge variant="secondary" className="ml-1 gap-1 text-[10px] font-normal">
+                        <Lock className="size-3" /> SIREB
+                      </Badge>
+                    )}
                   </Label>
                   <Input
                     value={nombre}
                     onChange={(e) => setNombre(e.target.value)}
                     placeholder="Cancha Central"
+                    readOnly={espejaSireb}
+                    className={espejaSireb ? 'bg-muted text-muted-foreground' : ''}
                     required
                   />
-                  {errores.nombre && (
-                    <p className="text-xs text-destructive">{errores.nombre[0]}</p>
+                  {espejaSireb ? (
+                    <p className="text-xs text-muted-foreground">
+                      Espeja al servicio SIREB · se corrige en recaudaciones, no acá.
+                    </p>
+                  ) : (
+                    errores.nombre && (
+                      <p className="text-xs text-destructive">{errores.nombre[0]}</p>
+                    )
                   )}
                 </div>
                 <div className="space-y-2 sm:col-span-2">

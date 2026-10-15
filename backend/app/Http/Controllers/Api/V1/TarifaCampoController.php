@@ -21,29 +21,16 @@ class TarifaCampoController extends Controller
         private TarifaCampoService $service
     ) {}
 
-    /**
+        /**
      * GET /api/v1/campos-deportivos/{campoDeportivo}/tarifas
-     * Historial + tarifas activas (diurna y nocturna) + hora de corte.
+     *
+     * Historial + tarifas activas horarias + tarifas espejadas no horarias
+     * + última sincronización desde SIREB.
      */
     public function historial(CampoDeportivo $campoDeportivo): JsonResponse
     {
-        $activas = $this->service->tarifasActivas($campoDeportivo);
-        $historial = $this->service->historial($campoDeportivo);
-
-        // Cargar la relación en ambas activas (si existen)
-        foreach ($activas as $tarifa) {
-            $tarifa?->load('creadoPor:id,nombre_completo');
-        }
-
         return response()->json([
-            'data' => [
-                'hora_inicio_noche' => $campoDeportivo->hora_inicio_noche,
-                'activas' => [
-                    'diurna' => $activas['diurna'],
-                    'nocturna' => $activas['nocturna'],
-                ],
-                'historial' => $historial,
-            ],
+            'data' => $this->service->panel($campoDeportivo),
         ]);
     }
 }

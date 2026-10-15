@@ -7,6 +7,7 @@ use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Models\CampoDeportivo;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use App\Models\TarifaCampo;
 
 /**
  * Resuelve tarifa_id de SIREB para un campo + hora dados.
@@ -34,43 +35,25 @@ class CatalogoSirebService
      * @throws \RuntimeException si el campo no tiene servicio_sireb_id mapeado
      * @throws \RuntimeException si no existe la tarifa diurna/nocturna
      */
-    public function resolverTarifaId(CampoDeportivo $campo, string $horaInicio): string
+        public function resolverTarifaId(CampoDeportivo $campo, string $horaInicio): string
     {
         if (empty($campo->servicio_sireb_id)) {
             throw new \RuntimeException(
                 "Campo {$campo->codigo} no tiene servicio_sireb_id mapeado. " .
-                "Ejecutá 'php artisan sireb:mapear-campos' para cargar el mapeo."
+                "Vinculalo desde el panel o ejecutá el mapeo correspondiente."
             );
         }
 
-        $etiqueta = $this->resolverEtiqueta($campo, $horaInicio);
-        $catalogo = $this->obtenerCatalogo();
+        $tarifa = $this->tarifaEspejoVigente($campo, $horaInicio);
 
-        $servicio = collect($catalogo)->firstWhere('id', $campo->servicio_sireb_id);
-        if (! $servicio) {
-            // Forzar refresco de cache y reintentar una vez
-            Cache::forget(self::CACHE_KEY);
-            $catalogo = $this->obtenerCatalogo(true);
-            $servicio = collect($catalogo)->firstWhere('id', $campo->servicio_sireb_id);
-
-            if (! $servicio) {
-                throw new \RuntimeException(
-                    "Servicio SIREB {$campo->servicio_sireb_id} no existe en el catálogo."
-                );
-            }
-        }
-
-        $tarifa = collect($servicio['tarifas'] ?? [])
-            ->first(fn (array $t) => strcasecmp($t['etiqueta'] ?? '', $etiqueta) === 0);
-
-        if (! $tarifa) {
+        if (! $tarifa || ! $tarifa->tarifa_sireb_id) {
             throw new \RuntimeException(
-                "No se encontró tarifa '{$etiqueta}' para el servicio {$servicio['codigo']}. " .
-                "Verificá el tarifario vigente en SIREB."
+                "No hay tarifa SIREB vigente espejada para {$campo->codigo} a las {$horaInicio}. " .
+                "Ejecutá php artisan sireb:sincronizar-tarifas."
             );
         }
 
-        return $tarifa['id'];
+        return $tarifa->tarifa_sireb_id;
     }
 
     /**
@@ -78,26 +61,52 @@ class CatalogoSirebService
      */
     public function obtenerMontoTarifa(string $tarifaId): float
     {
-        $catalogo = $this->obtenerCatalogo();
+        $tarifa = TarifaCampo::query()
+            ->where('tarifa_sireb_id', $tarifaId)
+            ->whereNull('vigente_hasta')
+            ->where('liquidable', true)
+            ->where('tarifario_estado', 'vigente')
+            ->first();
 
-        foreach ($catalogo as $servicio) {
-            foreach ($servicio['tarifas'] ?? [] as $tarifa) {
-                if ($tarifa['id'] === $tarifaId) {
-                    return (float) $tarifa['monto'];
-                }
-            }
+        if (! $tarifa) {
+            throw new \RuntimeException(
+                "Tarifa SIREB {$tarifaId} no está espejada como vigente/liquidable. " .
+                "Ejecutá php artisan sireb:sincronizar-tarifas."
+            );
         }
 
-        throw new \RuntimeException("Tarifa {$tarifaId} no encontrada en el catálogo.");
+        return (float) $tarifa->precio_por_hora;
     }
 
-    private function resolverEtiqueta(CampoDeportivo $campo, string $horaInicio): string
+    private function tarifaEspejoVigente(CampoDeportivo $campo, string $horaInicio): ?TarifaCampo
     {
-        $inicioNoche = $campo->hora_inicio_noche ?? '18:00:00';
+        $activas = TarifaCampo::paraGrillaHoraria()
+            ->where('campo_id', $campo->id)
+            ->get();
 
-        return $this->aSegundos($horaInicio) < $this->aSegundos($inicioNoche)
-            ? 'Diurno'
-            : 'Nocturno';
+        if ($activas->isEmpty()) {
+            return null;
+        }
+
+        $unica = $activas->firstWhere('clasificacion', 'unica');
+        if ($unica) {
+            return $unica;
+        }
+
+        $inicioNoche = $this->aSegundos($campo->hora_inicio_noche ?? '18:00:00');
+        $tipo = $this->aSegundos($horaInicio) < $inicioNoche
+            ? 'diurna'
+            : 'nocturna';
+
+        $coleccion = $activas->where('clasificacion', $tipo);
+
+        if ($coleccion->count() > 1) {
+            throw new \RuntimeException(
+                "Tarifa espejada ambigua para {$campo->codigo}: múltiples activas de tipo {$tipo}."
+            );
+        }
+
+        return $coleccion->first();
     }
 
     private function obtenerCatalogo(bool $forceRefresh = false): array

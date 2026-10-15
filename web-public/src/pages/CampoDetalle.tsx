@@ -23,6 +23,9 @@ import BarraCarrito from '@/components/campo/BarraCarrito';
 interface InfoTarifa {
   precio_por_hora: number;
   vigente_desde: string;
+  etiqueta?: string;
+  tipo?: 'diurna' | 'nocturna' | 'unica';
+  sireb_tarifa_id?: string | null;
 }
 
 interface HorarioAtencion {
@@ -49,6 +52,7 @@ interface Campo {
   tarifas: {
     diurna: InfoTarifa | null;
     nocturna: InfoTarifa | null;
+    unica?: InfoTarifa | null;
   };
   horarios_atencion?: HorarioAtencion[];
 }
@@ -162,8 +166,13 @@ export default function CampoDetalle() {
   }
 
   const esMantenimiento = campo.estado === 'mantenimiento';
-  const { diurna, nocturna } = campo.tarifas;
-  const tieneAlgunaTarifa = diurna !== null || nocturna !== null;
+  const { diurna, nocturna, unica } = campo.tarifas ?? {
+    diurna: null,
+    nocturna: null,
+    unica: null,
+  };
+
+  const tieneAlgunaTarifa = Boolean(diurna || nocturna || unica);
   const horarios = campo.horarios_atencion ?? [];
   const imagenUrl = normalizarUrlImagen(campo.imagen_url);
 
@@ -302,6 +311,12 @@ export default function CampoDetalle() {
                       Con luces Bs {nocturna.precio_por_hora.toFixed(0)}
                     </span>
                   )}
+                  {unica && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-900">
+                      <Clock className="w-3.5 h-3.5 text-sky-500" />
+                      Única Bs {unica.precio_por_hora.toFixed(0)}
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -349,7 +364,11 @@ export default function CampoDetalle() {
                     campoId={campo.id}
                     campoNombre={campo.nombre}
                     fecha={fecha}
-                    tarifas={campo.tarifas}
+                    tarifas={{
+                      diurna,
+                      nocturna,
+                      unica: unica ?? null,
+                    }}
                     horaInicioNoche={campo.hora_inicio_noche}
                   />
 
@@ -386,6 +405,7 @@ export default function CampoDetalle() {
                   <TarjetaTarifas
                     diurna={diurna}
                     nocturna={nocturna}
+                    unica={unica ?? null}
                     horaInicioNoche={campo.hora_inicio_noche}
                     tieneAlgunaTarifa={tieneAlgunaTarifa}
                   />
@@ -412,11 +432,13 @@ export default function CampoDetalle() {
 function TarjetaTarifas({
   diurna,
   nocturna,
+  unica,
   horaInicioNoche,
   tieneAlgunaTarifa,
 }: {
   diurna: InfoTarifa | null;
   nocturna: InfoTarifa | null;
+  unica: InfoTarifa | null;
   horaInicioNoche: string;
   tieneAlgunaTarifa: boolean;
 }) {
@@ -450,6 +472,7 @@ function TarjetaTarifas({
                 </p>
               </div>
             )}
+
             {nocturna && (
               <div className="flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 p-3">
                 <div className="flex items-center gap-2">
@@ -465,6 +488,25 @@ function TarjetaTarifas({
                 </div>
                 <p className="text-lg font-bold text-indigo-900">
                   Bs {nocturna.precio_por_hora.toFixed(0)}
+                </p>
+              </div>
+            )}
+
+            {unica && (
+              <div className="flex items-center justify-between rounded-lg border border-sky-200 bg-sky-50 p-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-sky-500" />
+                  <div>
+                    <p className="text-xs font-semibold text-sky-900">
+                      Tarifa única
+                    </p>
+                    <p className="text-[10px] text-sky-700">
+                      Aplica a cualquier horario
+                    </p>
+                  </div>
+                </div>
+                <p className="text-lg font-bold text-sky-900">
+                  Bs {unica.precio_por_hora.toFixed(0)}
                 </p>
               </div>
             )}

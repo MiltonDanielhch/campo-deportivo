@@ -4,6 +4,9 @@ import { useCarritoStore, type FranjaCarrito } from '@/store/carritoStore';
 interface InfoTarifa {
   precio_por_hora: number;
   vigente_desde: string;
+  etiqueta?: string;
+  tipo?: 'diurna' | 'nocturna' | 'unica';
+  sireb_tarifa_id?: string | null;
 }
 
 interface Bloque {
@@ -21,6 +24,7 @@ interface GrillaDisponibilidadProps {
   tarifas: {
     diurna: InfoTarifa | null;
     nocturna: InfoTarifa | null;
+    unica?: InfoTarifa | null;
   };
   horaInicioNoche: string;
 }
@@ -30,16 +34,53 @@ const minutosDesdeMedianoche = (hhmm: string): number => {
   return (h || 0) * 60 + (m || 0);
 };
 
-type TipoTarifa = 'diurna' | 'nocturna';
+type TipoTarifaVisible = 'diurna' | 'nocturna' | 'unica';
 
-function determinarTipo(
+function determinarTipoHorario(
   horaInicioBloque: string,
   horaCorte: string,
-): TipoTarifa {
+): 'diurna' | 'nocturna' {
   return minutosDesdeMedianoche(horaInicioBloque) >=
     minutosDesdeMedianoche(horaCorte)
     ? 'nocturna'
     : 'diurna';
+}
+
+/**
+ * Prioridad:
+ * 1. Si existe tarifa horaria concreta para el bloque (diurna/nocturna), usarla.
+ * 2. Si no, pero existe tarifa única, usarla para cualquier horario.
+ * 3. Si no hay ninguna, bloque no seleccionable.
+ */
+function tarifaParaBloque(
+  tarifas: GrillaDisponibilidadProps['tarifas'],
+  horaInicioBloque: string,
+  horaCorte: string,
+): { tarifa: InfoTarifa | null; tipo: TipoTarifaVisible } {
+  const tipoHorario = determinarTipoHorario(horaInicioBloque, horaCorte);
+  const tarifaHoraria = tarifas[tipoHorario];
+
+  if (tarifaHoraria) {
+    return { tarifa: tarifaHoraria, tipo: tipoHorario };
+  }
+
+  if (tarifas.unica) {
+    return { tarifa: tarifas.unica, tipo: 'unica' };
+  }
+
+  return { tarifa: null, tipo: tipoHorario };
+}
+
+function clasesLibre(tipo: TipoTarifaVisible): string {
+  if (tipo === 'nocturna') {
+    return 'bg-indigo-50/60 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm';
+  }
+
+  if (tipo === 'unica') {
+    return 'bg-sky-50/60 border-sky-200 hover:bg-sky-100 hover:border-sky-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm';
+  }
+
+  return 'bg-amber-50/60 border-amber-200 hover:bg-amber-100 hover:border-amber-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm';
 }
 
 export default function GrillaDisponibilidad({
@@ -64,8 +105,12 @@ export default function GrillaDisponibilidad({
     // 'pasada', 'ocupada' y 'bloqueada_temporal' caen acá: no se seleccionan.
     if (bloque.estado !== 'libre') return;
 
-    const tipo = determinarTipo(bloque.hora_inicio, horaInicioNoche);
-    const tarifa = tarifas[tipo];
+    const { tarifa } = tarifaParaBloque(
+      tarifas,
+      bloque.hora_inicio,
+      horaInicioNoche,
+    );
+
     if (!tarifa) return;
 
     const franja: FranjaCarrito = {
@@ -87,7 +132,7 @@ export default function GrillaDisponibilidad({
   const getClase = (
     bloque: Bloque,
     tarifa: InfoTarifa | null,
-    tipo: TipoTarifa,
+    tipo: TipoTarifaVisible,
   ) => {
     // 'pasada' tiene prioridad: gris neutro, no rojo/naranja.
     if (bloque.estado === 'pasada') {
@@ -105,18 +150,23 @@ export default function GrillaDisponibilidad({
     if (estaSeleccionada(bloque)) {
       return 'bg-teal-600 text-white border-teal-600 shadow-md scale-[1.02]';
     }
-    // Libre sin seleccionar: color por tipo + hover
-    return tipo === 'nocturna'
-      ? 'bg-indigo-50/60 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm'
-      : 'bg-amber-50/60 border-amber-200 hover:bg-amber-100 hover:border-amber-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm';
+
+    // Libre sin seleccionar: color por tipo + hover.
+    return clasesLibre(tipo);
   };
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
       {bloques.map((bloque) => {
-        const tipo = determinarTipo(bloque.hora_inicio, horaInicioNoche);
-        const tarifa = tarifas[tipo];
-        const Icono = tipo === 'nocturna' ? Lightbulb : Sun;
+        const { tarifa, tipo } = tarifaParaBloque(
+          tarifas,
+          bloque.hora_inicio,
+          horaInicioNoche,
+        );
+
+        const Icono =
+          tipo === 'nocturna' ? Lightbulb : tipo === 'unica' ? Clock : Sun;
+
         const seleccionado = estaSeleccionada(bloque);
 
         return (
@@ -135,7 +185,9 @@ export default function GrillaDisponibilidad({
                 : !tarifa && bloque.estado === 'libre'
                   ? tipo === 'nocturna'
                     ? 'Sin tarifa con iluminación definida'
-                    : 'Sin tarifa regular definida'
+                    : tipo === 'unica'
+                      ? 'Sin tarifa única definida'
+                      : 'Sin tarifa regular definida'
                   : undefined
             }
           >
@@ -143,7 +195,11 @@ export default function GrillaDisponibilidad({
             {bloque.estado === 'libre' && tarifa && !seleccionado && (
               <span
                 className={`absolute top-2 left-2 w-1 h-6 rounded-full ${
-                  tipo === 'nocturna' ? 'bg-indigo-400' : 'bg-amber-400'
+                  tipo === 'nocturna'
+                    ? 'bg-indigo-400'
+                    : tipo === 'unica'
+                      ? 'bg-sky-400'
+                      : 'bg-amber-400'
                 }`}
               />
             )}
@@ -156,7 +212,9 @@ export default function GrillaDisponibilidad({
                       ? 'text-white'
                       : tipo === 'nocturna'
                         ? 'text-indigo-500'
-                        : 'text-amber-500'
+                        : tipo === 'unica'
+                          ? 'text-sky-500'
+                          : 'text-amber-500'
                   }`}
                 />
               )}
@@ -197,7 +255,9 @@ export default function GrillaDisponibilidad({
                       ? 'Seleccionada'
                       : tipo === 'nocturna'
                         ? 'Con luces'
-                        : 'Regular'}
+                        : tipo === 'unica'
+                          ? 'Única'
+                          : 'Regular'}
                   </span>
                 </>
               )}

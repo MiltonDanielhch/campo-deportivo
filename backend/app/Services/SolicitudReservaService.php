@@ -255,15 +255,27 @@ class SolicitudReservaService
                 ]);
             }
 
-            $tarifasActivas = $campo->tarifas()->whereNull('vigente_hasta')->get();
+            $tarifasActivas = $campo->tarifas()
+                ->paraGrillaHoraria()
+                ->get();
+
             if ($tarifasActivas->isEmpty()) {
                 throw ValidationException::withMessages([
-                    'franjas' => "El campo {$campo->nombre} no tiene tarifa vigente definida.",
+                    'franjas' => "El campo {$campo->nombre} no tiene tarifa SIREB vigente espejada. Ejecutá la sincronización desde SIREB.",
                 ]);
             }
 
+            $porClasificacion = $tarifasActivas->groupBy('clasificacion');
+            foreach ($porClasificacion as $clasificacion => $coleccion) {
+                if ($coleccion->count() > 1) {
+                    throw ValidationException::withMessages([
+                        'franjas' => "El campo {$campo->nombre} tiene más de una tarifa espejada activa para '{$clasificacion}'. Revisá el tarifario en SIREB.",
+                    ]);
+                }
+            }
+
             $campos[$campo->id] = [
-                'tarifas' => $tarifasActivas->keyBy('tipo_tarifa'),
+                'tarifas' => $tarifasActivas->keyBy('clasificacion'),
                 'inicio_noche' => self::aSegundos($campo->hora_inicio_noche ?? '18:00:00'),
             ];
 
@@ -275,7 +287,8 @@ class SolicitudReservaService
 
             $this->validarSolapeInterno($grupo->all());
 
-            $campo->load(['tarifas' => fn ($q) => $q->whereNull('vigente_hasta')]);
+            $campo->load(['tarifas' => fn ($q) => $q->paraGrillaHoraria()]);
+
             $grilla = $this->disponibilidad->calcularGrilla($campo, $fecha);
 
             if (! $grilla['abierto']) {
@@ -418,11 +431,24 @@ class SolicitudReservaService
      */
     private function precioDeFranja(FranjaSolicitadaDTO $franja, array $campoInfo): float
     {
+        $tarifas = $campoInfo['tarifas'];
+
+        $unica = $tarifas->get('unica');
+        if ($unica) {
+            return (float) $unica->precio_por_hora;
+        }
+
         $tipo = self::aSegundos($franja->horaInicio) < $campoInfo['inicio_noche']
             ? 'diurna'
             : 'nocturna';
 
-        $tarifa = $campoInfo['tarifas']->get($tipo) ?? $campoInfo['tarifas']->first();
+        $tarifa = $tarifas->get($tipo);
+
+        if (! $tarifa) {
+            throw ValidationException::withMessages([
+                'franjas' => "No hay tarifa {$tipo} vigente espejada para la franja solicitada.",
+            ]);
+        }
 
         return (float) $tarifa->precio_por_hora;
     }

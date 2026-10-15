@@ -512,7 +512,9 @@ export default function Pago() {
                 <span className="text-xs font-medium text-slate-700">
                   Esperando confirmación del pago…
                 </span>
-                <Info className="w-3 h-3 text-slate-400 ml-1" title="Verificamos cada 5 segundos" />
+                <span title="Verificamos cada 5 segundos" className="inline-flex ml-1">
+                  <Info className="w-3 h-3 text-slate-400" />
+                </span>
               </div>
             </div>
           )}

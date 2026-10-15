@@ -59,7 +59,6 @@ class SolicitudReservaAnulacionTest extends TestCase
         $this->postJson("/api/v1/admin/solicitudes-reserva/{$this->solicitud->id}/anular-liquidacion", [
             'motivo' => 'Cliente solicita cancelación por emergencia médica',
         ])
-            ->dump()
             ->assertJsonStructure(['message']);
 
         $this->solicitud->refresh();

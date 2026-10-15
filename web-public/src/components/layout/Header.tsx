@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MapPinned, ReceiptText } from 'lucide-react';
+import { ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function Header() {

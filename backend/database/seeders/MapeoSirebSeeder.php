@@ -6,25 +6,32 @@ use App\Models\CampoDeportivo;
 use Illuminate\Database\Seeder;
 
 /**
- * Mapea cada campo deportivo al servicio correspondiente en SIREB.
+ * Respaldo OFFLINE de un único vínculo campo→SIREB, para desarrollo.
  *
- * Los UUIDs son los del entorno de test (obtenidos del catálogo real).
- * Es un respaldo offline de `php artisan sireb:mapear-campos`, que es la
- * vía recomendada porque lee el catálogo vigente desde SIREB y además
- * completa el código de servicio y da de alta los campos que falten.
+ * El resto de los campos se vincula EN VIVO desde Paramétricas o con
+ * `php artisan sireb:mapear-campos`, que lee el catálogo vigente de SIREB.
+ * Este seeder NO es la vía normal: es solo un fallback para que el
+ * Estadio Gran Mamoré tenga su servicio de test garantizado sin red.
+ *
+ * El UUID es del entorno TEST de SIREB → corre SOLO en local.
  */
 class MapeoSirebSeeder extends Seeder
 {
     private const MAPEO = [
         // codigo_campo_local => [servicio_sireb_id, servicio_sireb_codigo]
-        'CD-001' => ['01a0f3e8-33bc-7130-9614-85a23ea26caf', 'SEDEDE-CS1'],        // cancha vieja → Cancha Sintética N° 1
-        'FS-001' => ['01a0f3fc-b135-7119-9507-9546fcfcba7f', 'SEDEDE-CS2'],        // Cancha Techada → Cancha Sintética N° 2
-        'CD-002' => ['01a0f3fd-a930-7389-b094-bb9847f4774d', 'SEDEDE-EGM-ENTREN'], // estadio gran mamore → Estadio Gran Mamoré
-        'CD-005' => ['01a0fe36-def0-7064-8bb9-7cb18b626c69', '0005'],              // piscina → H. PISCINA OLIMPICA
+        'CD-002' => ['01a0f3fd-a930-7389-b094-bb9847f4774d', 'SEDEDE-EGM-ENTREN'], // Estadio Gran Mamoré
     ];
 
     public function run(): void
     {
+        // Los UUIDs son de TEST. En producción el vínculo sale del comando /
+        // la pantalla leyendo los UUIDs REALES, nunca de este array.
+        if (! app()->environment('local')) {
+            $this->command->warn('⚠ MapeoSirebSeeder omitido fuera de local (UUID de test).');
+
+            return;
+        }
+
         foreach (self::MAPEO as $codigoCampo => [$servicioSirebId, $servicioSirebCodigo]) {
             $campo = CampoDeportivo::where('codigo', $codigoCampo)->first();
 
