@@ -56,14 +56,21 @@ class ComprobanteScreen extends StatelessWidget {
             ...estado.reservas.map(
               (r) => Card(
                 child: ListTile(
-                  leading: const Icon(Icons.confirmation_number,
-                      color: Colors.teal),
+                  leading: Icon(
+                    r.tienePerfil ? Icons.pool : Icons.confirmation_number,
+                    color: Colors.teal,
+                  ),
                   title: Text(
                     r.campoNombre,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  subtitle:
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text('${r.fechaCorta} · ${r.horaInicio} - ${r.horaFin}'),
+                      if (r.tienePerfil) Text(r.etiquetaPerfil ?? ''),
+                    ],
+                  ),
                   trailing: SelectableText(
                     r.codigoReserva,
                     style: const TextStyle(
@@ -75,10 +82,12 @@ class ComprobanteScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Presenta estos códigos al llegar al campo deportivo.',
+            Text(
+              estado.esPiscina
+                  ? 'Presenta estos códigos al ingresar a la piscina.'
+                  : 'Presenta estos códigos al llegar al campo deportivo.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 24),
             ElevatedButton(

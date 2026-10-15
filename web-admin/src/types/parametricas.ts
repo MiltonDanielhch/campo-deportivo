@@ -69,6 +69,8 @@ export interface CampoDeportivo {
   servicio_sireb_id: string | null;
   /** Código legible del servicio SIREB (nullable) */
   servicio_sireb_codigo: string | null;
+  /** Modalidad de reserva: franja_horaria (canchas), turno_por_perfil (piscina), sin_reserva_online */
+  modalidad_reserva?: 'franja_horaria' | 'turno_por_perfil' | 'sin_reserva_online';
   creado_en: string;
   tipo_campo?: TipoCampo;
   horarios_atencion?: HorarioAtencion[];

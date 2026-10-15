@@ -117,6 +117,22 @@ class CampoPublicoSirebPresenter
         // [2b] Fuente única de tarifas: el espejo ya cargado por index()/show().
         $tarifasEspejo = $this->tarifasEspejoParaGrilla($campo);
 
+        // Si es piscina (modalidad_reserva = 'turno_por_perfil'), marcar como reservable
+        // independientemente de las tarifas horarias (que no tiene por diseño)
+        if ($campo->modalidad_reserva?->value === 'turno_por_perfil') {
+            return array_merge($base, [
+                'tarifas' => [
+                    'diurna' => null,
+                    'nocturna' => null,
+                    'unica' => null,
+                ],
+                'sireb' => null,
+                'reservable_online' => true,
+                'mensaje_no_reservable' => null,
+                'fuente_precios' => 'SIREB_PERFIL',
+            ]);
+        }
+
         if ($fuente === 'SIREB' && $servicios !== null) {
             $servicio = $servicios->get((string) $campo->servicio_sireb_id);
 
@@ -156,6 +172,7 @@ class CampoPublicoSirebPresenter
             'hora_inicio_noche' => $campo->hora_inicio_noche,
             'servicio_sireb_id' => $campo->servicio_sireb_id,
             'servicio_sireb_codigo' => $campo->servicio_sireb_codigo,
+            'modalidad_reserva' => $campo->modalidad_reserva?->value,
             'horarios_atencion' => $campo->relationLoaded('horariosAtencion')
                 ? $campo->horariosAtencion
                     ->sortBy('dia_semana')

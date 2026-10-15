@@ -57,6 +57,38 @@ class OcupacionController extends Controller
     }
 
     /**
+     * GET /api/v1/ocupacion/piscina-turnos?fecha=YYYY-MM-DD
+     *
+     * Devuelve la grilla de turnos de piscina (cupo por perfil) de la fecha.
+     * Sirve al panel de ocupación para mostrar también el módulo de piscina.
+     */
+    public function turnosPiscina(Request $request): JsonResponse
+    {
+        $fechaStr = $request->query('fecha', now()->toDateString());
+
+        try {
+            $fecha = Carbon::createFromFormat('Y-m-d', $fechaStr)->startOfDay();
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Fecha inválida. Use formato YYYY-MM-DD.',
+            ], 422);
+        }
+
+        /** @var \App\Models\Funcionario $funcionario */
+        $funcionario = $request->user();
+
+        $campos = $this->ocupacion->turnosPiscina($funcionario, $fecha);
+
+        return response()->json([
+            'data' => $campos,
+            'meta' => [
+                'fecha' => $fecha->toDateString(),
+                'total_campos' => count($campos),
+            ],
+        ]);
+    }
+
+    /**
      * GET /api/v1/ocupacion/verificar/{codigo_reserva}
      *
      * Verifica un código de reserva. Si el funcionario es funcionario_control

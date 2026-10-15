@@ -272,6 +272,38 @@ class CatalogoSirebController extends Controller
         }
     }
 
+    /**
+     * POST /api/v1/admin/catalogo-sireb/refrescar
+     *
+     * Invalida la caché del catálogo SIREB y la repuebla iterando todas
+     * las páginas. Es el botón "Refrescar catálogo" del panel: SIN este
+     * endpoint, el operador esperaba un refresh y solo veía datos cacheados
+     * (hasta 10 min de retraso cuando se agrega un servicio en SIREB).
+     */
+    public function refrescar(): JsonResponse
+    {
+        try {
+            $catalogo = $this->catalogoSireb->refrescarCatalogo();
+
+            return response()->json([
+                'message' => 'Catálogo SIREB refrescado',
+                'data' => [
+                    'total_servicios' => count($catalogo),
+                    'sincronizado_en' => $this->catalogoSireb->ultimaActualizacion(),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('sireb')->error('Error al refrescar catálogo', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Error al refrescar catálogo',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ─── Helpers privados ───
 
     private function esReservable(array $servicio): bool

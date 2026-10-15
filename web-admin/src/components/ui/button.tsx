@@ -69,6 +69,9 @@ function Button({
     return (
       <ButtonPrimitive
         render={children}
+        // El hijo de asChild es un <a>/<Link>, no un <button> nativo: sin esto
+        // Base UI avisa "expected a native <button> because nativeButton is true".
+        nativeButton={false}
         data-slot="button"
         className={classes}
         {...(props as Record<string, unknown>)}

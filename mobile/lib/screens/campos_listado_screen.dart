@@ -261,6 +261,19 @@ class _CampoTarjeta extends StatelessWidget {
                               fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
+                      if (campo.esPiscina)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 6),
+                          child: Chip(
+                            avatar: Icon(Icons.pool,
+                                size: 16, color: Colors.white),
+                            label: Text('Piscina'),
+                            backgroundColor: Colors.cyan,
+                            labelStyle:
+                                TextStyle(color: Colors.white, fontSize: 12),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
                       if (esMantenimiento)
                         const Chip(
                           label: Text('Mantenimiento'),
@@ -291,8 +304,25 @@ class _CampoTarjeta extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // ─── Precios desde SIREB o locales ───
-                  if (campo.fuentePrecios == 'SIREB' && campo.sireb != null)
+                  // ─── Precios: piscina por perfil, SIREB o locales ───
+                  if (campo.esPiscina)
+                    Row(
+                      children: [
+                        const Icon(Icons.pool, size: 20, color: Colors.cyan),
+                        const SizedBox(width: 4),
+                        const Expanded(
+                          child: Text(
+                            'Tarifa por perfil · elegí tu turno',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.cyan,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else if (campo.fuentePrecios == 'SIREB' && campo.sireb != null)
                     Row(
                       children: [
                         Icon(Icons.payments, size: 20, color: Colors.green),

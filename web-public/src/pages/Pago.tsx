@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -20,6 +20,7 @@ import {
   ScanLine,
   MessageCircle,
   Info,
+  Ticket,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
@@ -152,6 +153,21 @@ export default function Pago() {
     [estado?.motivo_rechazo],
   );
 
+  // Detecta si el código es de piscina (PIS-) o de campo (RES-) y enruta al
+  // endpoint y comprobante correspondientes. Así un único componente Pago.tsx
+  // sirve para ambos módulos y el polling consulta el backend correcto.
+  const { endpointEstado, comprobantePath } = useMemo(() => {
+    const esPiscina = codigo?.startsWith('PIS-') ?? false;
+    return {
+      endpointEstado: esPiscina
+        ? `/public/piscina/reservas/${codigo}/estado`
+        : `/public/solicitudes-reserva/${codigo}/estado`,
+      comprobantePath: esPiscina
+        ? `/comprobante-piscina/${codigo}`
+        : `/comprobante/${codigo}`,
+    };
+  }, [codigo]);
+
   const SIREB_PANEL_URL =
     import.meta.env.VITE_SIREB_PANEL_URL ||
     'https://test.sireb.beni.gob.bo/panel/liquidaciones';
@@ -165,12 +181,15 @@ export default function Pago() {
   const consultarEstado = useCallback(async () => {
     if (!codigo) return;
     try {
-      const res = await api.get(`/public/solicitudes-reserva/${codigo}/estado`);
+      const res = await api.get(endpointEstado);
       const data: EstadoPago = res.data.data;
-      setEstado(data);
+      // Piscina serializa monto_total como string (cast decimal:2 del modelo);
+      // campos lo devuelve como float. Normalizamos a número para que
+      // toFixed() funcione en ambos módulos.
+      setEstado({ ...data, monto_total: Number(data.monto_total) });
 
       if (data.estado === 'confirmada') {
-        navigate(`/comprobante/${codigo}`, { replace: true });
+        navigate(comprobantePath, { replace: true });
         return;
       }
       if (data.estado === 'expirada') setVista('expirada');
@@ -181,7 +200,7 @@ export default function Pago() {
         setVista('no_encontrada');
       }
     }
-  }, [codigo, navigate]);
+  }, [codigo, endpointEstado, comprobantePath, navigate]);
 
   useEffect(() => {
     consultarEstado();
@@ -288,6 +307,10 @@ export default function Pago() {
           {/* ─── Header ─── */}
           {vista === 'pendiente' && (
             <div className="mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-teal-50 border border-teal-100 text-xs font-semibold uppercase tracking-widest text-teal-700 mb-3">
+                <Ticket className="w-3.5 h-3.5" />
+                Servicio ciudadano
+              </div>
               <p className="text-teal-600 font-semibold uppercase tracking-widest text-xs mb-2">
                 Paso 3 de 3
               </p>

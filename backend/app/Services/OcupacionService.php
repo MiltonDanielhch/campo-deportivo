@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Enums\EstadoPiscinaReserva;
 use App\Enums\EstadoSolicitudReserva;
 use App\Models\CampoDeportivo;
 use App\Models\Funcionario;
+use App\Models\PiscinaReserva;
+use App\Models\PiscinaTurno;
 use App\Models\Reserva;
 use App\Models\SolicitudReservaDetalle;
 use Carbon\Carbon;
@@ -98,7 +101,8 @@ class OcupacionService
             ->first();
 
         if (! $solicitud) {
-            return null;
+            // ── Camino C: reserva de piscina (PIS-… o código de ventanilla) ──
+            return $this->verificarCodigoPiscina($codigo, $funcionario, $esAdmin);
         }
 
         /** @var Collection<int, Reserva> $reservas */
@@ -128,6 +132,136 @@ class OcupacionService
     }
 
     /**
+     * ── Camino C: reserva de piscina ──
+     * Acepta el código de seguimiento (PIS-…) o el código de ventanilla
+     * (referencia_recaudaciones, p.ej. K699-88PZ-J7G). Solo reservas confirmadas.
+     *
+     * Misma regla de seguridad: funcionario_control solo ve sus campos asignados.
+     */
+    private function verificarCodigoPiscina(string $codigo, Funcionario $funcionario, bool $esAdmin): ?array
+    {
+        $reserva = PiscinaReserva::with(['detalles', 'campo'])
+            ->where('estado', EstadoPiscinaReserva::Confirmada->value)
+            ->where(function ($q) use ($codigo) {
+                $q->where('codigo_seguimiento', $codigo)
+                    ->orWhere('referencia_recaudaciones', $codigo);
+            })
+            ->first();
+
+        if (! $reserva) {
+            return null;
+        }
+
+        if (! $esAdmin && ! $this->campoAsignado($funcionario, $reserva->campo_id)) {
+            return null;
+        }
+
+        return $this->armarResultadoVerificacionPiscina($reserva);
+    }
+
+    /**
+     * Arma la respuesta del verificador para una reserva de piscina.
+     * Reutiliza el mismo contrato (`franjas`) que los campos; cada franja
+     * representa un detalle (turno) con su perfil y cantidad. No hay
+     * marcado de asistencia para piscina.
+     */
+    private function armarResultadoVerificacionPiscina(PiscinaReserva $reserva): array
+    {
+        $campoNombre = $reserva->campo?->nombre;
+
+        return [
+            'tipo'               => 'piscina',
+            'codigo_seguimiento' => $reserva->codigo_seguimiento,
+            'estado_solicitud'   => $reserva->estado->value,
+            'titular' => [
+                'nombre'   => $reserva->nombre_pagador,
+                'ci_nit'   => $reserva->ci_nit_pagador,
+                'telefono' => $reserva->telefono_pagador,
+            ],
+            'campo_id'      => $reserva->campo_id,
+            'campo_nombre'  => $campoNombre,
+            'fecha_reserva' => $reserva->detalles->first()?->fecha?->toDateString(),
+            'franjas' => $reserva->detalles->map(fn ($d) => [
+                'id'                    => $d->id,
+                'codigo_reserva'        => $reserva->codigo_seguimiento,
+                'campo_nombre'          => $campoNombre,
+                'fecha'                 => $d->fecha?->toDateString(),
+                'hora_inicio'           => $d->hora_inicio?->format('H:i'),
+                'hora_fin'              => $d->hora_fin?->format('H:i'),
+                'asistencia_marcada_en' => null,
+                'perfil'                => $d->perfil,
+                'cantidad'              => $d->cantidad,
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * Grilla de turnos de piscina para una fecha (control en sitio).
+     *
+     * Devuelve los campos con modalidad `turno_por_perfil` y, por cada uno,
+     * sus turnos activos con el cupo por perfil (total, reservado, disponible).
+     * funcionario_control solo ve sus campos asignados.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function turnosPiscina(Funcionario $funcionario, Carbon $fecha): array
+    {
+        $fecha = $fecha->copy()->startOfDay();
+
+        $query = CampoDeportivo::query()
+            ->where('modalidad_reserva', 'turno_por_perfil')
+            ->where('estado', 'activo')
+            ->orderBy('nombre');
+
+        if (! $this->esAdministrador($funcionario)) {
+            $ids = $funcionario->camposAsignados()->pluck('campos_deportivos.id');
+            $query->whereIn('id', $ids);
+        }
+
+        return $query->get()->map(function (CampoDeportivo $campo) use ($fecha) {
+            $turnos = PiscinaTurno::where('campo_id', $campo->id)
+                ->where('fecha', $fecha->toDateString())
+                ->where('estado', 'activo')
+                ->with('perfiles')
+                ->orderBy('hora_inicio')
+                ->get()
+                ->map(fn (PiscinaTurno $t) => [
+                    'turno_id'   => $t->id,
+                    'hora_inicio' => substr((string) $t->hora_inicio, 0, 5),
+                    'hora_fin'    => substr((string) $t->hora_fin, 0, 5),
+                    'cupo_total'  => $t->cupo_total,
+                    'perfiles' => $t->perfiles->map(fn ($p) => [
+                        'perfil'     => $p->perfil,
+                        'etiqueta'   => $this->etiquetaPerfilPiscina($p->perfil),
+                        'cupo'       => $p->cupo,
+                        'reservado'  => $p->reservado,
+                        'disponible' => $p->disponible,
+                    ])->values()->all(),
+                ])->values()->all();
+
+            return [
+                'campo_id'     => $campo->id,
+                'campo_nombre' => $campo->nombre,
+                'fecha'        => $fecha->toDateString(),
+                'turnos'       => $turnos,
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * Etiqueta legible para el perfil de piscina.
+     */
+    private function etiquetaPerfilPiscina(string $perfil): string
+    {
+        return match ($perfil) {
+            'mayor_12' => 'Mayores de 12',
+            'menor_12' => 'Menores de 12',
+            'institucion' => 'Institución',
+            default => $perfil,
+        };
+    }
+
+    /**
      * Arma la respuesta unificada del verificador (1 o N franjas).
      * Cada franja incluye `id` (PK de reservas) porque el POST de asistencia
      * (/admin/reservas/{id}/asistencia) la requiere, no el codigo_reserva.
@@ -140,6 +274,7 @@ class OcupacionService
         array $reservas,
     ): array {
         return [
+            'tipo'               => 'campo',
             'codigo_seguimiento' => $solicitud->codigo_seguimiento,
             'estado_solicitud'   => $solicitud->estado->value,
             'titular' => [

@@ -109,6 +109,20 @@ class CatalogoSirebService
         return $coleccion->first();
     }
 
+    /**
+     * SIREB pagina su catálogo (pagina + por_pagina). El bug clásico es
+     * romper cuando la página viene "incompleta" (count < por_pagina),
+     * asumiendo que no hay más. Falso: muchas APIs tienen page size
+     * propio (5, 20) e ignoran por_pagina grande. Resultado: perdemos
+     * silenciosamente los servicios que viven en página > 1.
+     *
+     * Estrategia correcta: pedir página tras página hasta que venga
+     * VACÍA (data = []). Dedupe por id (sirve de salvaguarda extra si
+     * SIREB repite páginas en una API bugueada). MAX_PAGINAS evita
+     * loop infinito: 50 × 100 = 5000 servicios, más que suficiente.
+     */
+    private const MAX_PAGINAS = 50;
+
     private function obtenerCatalogo(bool $forceRefresh = false): array
     {
         if ($forceRefresh) {
@@ -118,7 +132,39 @@ class CatalogoSirebService
 
         return Cache::remember(self::CACHE_KEY, self::CACHE_TTL_SEGUNDOS, function () {
             try {
-                $catalogo = $this->client->listarCatalogo(pagina: 1, porPagina: 100);
+                $catalogo = [];
+                $idsVistos = [];
+                $pagina = 1;
+
+                while ($pagina <= self::MAX_PAGINAS) {
+                    $lote = $this->client->listarCatalogo(pagina: $pagina, porPagina: 100);
+
+                    if (empty($lote)) {
+                        // Página vacía = fin del catálogo.
+                        break;
+                    }
+
+                    foreach ($lote as $servicio) {
+                        $id = $servicio['id'] ?? null;
+                        if ($id === null) {
+                            // Sin id no podemos deduplicar: lo aceptamos igual.
+                            $catalogo[] = $servicio;
+                            continue;
+                        }
+                        if (isset($idsVistos[$id])) {
+                            continue;
+                        }
+                        $idsVistos[$id] = true;
+                        $catalogo[] = $servicio;
+                    }
+
+                    $pagina++;
+                }
+
+                Log::channel('sireb')->info('Catálogo SIREB espejado', [
+                    'paginas_leidas' => $pagina,
+                    'total_servicios' => count($catalogo),
+                ]);
 
                 Cache::put(
                     self::CACHE_TS_KEY,

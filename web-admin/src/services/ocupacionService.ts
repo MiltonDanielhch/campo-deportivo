@@ -1,5 +1,9 @@
 import apiClient from './apiClient';
-import type { MisCamposResponse, VerificarCodigoResponse } from '@/types/ocupacion';
+import type {
+  MisCamposResponse,
+  PiscinaTurnosResponse,
+  VerificarCodigoResponse,
+} from '@/types/ocupacion';
 
 export const ocupacionService = {
   /**
@@ -12,6 +16,21 @@ export const ocupacionService = {
     const params = fecha ? { fecha } : {};
     const { data } = await apiClient.get<MisCamposResponse>(
       '/v1/ocupacion/mis-campos',
+      { params }
+    );
+    return data;
+  },
+
+  /**
+   * GET /api/v1/ocupacion/piscina-turnos?fecha=YYYY-MM-DD
+   *
+   * Grilla de turnos de piscina de la fecha, con cupo por perfil.
+   * funcionario_control solo ve sus campos asignados.
+   */
+  async piscinaTurnos(fecha?: string): Promise<PiscinaTurnosResponse> {
+    const params = fecha ? { fecha } : {};
+    const { data } = await apiClient.get<PiscinaTurnosResponse>(
+      '/v1/ocupacion/piscina-turnos',
       { params }
     );
     return data;

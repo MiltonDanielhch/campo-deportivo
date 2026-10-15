@@ -8,6 +8,7 @@ const CampoDetalle = lazy(() => import('./pages/CampoDetalle'));
 const Reserva = lazy(() => import('./pages/Reserva'));
 const Pago = lazy(() => import('./pages/Pago'));
 const Comprobante = lazy(() => import('./pages/Comprobante'));
+const ComprobantePiscina = lazy(() => import('./pages/ComprobantePiscina'));
 const ConsultarEstado = lazy(() => import('./pages/ConsultarEstado'));
 
 function SuspenseWrapper({ children }: { children: ReactNode }) {
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
       { path: '/reserva', element: <SuspenseWrapper><Reserva /></SuspenseWrapper> },
       { path: '/pago/:codigo', element: <SuspenseWrapper><Pago /></SuspenseWrapper> },
       { path: '/comprobante/:codigo', element: <SuspenseWrapper><Comprobante /></SuspenseWrapper> },
+      { path: '/comprobante-piscina/:codigo', element: <SuspenseWrapper><ComprobantePiscina /></SuspenseWrapper> },
       { path: '/estado', element: <SuspenseWrapper><ConsultarEstado /></SuspenseWrapper> },
     ],
   },

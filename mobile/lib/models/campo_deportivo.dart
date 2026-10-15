@@ -22,8 +22,11 @@ class CampoDeportivo {
   final bool reservableOnline;
   /// Mensaje explicativo si no es reservable
   final String? mensajeNoReservable;
-  /// Fuente de los precios (SIREB, LOCAL_FALLBACK, NO_VINCULADO)
+  /// Fuente de los precios (SIREB, LOCAL_FALLBACK, NO_VINCULADO, SIREB_PERFIL)
   final String? fuentePrecios;
+  /// Modalidad de reserva del campo: null (franja horaria) o 'turno_por_perfil'
+  /// (piscina). El backend lo envía siempre en `modalidad_reserva`.
+  final String? modalidadReserva;
 
   const CampoDeportivo({
     required this.id,
@@ -42,6 +45,7 @@ class CampoDeportivo {
     this.reservableOnline = false,
     this.mensajeNoReservable,
     this.fuentePrecios,
+    this.modalidadReserva,
   });
 
   /// Parsea el JSON del backend.
@@ -70,6 +74,7 @@ class CampoDeportivo {
       reservableOnline: json['reservable_online'] as bool? ?? false,
       mensajeNoReservable: json['mensaje_no_reservable'] as String?,
       fuentePrecios: json['fuente_precios'] as String?,
+      modalidadReserva: json['modalidad_reserva'] as String?,
     );
   }
 
@@ -91,10 +96,15 @@ class CampoDeportivo {
         'reservable_online': reservableOnline,
         'mensaje_no_reservable': mensajeNoReservable,
         'fuente_precios': fuentePrecios,
+        'modalidad_reserva': modalidadReserva,
       };
 
   /// True si el campo está activo y disponible para reserva.
   bool get estaActivo => estado == 'activo';
+
+  /// True si el campo se reserva por turno y perfil (piscina) en vez de por
+  /// franja horaria. El backend lo marca con `modalidad_reserva`.
+  bool get esPiscina => modalidadReserva == 'turno_por_perfil';
 
   /// True si el campo está en mantenimiento (no disponible temporalmente).
   bool get estaEnMantenimiento => estado == 'mantenimiento';

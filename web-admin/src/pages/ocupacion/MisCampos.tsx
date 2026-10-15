@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, MapPin, RefreshCw, Search, UserCheck, CheckCircle2, User, IdCard, Phone, Undo2 } from 'lucide-react';
+import { Calendar, Clock, MapPin, RefreshCw, Search, UserCheck, CheckCircle2, User, IdCard, Phone, Undo2, Waves, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -7,13 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ocupacionService } from '@/services/ocupacionService';
 import { asistenciaService } from '@/services/asistenciaService';
-import type { CampoOcupacion, Franja, FranjaVerificada, VerificarCodigoResponse } from '@/types/ocupacion';
+import type { CampoOcupacion, CampoPiscinaOcupacion, Franja, FranjaVerificada, VerificarCodigoResponse } from '@/types/ocupacion';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 export default function MisCampos() {
   const [campos, setCampos] = useState<CampoOcupacion[]>([]);
+  const [piscinaCampos, setPiscinaCampos] = useState<CampoPiscinaOcupacion[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fecha, setFecha] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -38,6 +39,14 @@ export default function MisCampos() {
       toast.error(mensaje);
     } finally {
       setCargando(false);
+    }
+
+    // Piscina: carga independiente para que un fallo no rompa los campos.
+    try {
+      const piscina = await ocupacionService.piscinaTurnos(fecha);
+      setPiscinaCampos(piscina.data ?? []);
+    } catch {
+      setPiscinaCampos([]);
     }
   }, [fecha]);
 
@@ -181,6 +190,21 @@ export default function MisCampos() {
     }
   };
 
+  const esPiscina = resultadoVerificacion?.tipo === 'piscina';
+
+  const etiquetaPerfil = (perfil?: string): string => {
+    switch (perfil) {
+      case 'mayor_12':
+        return 'Mayores de 12';
+      case 'menor_12':
+        return 'Menores de 12';
+      case 'institucion':
+        return 'Institución';
+      default:
+        return perfil ?? '';
+    }
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -209,7 +233,7 @@ export default function MisCampos() {
         <CardContent className="space-y-4">
           <div className="flex gap-2">
             <Input
-              placeholder="Ej: RES-20261012-XXXXXX o RSV-…"
+              placeholder="Ej: RES-… / RSV-… / PIS-… / código de ventanilla"
               value={codigoBusqueda}
               onChange={(e) => setCodigoBusqueda(e.target.value.toUpperCase())}
               onKeyPress={handleKeyPress}
@@ -220,8 +244,9 @@ export default function MisCampos() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Acepta el código del QR del comprobante (RES-…) o el código de franja
-            que ves en la grilla (RSV-…).
+            Acepta el código del QR del comprobante (RES-… / PIS-…), el código de
+            franja de la grilla (RSV-…) o el código de pago en ventanilla (ej.
+            K699-88PZ-J7G).
           </p>
 
           {resultadoVerificacion && (
@@ -234,10 +259,22 @@ export default function MisCampos() {
                     <span className="truncate">
                       Reserva válida · {resultadoVerificacion.codigo_seguimiento}
                     </span>
+                    {esPiscina && (
+                      <Badge className="bg-sky-100 text-sky-800 border-sky-300 flex-shrink-0 gap-1">
+                        <Waves className="size-3" />
+                        Piscina
+                      </Badge>
+                    )}
                   </div>
                   <Badge className="bg-green-100 text-green-800 border-green-300 flex-shrink-0">
                     {resultadoVerificacion.franjas.length}{' '}
-                    {resultadoVerificacion.franjas.length === 1 ? 'franja' : 'franjas'}
+                    {esPiscina
+                      ? resultadoVerificacion.franjas.length === 1
+                        ? 'turno'
+                        : 'turnos'
+                      : resultadoVerificacion.franjas.length === 1
+                        ? 'franja'
+                        : 'franjas'}
                   </Badge>
                 </div>
 
@@ -265,11 +302,11 @@ export default function MisCampos() {
                   </div>
                 </div>
 
-                {/* Franjas de la solicitud + acción de asistencia */}
+                {/* Franjas/turnos de la reserva + acción de asistencia */}
                 <div className="space-y-2">
                   {resultadoVerificacion.franjas.map((f) => (
                     <div
-                      key={f.codigo_reserva}
+                      key={f.id}
                       className="flex items-center justify-between gap-2 rounded-lg border border-green-200 bg-white/70 p-2.5"
                     >
                       <div className="min-w-0">
@@ -285,13 +322,25 @@ export default function MisCampos() {
                             <Clock className="size-3 text-slate-400" />
                             {f.hora_inicio}–{f.hora_fin}
                           </span>
+                          {esPiscina && f.perfil && (
+                            <span className="flex items-center gap-1">
+                              <Users className="size-3 text-slate-400" />
+                              {etiquetaPerfil(f.perfil)}
+                            </span>
+                          )}
                         </p>
                         <p className="text-[10px] font-mono text-slate-400 mt-0.5">
                           {f.codigo_reserva}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        {f.asistencia_marcada_en ? (
+                        {esPiscina ? (
+                          <Badge className="bg-sky-100 text-sky-800 border-sky-300 gap-1">
+                            <Users className="size-3" />
+                            {f.cantidad ?? 1}{' '}
+                            {(f.cantidad ?? 1) === 1 ? 'persona' : 'personas'}
+                          </Badge>
+                        ) : f.asistencia_marcada_en ? (
                           <>
                             <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 gap-1">
                               <UserCheck className="size-3" />
@@ -444,6 +493,87 @@ export default function MisCampos() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Grilla de turnos de piscina */}
+      {piscinaCampos.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Waves className="size-5 text-sky-600" />
+            <h2 className="text-lg font-semibold">Piscina</h2>
+            <span className="text-sm text-muted-foreground">
+              Turnos y cupos por perfil del día
+            </span>
+          </div>
+
+          <div className="space-y-6">
+            {piscinaCampos.map((campo) => (
+              <Card key={campo.campo_id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Waves className="size-5 text-sky-600" />
+                      <span>{campo.campo_nombre}</span>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {campo.turnos.length}{' '}
+                      {campo.turnos.length === 1 ? 'turno' : 'turnos'}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {campo.turnos.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No hay turnos activos para esta fecha.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {campo.turnos.map((turno) => (
+                        <div
+                          key={turno.turno_id}
+                          className="flex flex-col gap-2 rounded-lg border bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Clock className="size-4 text-slate-400" />
+                            <span className="font-mono text-sm font-semibold">
+                              {turno.hora_inicio}–{turno.hora_fin}
+                            </span>
+                            {turno.cupo_total != null && (
+                              <span className="text-xs text-muted-foreground">
+                                Cupo total: {turno.cupo_total}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {turno.perfiles.map((p) => (
+                              <div
+                                key={p.perfil}
+                                className="flex items-center gap-2 rounded-md border px-2 py-1"
+                                title={`Disponible: ${p.disponible}`}
+                              >
+                                <Users className="size-3.5 text-slate-400" />
+                                <span className="text-xs font-medium">{p.etiqueta}</span>
+                                <Badge
+                                  className={
+                                    p.disponible === 0
+                                      ? 'bg-red-100 text-red-800 border-red-200'
+                                      : 'bg-green-100 text-green-800 border-green-200'
+                                  }
+                                >
+                                  {p.reservado}/{p.cupo}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
     </div>

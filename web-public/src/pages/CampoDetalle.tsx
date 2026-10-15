@@ -19,6 +19,7 @@ import { api } from '@/lib/api';
 import SelectorFechas from '@/components/campo/SelectorFechas';
 import GrillaDisponibilidad from '@/components/campo/GrillaDisponibilidad';
 import BarraCarrito from '@/components/campo/BarraCarrito';
+import PiscinaDetalle from './PiscinaDetalle';
 
 interface InfoTarifa {
   precio_por_hora: number;
@@ -49,6 +50,7 @@ interface Campo {
   servicio_sireb_id?: string | null;
   servicio_sireb_codigo?: string | null;
   fuente_precios?: string;
+  modalidad_reserva?: 'franja_horaria' | 'turno_por_perfil' | 'sin_reserva_online';
   tarifas: {
     diurna: InfoTarifa | null;
     nocturna: InfoTarifa | null;
@@ -69,6 +71,11 @@ interface Disponibilidad {
 const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 const formatHora = (hhmmss: string): string => hhmmss.substring(0, 5);
+
+// Wrapper para pasar el ID a PiscinaDetalle
+function PiscinaDetalleWrapper({ campo }: { campo: Campo }) {
+  return <PiscinaDetalle campoId={campo.id} />;
+}
 
 /** Normaliza URLs locales al proxy CORS del backend. */
 const normalizarUrlImagen = (url: string | null): string | null => {
@@ -175,6 +182,11 @@ export default function CampoDetalle() {
   const tieneAlgunaTarifa = Boolean(diurna || nocturna || unica);
   const horarios = campo.horarios_atencion ?? [];
   const imagenUrl = normalizarUrlImagen(campo.imagen_url);
+
+  // Si es piscina, mostrar UI de piscina
+  if (campo.modalidad_reserva === 'turno_por_perfil') {
+    return <PiscinaDetalleWrapper campo={campo} />;
+  }
 
   return (
     <>

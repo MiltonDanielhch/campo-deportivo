@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/estado_solicitud.dart';
+import '../models/reserva_creada.dart';
 import '../services/estado_solicitud_service.dart';
 import 'comprobante_screen.dart';
+import 'pago_qr_screen.dart';
 
 /// Consulta manual del estado de una solicitud por código (HU-D7).
 /// Accesible desde la pantalla principal en cualquier momento.
@@ -47,7 +49,7 @@ class _ConsultarEstadoScreenState extends State<ConsultarEstadoScreen> {
       if (!mounted) return;
       setState(() {
         _cargando = false;
-        _error = 'No se encontró ninguna solicitud con ese código.';
+        _error = 'No encontramos ninguna reserva con ese dato.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -66,12 +68,13 @@ class _ConsultarEstadoScreenState extends State<ConsultarEstadoScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           const Text(
-            'Ingresa tu código de seguimiento',
+            'Consultá tu reserva',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           const Text(
-            'Lo recibiste al crear tu solicitud (formato RES-YYYYMMDD-XXXXXX).',
+            'Ingresá tu código de seguimiento (RES-… / PIS-…), el código de '
+            'pago en ventanilla del Banco Unión, tu CI/NIT o tu teléfono.',
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
           const SizedBox(height: 16),
@@ -79,7 +82,7 @@ class _ConsultarEstadoScreenState extends State<ConsultarEstadoScreen> {
             controller: _controller,
             textCapitalization: TextCapitalization.characters,
             decoration: const InputDecoration(
-              hintText: 'RES-20260916-ABC123',
+              hintText: 'RES-… / PIS-… / K699-… / CI / teléfono',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.search),
             ),
@@ -122,8 +125,13 @@ class _ConsultarEstadoScreenState extends State<ConsultarEstadoScreen> {
     if (estado.estaConfirmada) {
       return Card(
         child: ListTile(
-          leading: const Icon(Icons.check_circle, color: Colors.green),
-          title: const Text('Reserva confirmada'),
+          leading: Icon(
+            estado.esPiscina ? Icons.pool : Icons.check_circle,
+            color: Colors.green,
+          ),
+          title: Text(
+            estado.esPiscina ? 'Reserva de piscina confirmada' : 'Reserva confirmada',
+          ),
           subtitle: Text('${estado.reservas.length} reserva(s) generada(s)'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.push(
@@ -163,12 +171,35 @@ class _ConsultarEstadoScreenState extends State<ConsultarEstadoScreen> {
       );
     }
 
-    // pendiente
+    // pendiente: se puede reanudar el pago con el mismo QR/código.
     return Card(
       child: ListTile(
         leading: const Icon(Icons.hourglass_empty, color: Colors.teal),
         title: const Text('Pendiente de pago'),
-        subtitle: Text('Monto: Bs ${estado.montoTotal.toStringAsFixed(2)}'),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Código: ${estado.codigoSeguimiento}'),
+            Text('Monto: Bs ${estado.montoTotal.toStringAsFixed(2)}'),
+          ],
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PagoQrScreen(
+              resultado: ReservaDesdeEstado(
+                codigoSeguimiento: estado.codigoSeguimiento,
+                montoTotal: estado.montoTotal,
+                expiraEn: estado.expiraEn ?? '',
+                qrString: estado.qrString,
+                // Sin QR en el payload: la pantalla de pago lo espera por
+                // polling (mismo comportamiento que la creación de piscina).
+                qrDiferido: estado.qrString == null,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -15,6 +15,8 @@ interface EstadoReservaProps {
   montoTotal?: number;
   expiraEn?: string | null;
   codigoSeguimiento?: string;
+  /** Si es true, el botón "Ver comprobante" apunta al comprobante de piscina. */
+  esPiscina?: boolean;
   /** Si es true, muestra CTAs contextuales (ir a pagar / ver comprobante) */
   mostrarAcciones?: boolean;
 }
@@ -93,10 +95,14 @@ export default function EstadoReserva({
   montoTotal,
   expiraEn,
   codigoSeguimiento,
+  esPiscina = false,
   mostrarAcciones = false,
 }: EstadoReservaProps) {
   const config = CONFIG[estado] ?? CONFIG.cancelada;
   const Icono = config.icono;
+  const comprobanteHref = `${
+    esPiscina ? '/comprobante-piscina' : '/comprobante'
+  }/${codigoSeguimiento}`;
 
   return (
     <div
@@ -160,7 +166,7 @@ export default function EstadoReserva({
           {estado === 'confirmada' && codigoSeguimiento && (
             <Button asChild className="rounded-full">
               <Link
-                to={`/comprobante/${codigoSeguimiento}`}
+                to={comprobanteHref}
                 className="flex items-center justify-center gap-2"
               >
                 <Printer className="w-4 h-4" />

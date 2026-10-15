@@ -59,7 +59,7 @@ export default function SelectorFechas({
     }
   }
 
-  const [fy, fm, fd] = fechaSeleccionada.split('-').map(Number);
+  const [fy, fm, fd] = fechaSeleccionada ? fechaSeleccionada.split('-').map(Number) : [0, 0, 0];
   const fechaDate = fechaSeleccionada && !isNaN(fy)
     ? new Date(fy, fm - 1, fd)
     : undefined;

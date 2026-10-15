@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/franja_carrito.dart';
+import '../models/reserva_creada.dart';
 
 /// Error tipado del endpoint de creación de solicitudes.
 /// La app distingue 409 (franja perdida: quitar del carrito)
@@ -20,23 +21,33 @@ class SolicitudReservaException implements Exception {
 }
 
 /// Respuesta 201: la solicitud creada + el bloque de cobro del Core.
-class SolicitudCreada {
+class SolicitudCreada implements ReservaCreada {
   final Map<String, dynamic> solicitud;
   final Map<String, dynamic>? cobro;
 
   SolicitudCreada({required this.solicitud, this.cobro});
 
+  @override
   String get codigoSeguimiento =>
       (solicitud['codigo_seguimiento'] as String?) ?? '';
 
+  @override
   String get expiraEn => (solicitud['expira_en'] as String?) ?? '';
 
+  @override
   double get montoTotal =>
       ((solicitud['monto_total'] as num?) ?? 0).toDouble();
 
+  @override
   String? get qrString => (cobro?['qr_string'] as String?);
+  @override
   String? get checkoutUrl => (cobro?['checkout_url'] as String?);
+  @override
   String? get qrImageBase64 => (cobro?['qr_image_base64'] as String?);
+
+  /// El cobro de campos viene completo en la respuesta de creación.
+  @override
+  bool get qrDiferido => false;
 }
 
 class SolicitudReservaService {

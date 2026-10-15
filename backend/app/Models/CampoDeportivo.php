@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
     use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use App\Enums\ModalidadReservaCampo;
 
 
 class CampoDeportivo extends Model
@@ -22,7 +23,7 @@ class CampoDeportivo extends Model
     protected $fillable = [
         'tipo_campo_id', 'codigo', 'nombre', 'direccion',
         'latitud', 'longitud', 'estado', 'imagen_url', 'hora_inicio_noche',
-        'servicio_sireb_id', 'servicio_sireb_codigo',
+        'servicio_sireb_id', 'servicio_sireb_codigo', 'modalidad_reserva',
     ];
 
     protected function casts(): array
@@ -32,6 +33,7 @@ class CampoDeportivo extends Model
             'longitud' => 'decimal:8',
             'creado_en' => 'datetime',
             'hora_inicio_noche' => 'string', // 'HH:MM:SS' sin parsear como datetime
+            'modalidad_reserva' => ModalidadReservaCampo::class,
         ];
     }
 
@@ -80,5 +82,10 @@ class CampoDeportivo extends Model
             'campo_id',
             'funcionario_id'
         ); // Sin withTimestamps()
+    }
+
+    public function piscinaTurnos(): HasMany
+    {
+        return $this->hasMany(PiscinaTurno::class, 'campo_id');
     }
 }

@@ -123,3 +123,56 @@ export interface AsistenciaReservaResponse {
   asistencia_marcada_en: string | null;
   asistencia_marcada_por: string | null;
 }
+
+// ─── Módulo Piscina (panel: pestaña "Piscina") ──────────────────────────
+
+export type PerfilPiscina = 'mayor_12' | 'menor_12' | 'institucion';
+
+export interface DetallePiscinaAdmin {
+  id: string;
+  turno_id: string;
+  perfil: PerfilPiscina;
+  cantidad: number;
+  precio_unitario: number | string;
+  etiqueta_sireb: string | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
+  fecha: string | null;
+}
+
+export interface CampoPiscinaRef {
+  id: string;
+  nombre: string;
+}
+
+export interface PiscinaReservaAdmin {
+  id: string;
+  codigo_seguimiento: string;
+  estado: EstadoReserva;
+  monto_total: number | string;
+  monto_confirmado: number | string | null;
+  nombre_pagador: string | null;
+  telefono_pagador: string | null;
+  ci_nit_pagador: string | null;
+  referencia_recaudaciones: string | null;
+  motivo_rechazo: string | null;
+  created_at: string | null;
+  expira_en: string | null;
+  campo?: CampoPiscinaRef | null;
+  detalles?: DetallePiscinaAdmin[];
+}
+
+export interface ListadoPiscinaResponse {
+  data: PiscinaReservaAdmin[];
+  meta: MetaListado;
+}
+
+export interface FiltrosPiscinaReserva {
+  estado?: EstadoReserva | string;
+  campo_id?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  buscar?: string;
+  page?: number;
+  per_page?: number;
+}

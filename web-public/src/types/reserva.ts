@@ -5,6 +5,9 @@ export interface ReservaConfirmada {
   hora_inicio: string;
   hora_fin: string;
   confirmado_en?: string | null;
+  /** Solo piscina: perfil y cantidad de personas de cada detalle/turno. */
+  perfil?: 'mayor_12' | 'menor_12' | 'institucion' | string;
+  cantidad?: number;
 }
 
 export interface DatosCobroPendiente {
@@ -14,6 +17,8 @@ export interface DatosCobroPendiente {
 }
 
 export interface EstadoSolicitudPublico {
+  /** 'campo' (canchas) o 'piscina'. La consulta unificada lo agrega. */
+  tipo?: 'campo' | 'piscina';
   codigo_seguimiento: string;
   estado: string;
   monto_total: number;

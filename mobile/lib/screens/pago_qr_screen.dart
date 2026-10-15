@@ -4,9 +4,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-// import '../models/estado_solicitud.dart';
+import '../models/reserva_creada.dart';
 import '../services/estado_solicitud_service.dart';
-import '../services/solicitud_reserva_service.dart';
 import 'comprobante_screen.dart';
 
 /// Pantalla de cobro con cuenta regresiva (Fase 4.4) y detección
@@ -18,7 +17,7 @@ import 'comprobante_screen.dart';
 ///  • rechazada  → mensaje distinto: el Core procesó el intento y lo
 ///                  rechazó (no confundir con el 503 inmediato del Módulo 4)
 class PagoQrScreen extends StatefulWidget {
-  final SolicitudCreada resultado;
+  final ReservaCreada resultado;
 
   const PagoQrScreen({super.key, required this.resultado});
 
@@ -34,12 +33,16 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
   bool _rechazado = false;
   bool _navegando = false;
 
+  /// QR obtenido del polling cuando la creación no lo trajo (piscina).
+  String? _qrDesdePolling;
+
   final EstadoSolicitudService _estadoService = EstadoSolicitudService();
 
   @override
   void initState() {
     super.initState();
-    final expira = DateTime.parse(widget.resultado.expiraEn);
+    final expira = DateTime.tryParse(widget.resultado.expiraEn) ??
+        DateTime.now().add(const Duration(minutes: 20));
     _sincronizar(expira);
     _timer = Timer.periodic(
       const Duration(seconds: 1),
@@ -87,6 +90,11 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
         return;
       }
 
+      // Si la creación no trajo QR (piscina), lo tomamos del estado.
+      if (_qrDesdePolling == null && estado.qrString != null) {
+        setState(() => _qrDesdePolling = estado.qrString);
+      }
+
       if (estado.estaExpirada) {
         setState(() {
           _expirado = true;
@@ -121,6 +129,13 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
   }
 
   Color get _colorCuenta => _restante.inSeconds <= 60 ? Colors.red : Colors.teal;
+
+  /// El flujo de piscina se reserva por turno y perfil; el de campos por
+  /// franja horaria. Se distingue por el prefijo del código (PIS- / RES-).
+  bool get _esPiscina => widget.resultado.codigoSeguimiento.startsWith('PIS-');
+
+  String get _textoVolver =>
+      _esPiscina ? 'Volver a elegir turnos' : 'Volver a elegir franjas';
 
   Future<void> _abrirCheckout(String url) async {
     final uri = Uri.parse(url);
@@ -212,8 +227,10 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
     );
   }
 
-  Widget _medioDePago(SolicitudCreada r) {
-    if (r.qrString != null && r.qrString!.isNotEmpty) {
+  Widget _medioDePago(ReservaCreada r) {
+    final qrString = r.qrString ?? _qrDesdePolling;
+
+    if (qrString != null && qrString.isNotEmpty) {
       return Center(
         child: Container(
           padding: const EdgeInsets.all(12),
@@ -223,9 +240,28 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: QrImageView(
-            data: r.qrString!,
+            data: qrString,
             version: QrVersions.auto,
             size: 220,
+          ),
+        ),
+      );
+    }
+
+    if (r.qrDiferido) {
+      // La liquidación puede tardar unos segundos en el Core (caso piscina).
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 12),
+              Text(
+                'Generando el código de pago…',
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       );
@@ -293,7 +329,7 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
                 backgroundColor: Colors.teal,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Volver a elegir franjas'),
+              child: Text(_textoVolver),
             ),
           ],
         ),
@@ -331,7 +367,7 @@ class _PagoQrScreenState extends State<PagoQrScreen> {
                 backgroundColor: Colors.teal,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Volver a elegir franjas'),
+              child: Text(_textoVolver),
             ),
           ],
         ),

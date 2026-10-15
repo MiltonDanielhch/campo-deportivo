@@ -20,6 +20,7 @@ import {
   Link2,
   Unlink,
   Database,
+  Clock,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -155,8 +156,15 @@ export default function CamposDeportivos() {
     setCargandoSireb(true);
     setErrorSireb(null);
     try {
+      // El GET /v1/admin/catalogo-sireb/campos sirve caché (TTL 10min).
+      // Sin el refresh explícito, un servicio recién dado de alta en SIREB
+      // tarda hasta 10 min en verse acá. Por eso primero invalidamos caché
+      // y después leemos.
+      const refresh = await catalogoSirebService.refrescarCatalogo();
       const respuesta = await catalogoSirebService.listarCatalogo();
       setCatalogoSireb(respuesta.data);
+      const total = refresh?.data?.total_servicios ?? respuesta.data?.length ?? 0;
+      toast.success(`Catálogo SIREB refrescado: ${total} servicio${total === 1 ? '' : 's'}`);
     } catch {
       setErrorSireb('No se pudo consultar el catálogo de SIREB.');
       toast.error('No se pudo consultar el catálogo de SIREB');
@@ -720,6 +728,16 @@ export default function CamposDeportivos() {
                             <Banknote className="mr-2 size-4" />
                             Gestionar tarifas
                           </DropdownMenuItem>
+                          {campo.modalidad_reserva === 'turno_por_perfil' && (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                navigate(`/panel/parametricas/campos/${campo.id}/piscina/turnos`)
+                              }
+                            >
+                              <Clock className="mr-2 size-4" />
+                              Gestionar turnos piscina
+                            </DropdownMenuItem>
+                          )}
                           {campo.servicio_sireb_id ? (
                             <>
                               <DropdownMenuSeparator />

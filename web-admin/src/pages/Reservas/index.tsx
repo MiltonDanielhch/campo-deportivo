@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Search,
   UserCheck,
+  Waves,
   XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/context/AuthContext';
 import { solicitudesReservaService } from '@/services/solicitudesReservaService';
 import type {
@@ -49,6 +51,7 @@ import type {
   SolicitudReservaAdmin,
 } from '@/types/reservas';
 import DialogDetalleReserva from '@/components/reservas/DialogDetalleReserva';
+import PiscinaReservasTab from '@/components/reservas/PiscinaReservasTab';
 
 const estadoConfig: Record<
   EstadoReserva,
@@ -333,51 +336,29 @@ export default function Reservas() {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Gestión operativa
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight">Reservas</h1>
-          <p className="text-sm text-muted-foreground">
-            Auditoría de todas las solicitudes del sistema
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={cargarSolicitudes} disabled={cargando}>
-            <RotateCcw className="mr-2 size-4" />
-            Actualizar
-          </Button>
-
-          {esAdmin ? (
-            <Button
-              variant="outline"
-              onClick={handleExportarCsv}
-              disabled={exportando || cargando}
-              title="Exportar reservas con los filtros actuales"
-            >
-              {exportando ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <Download className="mr-2 size-4" />
-              )}
-              Exportar CSV
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              disabled
-              title="Solo administradores pueden exportar CSV"
-            >
-              <Download className="mr-2 size-4" />
-              Exportar CSV
-            </Button>
-          )}
-
-        </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Gestión operativa
+        </p>
+        <h1 className="text-2xl font-bold tracking-tight">Reservas</h1>
+        <p className="text-sm text-muted-foreground">
+          Auditoría de todas las solicitudes del sistema
+        </p>
       </div>
 
+      <Tabs defaultValue="campos" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="campos">
+            <MapPin className="size-4" />
+            Campos
+          </TabsTrigger>
+          <TabsTrigger value="piscina">
+            <Waves className="size-4" />
+            Piscina
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="campos" className="space-y-6">
       {/* Stats cards */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => {
@@ -484,6 +465,29 @@ export default function Reservas() {
 
           <Button variant="outline" onClick={limpiarFiltros}>
             Limpiar
+          </Button>
+
+          <Button variant="outline" onClick={cargarSolicitudes} disabled={cargando}>
+            <RotateCcw className="mr-2 size-4" />
+            Actualizar
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={handleExportarCsv}
+            disabled={!esAdmin || exportando || cargando}
+            title={
+              esAdmin
+                ? 'Exportar reservas con los filtros actuales'
+                : 'Solo administradores pueden exportar CSV'
+            }
+          >
+            {exportando ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 size-4" />
+            )}
+            Exportar CSV
           </Button>
         </div>
       </div>
@@ -623,6 +627,12 @@ export default function Reservas() {
           </div>
         )}
       </div>
+        </TabsContent>
+
+        <TabsContent value="piscina">
+          <PiscinaReservasTab />
+        </TabsContent>
+      </Tabs>
 
       <DialogDetalleReserva
         solicitudId={detalleId}

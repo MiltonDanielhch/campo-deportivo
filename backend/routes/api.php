@@ -14,13 +14,17 @@ use App\Http\Controllers\Api\V1\Public\DisponibilidadController;
 use App\Http\Controllers\Api\V1\Public\SolicitudReservaController;
 use App\Http\Controllers\Api\V1\WebhookRecaudacionesController;
 use App\Http\Controllers\Api\V1\Public\SolicitudEstadoController;
+use App\Http\Controllers\Api\V1\Public\ConsultaEstadoController;
 use App\Http\Controllers\Api\V1\Admin\SolicitudReservaController as AdminSolicitudReservaController;
 use App\Http\Controllers\Api\V1\Admin\AsistenciaController as AdminAsistenciaController;
 use App\Http\Controllers\Api\V1\Admin\CatalogoSirebController;
 use App\Http\Controllers\Api\V1\Admin\ReservasExportController as AdminReservasExportController;
+use App\Http\Controllers\Api\V1\Admin\PiscinaTurnoController;
+use App\Http\Controllers\Api\V1\Admin\PiscinaReservaController as AdminPiscinaReservaController;
 use App\Http\Controllers\Api\V1\OcupacionController;
 use App\Http\Controllers\Api\V1\ReportesController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\Public\PiscinaController;
 
 /*
 |--------------------------------------------------------------------------
@@ -67,7 +71,15 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
     Route::get('/campos/{campo}/disponibilidad', [DisponibilidadController::class, 'show']);
     Route::post('/solicitudes-reserva', [SolicitudReservaController::class, 'store']);
     Route::get('/solicitudes-reserva/{codigo}/estado', [SolicitudEstadoController::class, 'show']);
+    // Consulta ciudadana unificada: campos + piscina, por seguimiento, código
+    // de ventanilla o CI/NIT/teléfono.
+    Route::get('/consultas/{termino}/estado', [ConsultaEstadoController::class, 'show']);
     Route::get('/tipos-campo', [\App\Http\Controllers\Api\V1\Public\TipoCampoController::class, 'index']);
+
+    // ─── Módulo Piscina (Fase P7) ───
+    Route::get('/piscina/campos/{campoId}/turnos', [PiscinaController::class, 'turnos']);
+    Route::post('/piscina/reservas', [PiscinaController::class, 'reservar']);
+    Route::get('/piscina/reservas/{codigo}/estado', [PiscinaController::class, 'estado']);
 });
 
 // ─── Endpoints protegidos ───────────────────────────────────────────────
@@ -120,6 +132,11 @@ Route::middleware('auth.oauth')->group(function () {
         // ─── Catálogo SIREB (Fase C.4) ───
         Route::prefix('v1/admin/catalogo-sireb')->group(function () {
             Route::get('/campos', [CatalogoSirebController::class, 'index']);
+            // Refresca la caché del catálogo (invalida TTL 10min y re-pagina
+            // todo SIREB). Lo usa el botón "Refrescar catálogo" del panel
+            // porque el GET de arriba sirve caché y el operador no se entera
+            // de los servicios recién dados de alta en SIREB.
+            Route::post('/refrescar', [CatalogoSirebController::class, 'refrescar']);
         });
 
         // ─── Sincronización SIREB (Fase C.4) ───
@@ -155,6 +172,7 @@ Route::middleware('auth.oauth')->group(function () {
         Route::middleware('role:admin_parametricas|admin_reservas|funcionario_control')
             ->group(function () {
                 Route::get('/mis-campos', [OcupacionController::class, 'misCampos']);
+                Route::get('/piscina-turnos', [OcupacionController::class, 'turnosPiscina']);
                 Route::get('/verificar/{codigo}', [OcupacionController::class, 'verificar']);
             });
 
@@ -211,4 +229,21 @@ Route::middleware('auth.oauth')->group(function () {
             Route::get('/export', [AdminReservasExportController::class, 'csv']);
         });
     // ─── FIN Fase 7.3 ───
+
+    // ─── Fase P7.7: Módulo Piscina (Admin) ───
+    Route::middleware('role:admin_parametricas|admin_reservas')
+        ->prefix('v1/admin/piscina')
+        ->group(function () {
+            // Turnos
+            Route::get('/campos/{campoId}/turnos', [PiscinaTurnoController::class, 'index']);
+            Route::post('/turnos', [PiscinaTurnoController::class, 'store']);
+            Route::patch('/turnos/{turnoId}', [PiscinaTurnoController::class, 'update']);
+            Route::delete('/turnos/{turnoId}', [PiscinaTurnoController::class, 'destroy']);
+
+            // Reservas
+            Route::get('/reservas', [AdminPiscinaReservaController::class, 'index']);
+            Route::get('/reservas/{id}', [AdminPiscinaReservaController::class, 'show']);
+            Route::post('/reservas/{id}/cancelar', [AdminPiscinaReservaController::class, 'cancelar']);
+        });
+    // ─── FIN Fase P7.7 ───
 });

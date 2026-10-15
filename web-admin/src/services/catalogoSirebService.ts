@@ -84,4 +84,16 @@ export const catalogoSirebService = {
     );
     return data;
   },
+
+  /**
+   * Invalida la caché del catálogo SIREB (TTL 10min) y la repuebla
+   * iterando todas las páginas. Se usa cuando el operador agrega/quita
+   * un servicio en SIREB y no quiere esperar el TTL.
+   */
+  async refrescarCatalogo(): Promise<{ message: string; data: any }> {
+    const { data } = await apiClient.post<{ message: string; data: any }>(
+      '/v1/admin/catalogo-sireb/refrescar',
+    );
+    return data;
+  },
 };

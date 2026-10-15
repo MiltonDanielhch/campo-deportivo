@@ -5,9 +5,12 @@ import 'package:provider/provider.dart';
 import '../models/bloque_disponibilidad.dart';
 import '../models/campo_deportivo.dart';
 import '../models/franja_carrito.dart';
+import '../models/piscina_disponibilidad.dart';
 import '../providers/carrito_reserva_provider.dart';
 import '../services/disponibilidad_service.dart';
+import '../services/piscina_service.dart';
 import 'carrito_resumen_screen.dart';
+import 'piscina_datos_screen.dart';
 
 /// Pantalla de detalle de un campo con selector de fecha (HU-C2) y
 /// selección de franjas hacia el carrito global (HU-D1).
@@ -22,12 +25,20 @@ class CampoDetalleScreen extends StatefulWidget {
 
 class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
   final _service = DisponibilidadService();
+  final _piscinaService = PiscinaService();
   late DateTime _fechaSeleccionada;
 
   Disponibilidad? _disponibilidad;
   bool _cargando = true;
   String? _error;
   Timer? _refreshTimer;
+
+  // ─── Selección de piscina (un turno + cantidades por perfil) ───
+  PiscinaDisponibilidad? _piscina;
+  String? _turnoPiscinaId;
+  Map<String, int> _cantidadesPiscina = {};
+
+  bool get _esPiscina => widget.campo.esPiscina;
 
   @override
   void initState() {
@@ -55,6 +66,27 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
     }
 
     try {
+      if (_esPiscina) {
+        final data = await _piscinaService.obtenerTurnos(
+          widget.campo.id,
+          _fechaStr,
+        );
+        if (mounted) {
+          setState(() {
+            _piscina = data;
+            _cargando = false;
+            _error = null;
+            // Si el turno elegido ya no está, se limpia la selección.
+            if (_turnoPiscinaId != null &&
+                !data.turnos.any((t) => t.id == _turnoPiscinaId)) {
+              _turnoPiscinaId = null;
+              _cantidadesPiscina = {};
+            }
+          });
+        }
+        return;
+      }
+
       final data = await _service.obtenerDisponibilidad(
         widget.campo.id,
         _fechaSeleccionada,
@@ -112,6 +144,9 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
     if (fecha != _fechaSeleccionada) {
       setState(() {
         _fechaSeleccionada = fecha;
+        // La selección de piscina es por turno del día: se reinicia.
+        _turnoPiscinaId = null;
+        _cantidadesPiscina = {};
       });
       _cargar(silencioso: false);
     }
@@ -243,7 +278,6 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _InfoCampo(campo: widget.campo),
-
           // ─── Selector de fechas (scroll) + calendario FIJO a la derecha ───
           Container(
             height: 80,
@@ -316,19 +350,66 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
 
           Expanded(child: _construirGrilla()),
 
-          // ─── Barra del carrito global ───
-          if (!carrito.estaVacio)
-            _BarraCarrito(
-              cantidad: carrito.cantidad,
-              total: carrito.totalEstimado,
-              onVer: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const CarritoResumenScreen(),
+          // ─── Barra inferior: carrito (campos) o resumen (piscina) ───
+          if (_esPiscina) ...[
+            if (_turnoPiscinaId != null && _cantidadesPiscina.isNotEmpty)
+              _BarraPiscina(
+                totalPersonas: _totalPersonasPiscina,
+                total: _totalPiscina,
+                onContinuar: _continuarPiscina,
+              ),
+          ] else ...[
+            if (!carrito.estaVacio)
+              _BarraCarrito(
+                cantidad: carrito.cantidad,
+                total: carrito.totalEstimado,
+                onVer: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CarritoResumenScreen(),
+                  ),
                 ),
               ),
-            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  PiscinaTurno? get _turnoPiscina {
+    final piscina = _piscina;
+    if (piscina == null || _turnoPiscinaId == null) return null;
+    for (final t in piscina.turnos) {
+      if (t.id == _turnoPiscinaId) return t;
+    }
+    return null;
+  }
+
+  int get _totalPersonasPiscina =>
+      _cantidadesPiscina.values.fold(0, (suma, c) => suma + c);
+
+  double get _totalPiscina {
+    final turno = _turnoPiscina;
+    if (turno == null) return 0;
+    return turno.perfiles.fold(
+      0,
+      (suma, p) => suma + p.precio * (_cantidadesPiscina[p.perfil] ?? 0),
+    );
+  }
+
+  void _continuarPiscina() {
+    final turno = _turnoPiscina;
+    if (turno == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PiscinaDatosScreen(
+          campo: widget.campo,
+          fecha: _fechaStr,
+          turno: turno,
+          cantidades: Map<String, int>.from(_cantidadesPiscina),
+        ),
       ),
     );
   }
@@ -358,6 +439,10 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
           ),
         ),
       );
+    }
+
+    if (_esPiscina) {
+      return _construirTurnosPiscina();
     }
 
     final disponibilidad = _disponibilidad;
@@ -398,6 +483,56 @@ class _CampoDetalleScreenState extends State<CampoDetalleScreen> {
       bloques: disponibilidad.bloques,
       fecha: _fechaStr,
       campo: widget.campo,
+    );
+  }
+
+  /// Grilla de turnos por perfil (piscina) con selección de turno y cantidades.
+  Widget _construirTurnosPiscina() {
+    final piscina = _piscina;
+    if (piscina == null) {
+      return const Center(child: Text('Sin datos'));
+    }
+
+    if (!piscina.abierto || piscina.turnos.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.pool, size: 64, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              const Text(
+                'No hay turnos para esta fecha',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Elegí otra fecha para ver los turnos disponibles',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return _ListaTurnosPiscina(
+      turnos: piscina.turnos,
+      turnoSeleccionado: _turnoPiscinaId,
+      cantidades: _cantidadesPiscina,
+      onSeleccionarTurno: (turno) => setState(() {
+        _turnoPiscinaId = turno.id;
+        _cantidadesPiscina = {};
+      }),
+      onCambiarCantidad: (perfil, cantidad) => setState(() {
+        if (cantidad <= 0) {
+          _cantidadesPiscina.remove(perfil);
+        } else {
+          _cantidadesPiscina[perfil] = cantidad;
+        }
+      }),
     );
   }
 }
@@ -443,6 +578,30 @@ class _InfoCampo extends StatelessWidget {
               Expanded(child: Text(campo.direccion)),
             ],
           ),
+          if (campo.esPiscina) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.cyan[50],
+                border: Border.all(color: Colors.cyan[200]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.pool, size: 18, color: Colors.cyan),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Reserva por turno y perfil. Elegí un turno y la '
+                      'cantidad de personas.',
+                      style: TextStyle(fontSize: 12, color: Colors.black87),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (tieneAlgunaTarifa) ...[
             const SizedBox(height: 12),
             Row(
@@ -757,6 +916,235 @@ class _BarraCarrito extends StatelessWidget {
               foregroundColor: Colors.white,
             ),
             child: const Text('Ver carrito'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lista de turnos de piscina. El turno elegido se expande para elegir
+/// cantidades por perfil (mayores/menores/institución).
+class _ListaTurnosPiscina extends StatelessWidget {
+  final List<PiscinaTurno> turnos;
+  final String? turnoSeleccionado;
+  final Map<String, int> cantidades;
+  final ValueChanged<PiscinaTurno> onSeleccionarTurno;
+  final void Function(String perfil, int cantidad) onCambiarCantidad;
+
+  const _ListaTurnosPiscina({
+    required this.turnos,
+    required this.turnoSeleccionado,
+    required this.cantidades,
+    required this.onSeleccionarTurno,
+    required this.onCambiarCantidad,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: turnos.length,
+      itemBuilder: (context, index) {
+        final turno = turnos[index];
+        final seleccionado = turno.id == turnoSeleccionado;
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: seleccionado ? Colors.teal : Colors.grey.shade300,
+              width: seleccionado ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              InkWell(
+                onTap: () => onSeleccionarTurno(turno),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.schedule,
+                        color: seleccionado ? Colors.teal : Colors.grey[600],
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          turno.rango,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        'Cupo ${turno.cupoTotal}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        seleccionado
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        size: 20,
+                        color: seleccionado ? Colors.teal : Colors.grey,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (seleccionado)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: Column(
+                    children: turno.perfiles
+                        .map((p) => _FilaPerfil(
+                              perfil: p,
+                              cantidad: cantidades[p.perfil] ?? 0,
+                              onCambiar: (c) => onCambiarCantidad(p.perfil, c),
+                            ))
+                        .toList(),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Fila de un perfil con su precio y un selector de cantidad.
+class _FilaPerfil extends StatelessWidget {
+  final PiscinaPerfilTurno perfil;
+  final int cantidad;
+  final ValueChanged<int> onCambiar;
+
+  const _FilaPerfil({
+    required this.perfil,
+    required this.cantidad,
+    required this.onCambiar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sinCupo = !perfil.hayCupo;
+    final menosActivo = cantidad > 0;
+    final masActivo = cantidad < perfil.disponible;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  perfil.etiqueta,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  sinCupo
+                      ? 'Sin cupo'
+                      : 'Bs ${perfil.precio.toStringAsFixed(2)} · '
+                          '${perfil.disponible} disponible(s)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: sinCupo ? Colors.red : Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: menosActivo ? () => onCambiar(cantidad - 1) : null,
+            icon: const Icon(Icons.remove_circle_outline),
+            color: Colors.teal,
+            tooltip: 'Quitar uno',
+          ),
+          SizedBox(
+            width: 24,
+            child: Text(
+              '$cantidad',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: masActivo ? () => onCambiar(cantidad + 1) : null,
+            icon: const Icon(Icons.add_circle_outline),
+            color: Colors.teal,
+            tooltip: 'Agregar uno',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Barra inferior con el resumen de la selección de piscina.
+class _BarraPiscina extends StatelessWidget {
+  final int totalPersonas;
+  final double total;
+  final VoidCallback onContinuar;
+
+  const _BarraPiscina({
+    required this.totalPersonas,
+    required this.total,
+    required this.onContinuar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 4,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$totalPersonas persona(s) seleccionada(s)',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'Total estimado: Bs ${total.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.green),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: onContinuar,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Continuar'),
           ),
         ],
       ),

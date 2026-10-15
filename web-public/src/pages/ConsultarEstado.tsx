@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import {
@@ -30,6 +30,15 @@ export default function ConsultarEstado() {
   const [pollingActivo, setPollingActivo] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // El backend unificado marca el tipo; si no, lo inferimos por el prefijo.
+  const esPiscina =
+    datos?.tipo === 'piscina' ||
+    (datos?.codigo_seguimiento?.startsWith('PIS-') ?? false);
+
+  const comprobantePath = esPiscina
+    ? `/comprobante-piscina/${datos?.codigo_seguimiento}`
+    : `/comprobante/${datos?.codigo_seguimiento}`;
+
   const consultar = async () => {
     const limpio = codigo.trim().toUpperCase();
     if (!limpio) return;
@@ -40,12 +49,14 @@ export default function ConsultarEstado() {
     setYaConsulto(true);
 
     try {
-      const res = await api.get(`/public/solicitudes-reserva/${limpio}/estado`);
+      // Endpoint unificado: acepta código de seguimiento (RES-/PIS-),
+      // código de ventanilla (K699-…), CI/NIT o teléfono.
+      const res = await api.get(`/public/consultas/${encodeURIComponent(limpio)}/estado`);
       setDatos(res.data.data);
     } catch (err: any) {
       if (err.response?.status === 404) {
         setError(
-          'No encontramos ninguna reserva con ese código. Verificá que esté bien escrito.',
+          'No encontramos ninguna reserva con ese código, CI/NIT o teléfono. Verificá que esté bien escrito.',
         );
       } else {
         setError('Error de conexión. Intentá nuevamente en unos segundos.');
@@ -77,7 +88,9 @@ export default function ConsultarEstado() {
       setPollingActivo(true);
       pollingRef.current = setInterval(async () => {
         try {
-          const res = await api.get(`/public/solicitudes-reserva/${codigo.trim().toUpperCase()}/estado`);
+          const res = await api.get(
+            `/public/consultas/${encodeURIComponent(codigo.trim().toUpperCase())}/estado`,
+          );
           const nuevosDatos = res.data.data;
 
           setDatos(nuevosDatos);
@@ -129,8 +142,9 @@ export default function ConsultarEstado() {
               Consultá tu reserva
             </h1>
             <p className="text-slate-600 text-lg max-w-xl mx-auto">
-              Ingresá tu código de seguimiento para ver el estado de tu reserva,
-              descargar el comprobante o volver a pagar.
+              Ingresá tu código de seguimiento, el código de pago en ventanilla,
+              tu CI/NIT o teléfono para ver el estado de tu reserva, descargar el
+              comprobante o volver a pagar.
             </p>
           </div>
 
@@ -142,7 +156,7 @@ export default function ConsultarEstado() {
                 className="flex items-center gap-1.5 text-sm font-semibold mb-2"
               >
                 <FileSearch className="w-4 h-4 text-teal-600" />
-                Código de seguimiento
+                Código, CI/NIT o teléfono
               </Label>
 
               <div className="flex flex-col sm:flex-row gap-2">
@@ -152,7 +166,7 @@ export default function ConsultarEstado() {
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value.toUpperCase())}
                     onKeyDown={(e) => e.key === 'Enter' && consultar()}
-                    placeholder="RES-20260916-ABC123"
+                    placeholder="RES-… / PIS-… / K699-… / CI / teléfono"
                     className="font-mono uppercase h-12 text-base pl-4 pr-4 bg-slate-50 border-slate-200 focus:bg-white"
                     disabled={cargando}
                     autoComplete="off"
@@ -181,9 +195,16 @@ export default function ConsultarEstado() {
               <p className="text-xs text-slate-500 mt-3 flex items-start gap-1.5">
                 <span className="text-teal-600">💡</span>
                 <span>
-                  Lo recibiste por email al crear tu solicitud. Formato:{' '}
+                  Aceptamos el código de seguimiento, el código de pago en
+                  ventanilla, tu CI/NIT o teléfono:{' '}
                   <code className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">
                     RES-YYYYMMDD-XXXXXX
+                  </code>{' '}
+                  <code className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">
+                    PIS-YYYYMMDD-XXXXXX
+                  </code>{' '}
+                  <code className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">
+                    K699-88PZ-J7G
                   </code>
                 </span>
               </p>
@@ -244,6 +265,7 @@ export default function ConsultarEstado() {
                 montoTotal={datos.monto_total}
                 expiraEn={datos.expira_en}
                 codigoSeguimiento={datos.codigo_seguimiento}
+                esPiscina={esPiscina}
                 mostrarAcciones
               />
 
@@ -278,7 +300,7 @@ export default function ConsultarEstado() {
                   <div className="text-center">
                     <Button asChild variant="outline" className="rounded-full">
                       <Link
-                        to={`/comprobante/${datos.codigo_seguimiento}`}
+                        to={comprobantePath}
                         className="flex items-center gap-2"
                       >
                         Ver comprobante con opción de impresión
