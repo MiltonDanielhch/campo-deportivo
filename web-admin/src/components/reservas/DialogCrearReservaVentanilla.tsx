@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Check, Copy, Loader2, MapPin, Plus, QrCode } from 'lucide-react';
+import { Check, Copy, Download, Loader2, MapPin, MessageCircle, Plus, QrCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { solicitudesReservaService } from '@/services/solicitudesReservaService';
 import type { CampoOption } from '@/types/reservas';
+import { QRCodeCanvas } from 'qrcode.react';
 
 interface Props {
   open: boolean;
@@ -116,6 +117,25 @@ export default function DialogCrearReservaVentanilla({ open, onOpenChange, onCre
     setTimeout(() => setCopiado(null), 1500);
   };
 
+  const descargarQr = () => {
+    const canvas = document.getElementById('qr-ventanilla') as HTMLCanvasElement | null;
+    if (!canvas) return;
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `qr-${resultado?.codigo_seguimiento ?? 'reserva'}.png`;
+    a.click();
+  };
+
+  const enviarWhatsapp = () => {
+    if (!resultado) return;
+    const texto = encodeURIComponent(
+      `Reserva ${resultado.codigo_seguimiento}\nMonto: Bs ${resultado.monto_total.toFixed(2)}\n` +
+      `Código de pago: ${resultado.referencia_recaudaciones ?? ''}\n` +
+      `Pagá en ventanilla del Banco Unión o escaneá el QR.`,
+    );
+    window.open(`https://wa.me/?text=${texto}`, '_blank');
+  };
+
   const enviar = async () => {
     if (!campoId || !fecha || slots.length === 0) {
       toast.error('Elegí al menos una franja libre.');
@@ -179,10 +199,36 @@ export default function DialogCrearReservaVentanilla({ open, onOpenChange, onCre
             </div>
 
             {resultado.referencia_recaudaciones ? (
-              <div className="space-y-2 rounded-xl border bg-muted/50 p-4">
+              <div className="space-y-3 rounded-xl border bg-muted/50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Código de pago en ventanilla
                 </p>
+
+                {/* QR escaneable (igual que el público) */}
+                {resultado.qr_string && (
+                  <div className="flex flex-col items-center gap-3 py-2">
+                    <div className="rounded-xl border bg-white p-3">
+                      <QRCodeCanvas
+                        id="qr-ventanilla"
+                        value={resultado.qr_string}
+                        size={220}
+                        level="M"
+                        marginSize={2}
+                      />
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <Button variant="outline" size="sm" onClick={descargarQr}>
+                        <Download className="mr-2 size-4" />
+                        Descargar QR
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={enviarWhatsapp}>
+                        <MessageCircle className="mr-2 size-4" />
+                        Enviar por WhatsApp
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between gap-2">
                   <code className="font-mono text-xl font-bold tracking-widest">
                     {resultado.referencia_recaudaciones}
@@ -201,7 +247,7 @@ export default function DialogCrearReservaVentanilla({ open, onOpenChange, onCre
                 )}
                 <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
                   <QrCode className="size-3.5" />
-                  El ciudadano paga con este código o QR; el sistema confirma solo.
+                  Presentá este código o escaneá el QR en ventanilla del Banco Unión con tu CI.
                 </p>
               </div>
             ) : (

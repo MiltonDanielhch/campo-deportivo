@@ -79,19 +79,18 @@ class ReintentarSolicitudJob implements ShouldQueue
                 ['intentos' => $this->attempts()],
                 ['liquidacion_id' => $solicitud->liquidacion_id],
             );
-        } catch (RecaudacionesApiException $e) {
+        } catch (\Throwable $e) {
             Log::channel('sireb')->warning('Reintento fallido', [
                 'solicitud_id' => $solicitud->id,
                 'intento' => $this->attempts(),
                 'error' => $e->getMessage(),
             ]);
 
-            // Si este fue el último intento, marcar rechazada
             if ($this->attempts() >= $this->tries) {
                 $this->rechazarPorErrorCobro($solicitud, $e, $auditoria);
             }
 
-            throw $e; // Laravel reintenta automáticamente
+            throw $e;
         }
     }
 
@@ -127,12 +126,15 @@ class ReintentarSolicitudJob implements ShouldQueue
             referenciaExterna: $solicitud->codigo_seguimiento,
         );
 
-        // 4. Persistir referencias
+        // 4. Persistir referencias (SIREB manda el monto autoritativo)
         $solicitud->update([
             'referencia_recaudaciones' => $liquidacion['codigo_publico'],
             'liquidacion_id' => $liquidacion['id'],
+            'monto_total' => $liquidacion['monto'],
             'datos_cobro_pendiente' => [
                 'codigo_publico' => $liquidacion['codigo_publico'],
+                'qr_string' => 'SIREB:'.$liquidacion['codigo_publico'],
+                'qr_image_base64' => null,
                 'monto' => $liquidacion['monto'],
                 'fecha_vencimiento' => $liquidacion['fecha_vencimiento'],
                 'items' => $liquidacion['items'],
