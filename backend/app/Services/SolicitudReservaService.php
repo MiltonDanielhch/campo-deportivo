@@ -67,10 +67,15 @@ class SolicitudReservaService
     ) {
     }
 
-    public function crear(SolicitudReservaDTO $datos): SolicitudCreadaDTO
+    public function crear(SolicitudReservaDTO $datos, bool $esAdmin = false): SolicitudCreadaDTO
     {
-        // ── Gate anti-hoarding (antes de cualquier hold o consulta a BD) ──
-        $this->validarAntiHoarding($datos);
+        // ── Gate anti-hoarding: SOLO canal público ──
+        // El mostrador (admin) crea a nombre del ciudadano desde la IP de la
+        // oficina; aplicarle el tope por IP bloquearía la operación del GAD.
+        // El resto (disponibilidad, EXCLUDE, precio espejo) se mantiene igual.
+        if (! $esAdmin) {
+            $this->validarAntiHoarding($datos);
+        }
 
         // ── Capa 1: verificación rápida (aplicativa) ──
         $campos = $this->verificarFranjas($datos->franjas);

@@ -71,6 +71,7 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
     Route::get('/campos/{campo}/disponibilidad', [DisponibilidadController::class, 'show']);
     Route::post('/solicitudes-reserva', [SolicitudReservaController::class, 'store']);
     Route::get('/solicitudes-reserva/{codigo}/estado', [SolicitudEstadoController::class, 'show']);
+    Route::get('solicitudes-reserva', [SolicitudReservaController::class, 'index']);
     // Consulta ciudadana unificada: campos + piscina, por seguimiento, código
     // de ventanilla o CI/NIT/teléfono.
     Route::get('/consultas/{termino}/estado', [ConsultaEstadoController::class, 'show']);
@@ -202,6 +203,7 @@ Route::middleware('auth.oauth')->group(function () {
             ->group(function () {
                 Route::get('/', [AdminSolicitudReservaController::class, 'index']);
                 Route::get('/{id}', [AdminSolicitudReservaController::class, 'show']);
+                Route::post('/', [AdminSolicitudReservaController::class, 'store']);
             });
 
         // Acciones sensibles: solo admins.

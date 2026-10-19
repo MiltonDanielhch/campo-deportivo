@@ -10,12 +10,16 @@ use App\Http\Requests\AnularLiquidacionRequest;
 use App\Http\Resources\AuditoriaResource;
 use App\Http\Resources\SolicitudReservaAdminResource;
 use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
-use App\Models\SolicitudReserva;
 use App\Services\AuditoriaService;
 use App\Services\SolicitudReservaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\DTOs\FranjaSolicitadaDTO;
+use App\DTOs\SolicitudReservaDTO;
+use App\Exceptions\FranjaNoDisponibleException;
+use App\Http\Requests\StoreSolicitudReservaRequest;
+use App\Models\SolicitudReserva;
 
 /**
  * Endpoints administrativos para gestión de solicitudes de reserva e integración SIREB.
@@ -68,6 +72,77 @@ class SolicitudReservaController extends Controller
                 'stats' => $stats,
             ],
         ]);
+    }
+
+    /**
+     * POST /v1/admin/solicitudes-reserva
+     * Creación desde ventanilla: el funcionario genera la reserva y el código
+     * de pago SIREB para un ciudadano que paga en caja. Usa el MISMO motor que
+     * el canal público (disponibilidad, EXCLUDE, precio del espejo) pero sin el
+     * gate anti-hoarding por IP, que es anti-abuso de anónimos, no de oficina.
+     */
+    public function store(StoreSolicitudReservaRequest $request): JsonResponse
+    {
+        /** @var \App\Models\Funcionario $funcionario */
+        $funcionario = $request->user();
+
+        if (! $this->solicitudes->esAdministrador($funcionario)) {
+            return response()->json([
+                'message' => 'Solo administradores pueden crear reservas desde el panel.',
+            ], 403);
+        }
+
+        $v = $request->validated();
+
+        $franjas = array_map(
+            fn (array $f) => new FranjaSolicitadaDTO(
+                campoId: $f['campo_id'],
+                fecha: $f['fecha'],
+                horaInicio: $f['hora_inicio'],
+                horaFin: $f['hora_fin'],
+            ),
+            $v['franjas'],
+        );
+
+        $datos = new SolicitudReservaDTO(
+            franjas: $franjas,
+            nombrePagador: $v['nombre_pagador'],
+            telefonoPagador: $v['telefono_pagador'] ?? null,
+            ciNitPagador: $v['ci_nit_pagador'],
+            ipCobrador: $request->ip(),
+        );
+
+        try {
+            $resultado = $this->solicitudes->crear($datos, esAdmin: true);
+        } catch (FranjaNoDisponibleException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        // Leemos el cobro del modelo fresco: no depende de los nombres del DTO.
+        $solicitud = SolicitudReserva::findOrFail($resultado->solicitud->id);
+        $cobro = $solicitud->datos_cobro_pendiente;
+
+        $this->auditoria->registrar(
+            'solicitudes_reserva',
+            $solicitud->id,
+            'solicitud_creada_en_ventanilla',
+            $funcionario->id,
+            ['canal' => 'panel_admin'],
+            [
+                'codigo_seguimiento' => $solicitud->codigo_seguimiento,
+                'monto_total' => $solicitud->monto_total,
+            ],
+        );
+
+        return response()->json([
+            'message' => 'Reserva creada. Entregá el código de pago al ciudadano.',
+            'data' => [
+                'codigo_seguimiento' => $solicitud->codigo_seguimiento,
+                'monto_total' => (float) $solicitud->monto_total,
+                'referencia_recaudaciones' => $cobro['codigo_publico'] ?? null,
+                'qr_string' => $cobro['qr_string'] ?? null,
+            ],
+        ], 201);
     }
 
     /**

@@ -50,6 +50,41 @@ async function leerMensajeError(error: any): Promise<string> {
 }
 
 export const solicitudesReservaService = {
+  async crearReservaAdmin(payload: any) {
+    const response = await apiClient.post('/admin/solicitudes-reserva', payload);
+    return response.data;
+  },
+
+  /** Grilla pública (sin token): para ofrecer solo slots libres en ventanilla. */
+  async disponibilidad(campoId: string, fecha: string) {
+    const { data } = await apiClient.get<{
+      data: {
+        abierto: boolean;
+        bloques: Array<{ hora_inicio: string; hora_fin: string; estado: string }>;
+      };
+    }>(`/v1/public/campos/${campoId}/disponibilidad`, { params: { fecha } });
+    return data.data;
+  },
+
+  /** Creación desde ventanilla (admin). Devuelve código de seguimiento + cobro. */
+  async crearDesdeVentanilla(payload: {
+    franjas: Array<{ campo_id: string; fecha: string; hora_inicio: string; hora_fin: string }>;
+    nombre_pagador: string;
+    ci_nit_pagador: string;
+    telefono_pagador?: string;
+  }) {
+    const { data } = await apiClient.post<{
+      message: string;
+      data: {
+        codigo_seguimiento: string;
+        monto_total: number;
+        referencia_recaudaciones: string | null;
+        qr_string: string | null;
+      };
+    }>('/v1/admin/solicitudes-reserva', payload);
+    return data;
+  },
+
   async listar(
     params?: FiltrosReserva,
   ): Promise<ListadoSolicitudesResponse> {
@@ -149,6 +184,10 @@ export const solicitudesReservaService = {
    * Solo para admin_parametricas.
    * Si falla por permisos, la pantalla oculta el filtro de campo.
    */
+  /**
+   * Solo para admin_parametricas.
+   * Si falla por permisos, la pantalla oculta el filtro de campo.
+   */
   async listarCampos(): Promise<CampoOption[]> {
     const { data } = await apiClient.get<unknown>('/v1/campos-deportivos', {
       params: {
@@ -172,6 +211,27 @@ export const solicitudesReservaService = {
         nombre: String(campo.nombre ?? 'Campo sin nombre'),
       }))
       .filter((campo) => campo.id)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  },
+
+  /** Campos activos desde endpoint público (sin token, shape garantizado). */
+  async listarCamposPublicos(): Promise<CampoOption[]> {
+    const { data } = await apiClient.get<unknown>('/v1/public/campos');
+
+    const body = data as { data?: unknown } | unknown[] | null;
+    const raw: unknown[] = Array.isArray(body)
+      ? body
+      : Array.isArray((body as { data?: unknown })?.data)
+        ? ((body as { data: unknown[] }).data)
+        : [];
+
+    return (raw as Array<Record<string, unknown>>)
+      .filter((c) => c && (c.estado === 'activo' || c.estado === undefined))
+      .map((c) => ({
+        id: String(c.id ?? ''),
+        nombre: String(c.nombre ?? c.descripcion ?? c.codigo ?? ''),
+      }))
+      .filter((c) => c.id)
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   },
 };

@@ -14,6 +14,7 @@ import {
   Filter,
   Loader2,
   MapPin,
+  Plus,    
   RotateCcw,
   Search,
   UserCheck,
@@ -52,6 +53,7 @@ import type {
 } from '@/types/reservas';
 import DialogDetalleReserva from '@/components/reservas/DialogDetalleReserva';
 import PiscinaReservasTab from '@/components/reservas/PiscinaReservasTab';
+import DialogCrearReservaVentanilla from '@/components/reservas/DialogCrearReservaVentanilla';
 
 const estadoConfig: Record<
   EstadoReserva,
@@ -144,6 +146,8 @@ export default function Reservas() {
   const esAdmin =
   rol === 'admin_parametricas' || rol === 'admin_reservas';
 
+  const [crearOpen, setCrearOpen] = useState(false);
+
   const [solicitudes, setSolicitudes] = useState<SolicitudReservaAdmin[]>([]);
   const [meta, setMeta] = useState<MetaListado | null>(null);
   const [campos, setCampos] = useState<CampoOption[]>([]);
@@ -171,7 +175,7 @@ export default function Reservas() {
     }
 
     try {
-      const data = await solicitudesReservaService.listarCampos();
+      const data = await solicitudesReservaService.listarCamposPublicos();
       setCampos(data);
     } catch {
       setCampos([]);
@@ -440,7 +444,7 @@ export default function Reservas() {
             title="Hasta"
           />
 
-          {campos.length > 0 && (
+                    {campos.length > 0 && (
             <Select
               value={campoId}
               onValueChange={(value) => {
@@ -449,14 +453,19 @@ export default function Reservas() {
               }}
             >
               <SelectTrigger className="w-full lg:w-56">
-                <MapPin className="mr-2 size-4" />
-                <SelectValue placeholder="Campo" />
+                {/* Render manual: no dependemos de que Radix resuelva el label */}
+                <span className="flex min-w-0 items-center gap-2 text-left">
+                  <MapPin className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">
+                    {campos.find((c) => c.id === campoId)?.nombre || 'Campo'}
+                  </span>
+                </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos los campos</SelectItem>
                 {campos.map((campo) => (
                   <SelectItem key={campo.id} value={campo.id}>
-                    {campo.nombre}
+                    {campo.nombre || campo.id}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -488,6 +497,10 @@ export default function Reservas() {
               <Download className="mr-2 size-4" />
             )}
             Exportar CSV
+          </Button>
+          <Button onClick={() => setCrearOpen(true)} className="bg-teal-600 hover:bg-teal-700">
+            <Plus className="mr-2 size-4" />
+            Nueva Reserva
           </Button>
         </div>
       </div>
@@ -639,6 +652,12 @@ export default function Reservas() {
         open={detalleOpen}
         onOpenChange={setDetalleOpen}
         onRefresh={cargarSolicitudes}
+      />
+
+      <DialogCrearReservaVentanilla
+        open={crearOpen}
+        onOpenChange={setCrearOpen}
+        onCreada={cargarSolicitudes}
       />
     </div>
   );
