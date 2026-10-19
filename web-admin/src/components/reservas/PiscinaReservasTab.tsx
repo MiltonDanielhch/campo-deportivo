@@ -50,6 +50,8 @@ import type {
   MetaListado,
   PiscinaReservaAdmin,
 } from '@/types/reservas';
+import { Plus } from 'lucide-react';
+import DialogCrearReservaPiscinaVentanilla from '@/components/reservas/DialogCrearReservaPiscinaVentanilla';
 
 const estadoConfig: Record<
   EstadoReserva,
@@ -159,6 +161,8 @@ export default function PiscinaReservasTab() {
   const [meta, setMeta] = useState<MetaListado | null>(null);
   const [cargando, setCargando] = useState(true);
 
+  const [crearOpen, setCrearOpen] = useState(false);
+  
   const [filtroEstado, setFiltroEstado] = useState<string>('todos');
   const [filtroBuscar, setFiltroBuscar] = useState('');
   const [buscarDebounce, setBuscarDebounce] = useState('');
@@ -367,6 +371,11 @@ export default function PiscinaReservasTab() {
           <Button variant="outline" onClick={cargarReservas} disabled={cargando}>
             <RotateCcw className="mr-2 size-4" />
             Actualizar
+          </Button>
+
+          <Button onClick={() => setCrearOpen(true)}>
+            <Plus className="mr-2 size-4" />
+            Nueva reserva
           </Button>
         </div>
       </div>
@@ -623,6 +632,11 @@ export default function PiscinaReservasTab() {
           ) : null}
         </DialogContent>
       </Dialog>
+      <DialogCrearReservaPiscinaVentanilla
+        open={crearOpen}
+        onOpenChange={setCrearOpen}
+        onCreada={cargarReservas}
+      />
     </div>
   );
 }

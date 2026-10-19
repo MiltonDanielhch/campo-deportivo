@@ -44,4 +44,36 @@ export const piscinaService = {
     );
     return data.data;
   },
+
+  /** Turnos disponibles para ventanilla (endpoint público, sin token). */
+  async turnosDisponibles(campoId: string, fecha: string): Promise<unknown> {
+    const { data } = await apiClient.get(
+      `/v1/public/piscina/campos/${campoId}/turnos`,
+      { params: { fecha } },
+    );
+    return data.data ?? data;
+  },
+
+  /** Creación desde ventanilla (admin). Devuelve código + QR. */
+  async crearDesdeVentanilla(payload: {
+    fecha: string;
+    turno_id: string;
+    items: Array<{ perfil: string; cantidad: number }>;
+    nombre_pagador: string;
+    ci_nit_pagador: string;
+    telefono_pagador?: string;
+  }) {
+    const { data } = await apiClient.post<{
+      message: string;
+      data: {
+        reserva_id: string;
+        codigo_seguimiento: string;
+        monto_total: number;
+        expira_en: string;
+        referencia_recaudaciones: string | null;
+        qr_string: string | null;
+      };
+    }>('/v1/admin/piscina/reservas', payload);
+    return data;
+  },
 };

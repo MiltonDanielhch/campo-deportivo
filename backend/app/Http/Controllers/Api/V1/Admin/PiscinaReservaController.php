@@ -8,12 +8,24 @@ use App\Models\PiscinaReserva;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\DTOs\PiscinaReservaDTO;
+use App\Exceptions\FranjaNoDisponibleException;
+use App\Exceptions\RecaudacionesApiException;
+use App\Http\Requests\Piscina\StorePiscinaReservaRequest;
+use App\Services\Piscina\PiscinaReservaService;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Controller admin para gestión de reservas de piscina.
  */
 class PiscinaReservaController extends Controller
 {
+
+    public function __construct(
+        private PiscinaReservaService $reservas,
+    ) {
+    }
+    
     /**
      * GET /api/v1/admin/piscina/reservas
      *
@@ -60,6 +72,57 @@ class PiscinaReservaController extends Controller
                 'stats' => $stats,
             ],
         ]);
+    }
+
+    /**
+     * POST /v1/admin/piscina/reservas
+     * Creación desde ventanilla: el funcionario genera la reserva y el código
+     * de pago SIREB para el ciudadano. Usa el mismo motor que el público,
+     * pero si SIREB falla, rechaza inline y libera el cupo.
+     */
+    public function store(StorePiscinaReservaRequest $request): JsonResponse
+    {
+        $v = $request->validated();
+
+        $dto = new PiscinaReservaDTO(
+            fecha: $v['fecha'],
+            turnoId: $v['turno_id'],
+            items: $v['items'],
+            nombrePagador: $v['nombre_pagador'],
+            telefonoPagador: $v['telefono_pagador'] ?? '',
+            ciNitPagador: $v['ci_nit_pagador'],
+            ipCobrador: $request->ip() ?? '127.0.0.1',
+        );
+
+        try {
+            $resultado = $this->reservas->crear($dto, esAdmin: true);
+        } catch (FranjaNoDisponibleException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'error' => 'cupo_no_disponible',
+            ], 409);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (RecaudacionesApiException $e) {
+            return response()->json([
+                'message' => 'No se pudo generar el código de pago: '.$e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::channel('sireb')->error('Error inesperado creando reserva de piscina desde ventanilla', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Error interno al crear la reserva de piscina.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Reserva creada. Entregá el código de pago al ciudadano.',
+            'data' => $resultado,
+        ], 201);
     }
 
     /**

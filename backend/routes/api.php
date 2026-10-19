@@ -244,6 +244,7 @@ Route::middleware('auth.oauth')->group(function () {
 
             // Reservas
             Route::get('/reservas', [AdminPiscinaReservaController::class, 'index']);
+            Route::post('/reservas', [AdminPiscinaReservaController::class, 'store']); // ← NUEVO
             Route::get('/reservas/{id}', [AdminPiscinaReservaController::class, 'show']);
             Route::post('/reservas/{id}/cancelar', [AdminPiscinaReservaController::class, 'cancelar']);
         });

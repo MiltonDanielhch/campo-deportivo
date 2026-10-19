@@ -46,7 +46,7 @@ class PiscinaReservaService
     ) {
     }
 
-    public function crear(PiscinaReservaDTO $datos): array
+    public function crear(PiscinaReservaDTO $datos, bool $esAdmin = false): array
     {
         // Validar items
         $datos->validarItems();
@@ -162,18 +162,28 @@ class PiscinaReservaService
                 return $reserva;
             });
 
-            // Después del commit, crear liquidación en SIREB
-            $this->crearLiquidacionEnSireb($reserva);
+            try {
+                $this->crearLiquidacionEnSireb($reserva, $esAdmin);
+            } catch (\Throwable $e) {
+                if ($esAdmin) {
+                    $this->rechazarPorFallaLiquidacion($reserva, $e);
+                }
 
-            // Dispatch jobs
+                throw $e;
+            }
+
             ExpirarPiscinaReservaJob::dispatch($reserva->id)->delay($reserva->expira_en);
             PollingPiscinaReservaJob::dispatch($reserva->id);
+
+            $reserva->refresh();
 
             return [
                 'reserva_id' => $reserva->id,
                 'codigo_seguimiento' => $reserva->codigo_seguimiento,
                 'monto_total' => (float) $reserva->monto_total,
                 'expira_en' => $reserva->expira_en->toIso8601String(),
+                'referencia_recaudaciones' => $reserva->referencia_recaudaciones,
+                'qr_string' => $reserva->datos_cobro_pendiente['qr_string'] ?? null,
             ];
         } catch (\Exception $e) {
             Log::channel('sireb')->error('Error al crear reserva de piscina', [
@@ -224,7 +234,7 @@ class PiscinaReservaService
      * Crea liquidación en SIREB después de crear la reserva local.
      * Si falla, despacha job de reintento.
      */
-    private function crearLiquidacionEnSireb(PiscinaReserva $reserva): void
+    private function crearLiquidacionEnSireb(PiscinaReserva $reserva, bool $esAdmin = false): void
     {
         try {
             // Buscar o registrar cliente en SIREB
@@ -282,13 +292,16 @@ class PiscinaReservaService
                     'monto' => $liquidacion['monto'],
                 ],
             );
-        } catch (\Exception $e) {
-            Log::channel('sireb')->error('Error al crear liquidación SIREB en primera intento', [
+        } catch (\Throwable $e) {
+            if ($esAdmin) {
+                throw $e;
+            }
+
+            Log::channel('sireb')->error('Error al crear liquidación SIREB en primer intento', [
                 'reserva_id' => $reserva->id,
                 'error' => $e->getMessage(),
             ]);
 
-            // Despachar job de reintento si falla
             ReintentarPiscinaReservaJob::dispatch($reserva->id);
         }
     }
@@ -315,5 +328,37 @@ class PiscinaReservaService
     private function minutosExpiracion(): int
     {
         return (int) ParametroSistema::where('clave', 'vigencia_minutos_solicitud')->value('valor') ?: 20;
+    }
+
+    /**
+     * Ventanilla: si SIREB no genera la liquidación, liberamos el cupo
+     * y marcamos la reserva como rechazada. No dejamos al funcionario
+     * con una reserva "pendiente" sin código de pago.
+     */
+    private function rechazarPorFallaLiquidacion(PiscinaReserva $reserva, \Throwable $e): void
+    {
+        DB::transaction(function () use ($reserva, $e) {
+            foreach ($reserva->detalles as $detalle) {
+                PiscinaTurnoPerfil::query()
+                    ->where('turno_id', $detalle->turno_id)
+                    ->where('perfil', $detalle->perfil)
+                    ->lockForUpdate()
+                    ->decrement('reservado', $detalle->cantidad);
+            }
+
+            $reserva->update([
+                'estado' => EstadoPiscinaReserva::Rechazada,
+                'motivo_rechazo' => 'cobro_ventanilla_fallo',
+            ]);
+
+            $this->auditoria->registrar(
+                'piscina_reservas',
+                $reserva->id,
+                'rechazada_liquidacion_ventanilla',
+                null,
+                ['motivo' => 'cobro_ventanilla_fallo'],
+                ['error' => $e->getMessage()],
+            );
+        });
     }
 }
