@@ -85,6 +85,7 @@ class ReintentarPiscinaReservaJob implements ShouldQueue
                 'datos_cobro_pendiente' => [
                     'codigo_publico' => $liquidacion['codigo_publico'],
                     'qr_string' => 'SIREB:' . $liquidacion['codigo_publico'],
+                    'qr_image_base64' => null,
                     'monto' => $liquidacion['monto'],
                     'fecha_vencimiento' => $liquidacion['fecha_vencimiento'],
                     'items' => $liquidacion['items'],
@@ -109,7 +110,7 @@ class ReintentarPiscinaReservaJob implements ShouldQueue
                 'intento' => $this->intento,
             ]);
 
-        } catch (RecaudacionesApiException $e) {
+        } catch (\Throwable $e) {
             Log::channel('sireb')->error('Error al crear liquidación SIREB (reintento)', [
                 'reserva_id' => $reserva->id,
                 'intento' => $this->intento,
