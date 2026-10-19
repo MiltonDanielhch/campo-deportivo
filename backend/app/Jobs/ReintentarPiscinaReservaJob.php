@@ -3,21 +3,27 @@
 namespace App\Jobs;
 
 use App\Enums\EstadoPiscinaReserva;
-use App\Exceptions\RecaudacionesApiException;
-use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Models\PiscinaReserva;
 use App\Services\AuditoriaService;
-use App\Services\Piscina\PiscinaReservaService;
+use App\Services\Sireb\SirebLiquidacionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Reintenta crear liquidación en SIREB si falló inicialmente.
+ *
+ * Delega la liquidación al helper central (SirebLiquidacionService). Este job
+ * solo decide la política ante el fallo:
+ *   - intento < MAX  -> re-dispatch con delay
+ *   - intento == MAX -> rechazar reserva + liberar cupos + auditar
+ *
+ * El helper lanza cualquier excepción; acá se atrapa con \Throwable para no
+ * dejar la reserva pendiente-forever si el fallo no es de SIREB (DB, shape
+ * malformado, etc.).
  */
 class ReintentarPiscinaReservaJob implements ShouldQueue
 {
@@ -34,8 +40,8 @@ class ReintentarPiscinaReservaJob implements ShouldQueue
     }
 
     public function handle(
-        RecaudacionesApiClientInterface $client,
         AuditoriaService $auditoria,
+        SirebLiquidacionService $liquidaciones,
     ): void {
         $reserva = PiscinaReserva::find($this->reservaId);
 
@@ -49,17 +55,7 @@ class ReintentarPiscinaReservaJob implements ShouldQueue
         }
 
         try {
-            // Buscar cliente en SIREB
-            $clienteSireb = $client->buscarCliente($reserva->ci_nit_pagador);
-            if (!$clienteSireb) {
-                $clienteSireb = $client->registrarCliente([
-                    'ci_nit' => $reserva->ci_nit_pagador,
-                    'nombre_completo' => $reserva->nombre_pagador,
-                    'telefono' => $reserva->telefono_pagador,
-                ]);
-            }
-
-            // Construir items para SIREB
+            // Construir items (dominio de piscina: tarifa ya guardada en el detalle)
             $items = [];
             foreach ($reserva->detalles as $detalle) {
                 $items[] = [
@@ -68,41 +64,12 @@ class ReintentarPiscinaReservaJob implements ShouldQueue
                 ];
             }
 
-            // Crear liquidación con idempotencia
-            $idempotencyKey = "sedede:piscina:{$reserva->id}";
-            $liquidacion = $client->crearLiquidacion(
+            // Delegar al helper central: cliente + liquidación + persistencia + auditoría
+            $liquidaciones->crearYPersistir(
+                reserva: $reserva,
                 items: $items,
-                clienteId: $clienteSireb['id'],
-                idempotencyKey: $idempotencyKey,
-                referenciaExterna: $reserva->codigo_seguimiento,
-            );
-
-            // Actualizar reserva
-            $reserva->update([
-                'referencia_recaudaciones' => $liquidacion['codigo_publico'],
-                'liquidacion_id' => $liquidacion['id'],
-                'monto_total' => $liquidacion['monto'],
-                'datos_cobro_pendiente' => [
-                    'codigo_publico' => $liquidacion['codigo_publico'],
-                    'qr_string' => 'SIREB:' . $liquidacion['codigo_publico'],
-                    'qr_image_base64' => null,
-                    'monto' => $liquidacion['monto'],
-                    'fecha_vencimiento' => $liquidacion['fecha_vencimiento'],
-                    'items' => $liquidacion['items'],
-                ],
-            ]);
-
-            $auditoria->registrar(
-                'piscina_reservas',
-                $reserva->id,
-                'liquidacion_creada_sireb',
-                null,
-                ['estado' => 'pendiente'],
-                [
-                    'liquidacion_id' => $liquidacion['id'],
-                    'codigo_publico' => $liquidacion['codigo_publico'],
-                    'monto' => $liquidacion['monto'],
-                ],
+                idempotencyPrefix: 'sedede:piscina',
+                tablaAuditoria: 'piscina_reservas',
             );
 
             Log::channel('sireb')->info('Liquidación creada exitosamente en SIREB (reintento)', [

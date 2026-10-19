@@ -4,7 +4,6 @@ namespace Tests\Feature\Jobs;
 
 use App\Enums\EstadoPiscinaReserva;
 use App\Exceptions\RecaudacionesApiException;
-use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Jobs\ReintentarPiscinaReservaJob;
 use App\Models\CampoDeportivo;
 use App\Models\PiscinaReserva;
@@ -13,6 +12,7 @@ use App\Models\PiscinaTurno;
 use App\Models\PiscinaTurnoPerfil;
 use App\Models\TipoCampo;
 use App\Services\AuditoriaService;
+use App\Services\Sireb\SirebLiquidacionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Mockery;
@@ -90,11 +90,14 @@ class ReintentarPiscinaReservaJobTest extends TestCase
         return $reserva;
     }
 
-    private function clientQueFalla(): RecaudacionesApiClientInterface
+    /**
+     * El job depende del helper, no del client. Mockeamos el helper para
+     * simular que la liquidación falla, sin acoplar el test a SIREB.
+     */
+    private function liquidacionesQueFalla(): SirebLiquidacionService
     {
-        $mock = Mockery::mock(RecaudacionesApiClientInterface::class);
-        $mock->shouldReceive('buscarCliente')->andReturn(['id' => 'c-1']);
-        $mock->shouldReceive('crearLiquidacion')
+        $mock = Mockery::mock(SirebLiquidacionService::class);
+        $mock->shouldReceive('crearYPersistir')
             ->andThrow(new RecaudacionesApiException('SERVICIO_INACTIVO: el servicio está apagado'));
 
         return $mock;
@@ -118,8 +121,8 @@ class ReintentarPiscinaReservaJobTest extends TestCase
         );
 
         $job->handle(
-            $this->clientQueFalla(),
-            app(AuditoriaService::class)
+            app(AuditoriaService::class),
+            $this->liquidacionesQueFalla()
         );
 
         $reserva->refresh();
@@ -145,8 +148,8 @@ class ReintentarPiscinaReservaJobTest extends TestCase
         $job = new ReintentarPiscinaReservaJob($reserva->id, 1);
 
         $job->handle(
-            $this->clientQueFalla(),
-            app(AuditoriaService::class)
+            app(AuditoriaService::class),
+            $this->liquidacionesQueFalla()
         );
 
         $reserva->refresh();
