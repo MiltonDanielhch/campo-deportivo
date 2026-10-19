@@ -3,8 +3,10 @@
 namespace Tests\Feature\Jobs;
 
 use App\Enums\EstadoSolicitudReserva;
+use App\Exceptions\RecaudacionesApiException;
 use App\Jobs\ExpirarSolicitudJob;
 use App\Jobs\PollingSolicitudJob;
+use App\Jobs\ReintentarSolicitudJob;
 use App\Models\CampoDeportivo;
 use App\Models\Funcionario;
 use App\Models\HorarioAtencion;
@@ -13,9 +15,14 @@ use App\Models\SolicitudReserva;
 use App\Models\SolicitudReservaDetalle;
 use App\Models\TarifaCampo;
 use App\Models\TipoCampo;
+use App\Services\AuditoriaService;
+use App\Services\CatalogoSirebService;
+use App\Services\Sireb\SirebLiquidacionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Mockery;
 use Tests\TestCase;
+use Illuminate\Contracts\Queue\Job as QueueJob;
 
 class SolicitudesJobsTest extends TestCase
 {
@@ -70,6 +77,8 @@ class SolicitudesJobsTest extends TestCase
             'monto_total' => 300.00,
             'nombre_pagador' => 'Juan Pérez',
             'telefono_pagador' => '70000000',
+            'ci_nit_pagador' => '1234567',
+            'ip_cobrador' => '127.0.0.1',
             'referencia_recaudaciones' => 'CORE-SIM-JOB01',
             'estado' => EstadoSolicitudReserva::Pendiente,
             'expira_en' => now()->addMinutes(15),
@@ -145,5 +154,112 @@ class SolicitudesJobsTest extends TestCase
             'tabla' => 'solicitudes_reserva',
             'accion' => 'expirar_por_barrido',
         ]);
+    }
+
+    public function test_reintentar_job_delega_la_liquidacion_al_helper(): void
+    {
+        $job = $this->conIntentos(new ReintentarSolicitudJob($this->solicitud->id), 1);
+
+        $catalogo = Mockery::mock(CatalogoSirebService::class);
+        $catalogo->shouldReceive('resolverTarifaId')
+            ->once()
+            ->andReturn('tarifa-test');
+
+        $liquidaciones = Mockery::mock(SirebLiquidacionService::class);
+        $liquidaciones->shouldReceive('crearYPersistir')
+            ->once();
+
+        $job->handle(
+            $catalogo,
+            app(AuditoriaService::class),
+            $liquidaciones
+        );
+
+        $this->assertSame('pendiente', $this->solicitud->fresh()->estado->value);
+    }
+
+    public function test_reintentar_job_no_rechaza_si_quedan_intentos(): void
+    {
+        // attempts()=2 < tries=5 → no rechaza, propaga para que Laravel reintente.
+        $job = $this->conIntentos(new ReintentarSolicitudJob($this->solicitud->id), 2);
+
+        $caught = false;
+
+        try {
+            $job->handle(
+                $this->catalogoSimulado(),
+                app(AuditoriaService::class),
+                $this->liquidacionesQueFalla()
+            );
+        } catch (RecaudacionesApiException $e) {
+            $caught = true;
+        }
+
+        $this->assertTrue($caught, 'El job debe propagar la excepción para que Laravel reintente.');
+        $this->assertSame('pendiente', $this->solicitud->fresh()->estado->value);
+        $this->assertDatabaseMissing('auditoria', [
+            'tabla' => 'solicitudes_reserva',
+            'registro_id' => $this->solicitud->id,
+            'accion' => 'rechazada_error_cobro',
+        ]);
+    }
+
+    public function test_reintentar_job_rechaza_al_agotar_intentos(): void
+    {
+        // attempts()=5 >= tries=5 → rechaza y propaga.
+        $job = $this->conIntentos(new ReintentarSolicitudJob($this->solicitud->id), 5);
+
+        $caught = false;
+
+        try {
+            $job->handle(
+                $this->catalogoSimulado(),
+                app(AuditoriaService::class),
+                $this->liquidacionesQueFalla()
+            );
+        } catch (RecaudacionesApiException $e) {
+            $caught = true;
+        }
+
+        $this->assertTrue($caught, 'El job debe propagar la excepción incluso al rechazar.');
+        $this->assertSame('rechazada', $this->solicitud->fresh()->estado->value);
+        $this->assertSame('error_cobro_inicial', $this->solicitud->fresh()->motivo_rechazo);
+        $this->assertDatabaseHas('auditoria', [
+            'tabla' => 'solicitudes_reserva',
+            'registro_id' => $this->solicitud->id,
+            'accion' => 'rechazada_error_cobro',
+        ]);
+    }
+
+    private function catalogoSimulado(): CatalogoSirebService
+    {
+        $catalogo = Mockery::mock(CatalogoSirebService::class);
+        $catalogo->shouldReceive('resolverTarifaId')
+            ->andReturn('tarifa-test');
+
+        return $catalogo;
+    }
+
+    private function liquidacionesQueFalla(): SirebLiquidacionService
+    {
+        $liquidaciones = Mockery::mock(SirebLiquidacionService::class);
+        $liquidaciones->shouldReceive('crearYPersistir')
+            ->andThrow(new RecaudacionesApiException('SERVICIO_INACTIVO: el servicio está apagado'));
+
+        return $liquidaciones;
+    }
+
+    /**
+     * Simula el contexto de cola para que attempts() devuelva el valor deseado.
+     * Sin esto, attempts() siempre devuelve 1 (no hay $this->job) y el job
+     * nunca dispara el rechazo por agotar intentos.
+     */
+    private function conIntentos(ReintentarSolicitudJob $job, int $intentos): ReintentarSolicitudJob
+    {
+        $queueJob = Mockery::mock(QueueJob::class);
+        $queueJob->shouldReceive('attempts')->andReturn($intentos);
+        $job->setJob($queueJob);
+
+        return $job;
     }
 }
