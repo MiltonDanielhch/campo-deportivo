@@ -7,13 +7,13 @@ use App\DTOs\SolicitudCreadaDTO;
 use App\DTOs\SolicitudReservaDTO;
 use App\Enums\EstadoSolicitudReserva;
 use App\Exceptions\FranjaNoDisponibleException;
-use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Jobs\ExpirarSolicitudJob;
 use App\Jobs\PollingSolicitudJob;
 use App\Jobs\ReintentarSolicitudJob;
 use App\Models\CampoDeportivo;
 use App\Models\ParametroSistema;
 use App\Models\SolicitudReserva;
+use App\Services\Sireb\SirebLiquidacionService;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
@@ -37,10 +37,23 @@ use Illuminate\Support\Facades\Cache;
  *   2. Escritura protegida: la restricción EXCLUDE decide en concurrencia.
  *
  * Recién DESPUÉS de que la transacción tiene éxito se llama a SIREB.
- * Si SIREB no responde (HU-D8), la solicitud queda 'pendiente' y se
- * despacha un ReintentarSolicitudJob (5 reintentos × 60s). Solo si los
+ *
+ * Canal público (HU-D8): si SIREB no responde, la solicitud queda 'pendiente'
+ * y se despacha un ReintentarSolicitudJob (5 reintentos × 60s). Solo si los
  * 5 fallan, la solicitud pasa a 'rechazada' con motivo 'error_cobro_inicial'
  * y la franja se libera.
+ *
+ * Canal ventanilla (esAdmin): si SIREB falla, NO hay reintento silencioso.
+ * La solicitud se rechaza inline (motivo 'cobro_ventanilla_fallo') y se
+ * propaga la excepción para que el controller devuelva 422 con el mensaje
+ * real. El funcionario frente al ciudadano necesita el código YA o el error,
+ * no una cola fantasma. La franja se libera sola al salir de estado activo
+ * (el EXCLUDE deja de contarla), sin transacción de decremento.
+ *
+ * La persistencia de la liquidación vive en SirebLiquidacionService (helper
+ * central compartido con piscina). Este servicio solo construye los items
+ * (dominio de canchas: resuelve tarifa por campo/hora con CatalogoSirebService)
+ * y DECIDE la política ante fallo según el canal.
  *
  * El monto de la solicitud se calcula localmente como ESTIMACIÓN (según
  * tipo de tarifa diurna/nocturna de la franja). Al crear la liquidación,
@@ -61,9 +74,9 @@ class SolicitudReservaService
 
     public function __construct(
         private DisponibilidadService $disponibilidad,
-        private RecaudacionesApiClientInterface $recaudaciones,
         private AuditoriaService $auditoria,
         private CatalogoSirebService $catalogo,
+        private SirebLiquidacionService $liquidaciones,
     ) {
     }
 
@@ -126,6 +139,28 @@ class SolicitudReservaService
         try {
             $this->crearLiquidacionEnSireb($solicitud);
         } catch (\Throwable $e) {
+            // Ventanilla: sin reintento silencioso. El funcionario frente al
+            // ciudadano necesita el código YA o el error real. Rechazamos
+            // inline (la franja se libera sola al salir de estado activo, el
+            // EXCLUDE deja de contarla) y propagamos para que el controller
+            // devuelva 422.
+            if ($esAdmin) {
+                $solicitud->update([
+                    'estado' => EstadoSolicitudReserva::Rechazada,
+                    'motivo_rechazo' => 'cobro_ventanilla_fallo',
+                ]);
+
+                Log::channel('sireb')->warning(
+                    'Liquidación de ventanilla falló, solicitud rechazada',
+                    [
+                        'solicitud_id' => $solicitud->id,
+                        'error' => $e->getMessage(),
+                    ]
+                );
+
+                throw $e;
+            }
+
             Log::channel('sireb')->warning(
                 'Creación de liquidación falló, despachando reintento',
                 [
@@ -150,65 +185,37 @@ class SolicitudReservaService
     }
 
     /**
-     * Crea la liquidación en SIREB (secuencia completa: cliente + items + POST).
+     * Construye los items de canchas y delega la liquidación al helper central.
      *
-     * @throws \Throwable si algo falla (lo captura el caller para reintentar)
+     * La resolución de tarifa por campo/hora (CatalogoSirebService) sigue
+     * siendo dominio de canchas y vive acá; lo que el helper concentra es el
+     * contrato con SIREB + el shape de datos_cobro_pendiente + auditoría, que
+     * antes estaba duplicado con el job de reintento.
+     *
+     * NO atrapa excepciones: la política (reintento público / rechazo
+     * ventanilla) vive en crear().
+     *
+     * @throws \Throwable si algo falla (lo captura el caller para decidir)
      */
     private function crearLiquidacionEnSireb(SolicitudReserva $solicitud): void
     {
-        // 1. Buscar o registrar cliente en SIREB
-        $clienteSireb = $this->recaudaciones->buscarCliente($solicitud->ci_nit_pagador);
-        if (! $clienteSireb) {
-            $clienteSireb = $this->recaudaciones->registrarCliente([
-                'ci_nit' => $solicitud->ci_nit_pagador,
-                'nombre_completo' => $solicitud->nombre_pagador,
-                'telefono' => $solicitud->telefono_pagador,
-            ]);
-        }
-
-        // 2. Construir items (uno por franja con tarifa_id resuelto)
         $items = [];
+
         foreach ($solicitud->detalles as $detalle) {
             $campo = $detalle->campo;
             $tarifaId = $this->catalogo->resolverTarifaId($campo, $detalle->hora_inicio);
-            $items[] = ['tarifa_id' => $tarifaId, 'cantidad' => 1];
+
+            $items[] = [
+                'tarifa_id' => $tarifaId,
+                'cantidad' => 1,
+            ];
         }
 
-        // 3. Crear liquidación con idempotencia
-        $idempotencyKey = "sedede:reserva:{$solicitud->id}";
-        $liquidacion = $this->recaudaciones->crearLiquidacion(
+        $this->liquidaciones->crearYPersistir(
+            reserva: $solicitud,
             items: $items,
-            clienteId: $clienteSireb['id'],
-            idempotencyKey: $idempotencyKey,
-            referenciaExterna: $solicitud->codigo_seguimiento,
-        );
-
-        // 4. Persistir referencias (SIREB manda el monto autoritativo)
-        $solicitud->update([
-            'referencia_recaudaciones' => $liquidacion['codigo_publico'],
-            'liquidacion_id' => $liquidacion['id'],
-            'monto_total' => $liquidacion['monto'],
-            'datos_cobro_pendiente' => [
-                'codigo_publico' => $liquidacion['codigo_publico'],
-                'qr_string' => 'SIREB:'.$liquidacion['codigo_publico'],
-                'qr_image_base64' => null,
-                'monto' => $liquidacion['monto'],
-                'fecha_vencimiento' => $liquidacion['fecha_vencimiento'],
-                'items' => $liquidacion['items'],
-            ],
-        ]);
-
-        $this->auditoria->registrar(
-            'solicitudes_reserva',
-            $solicitud->id,
-            'liquidacion_creada_sireb',
-            null,
-            ['estado' => 'pendiente'],
-            [
-                'liquidacion_id' => $liquidacion['id'],
-                'codigo_publico' => $liquidacion['codigo_publico'],
-                'monto' => $liquidacion['monto'],
-            ],
+            idempotencyPrefix: 'sedede:reserva',
+            tablaAuditoria: 'solicitudes_reserva',
         );
     }
 
