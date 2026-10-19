@@ -6,7 +6,6 @@ use App\DTOs\PiscinaReservaDTO;
 use App\Enums\EstadoPiscinaReserva;
 use App\Enums\ModalidadReservaCampo;
 use App\Exceptions\FranjaNoDisponibleException;
-use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Jobs\ExpirarPiscinaReservaJob;
 use App\Jobs\PollingPiscinaReservaJob;
 use App\Jobs\ReintentarPiscinaReservaJob;
@@ -17,6 +16,7 @@ use App\Models\PiscinaReservaDetalle;
 use App\Models\PiscinaTurno;
 use App\Models\PiscinaTurnoPerfil;
 use App\Services\AuditoriaService;
+use App\Services\Sireb\SirebLiquidacionService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -30,8 +30,14 @@ use Illuminate\Support\Facades\Log;
  * 3. Resolver tarifas desde espejo SIREB
  * 4. Calcular monto
  * 5. Transacción: crear reserva + detalles + reservar cupo
- * 6. Crear liquidación SIREB
+ * 6. Crear liquidación SIREB (delegada al helper central)
  * 7. Dispatch jobs (expiración, polling, reintentos)
+ *
+ * La persistencia de la liquidación vive en SirebLiquidacionService. Este
+ * servicio solo construye los items (dominio de piscina: tarifa por perfil
+ * ya guardada en el detalle) y DECIDE la política ante fallo:
+ *   - público  -> despacha ReintentarPiscinaReservaJob y continúa
+ *   - ventanilla -> rechaza inline, libera cupo y lanza (controller 422)
  */
 class PiscinaReservaService
 {
@@ -41,8 +47,8 @@ class PiscinaReservaService
 
     public function __construct(
         private PiscinaTarifaResolver $tarifaResolver,
-        private RecaudacionesApiClientInterface $recaudaciones,
         private AuditoriaService $auditoria,
+        private SirebLiquidacionService $liquidaciones,
     ) {
     }
 
@@ -162,14 +168,23 @@ class PiscinaReservaService
                 return $reserva;
             });
 
+            // Liquidación SIREB: el helper lanza si falla; acá se decide la
+            // política según canal (público reintenta, ventanilla rechaza).
             try {
-                $this->crearLiquidacionEnSireb($reserva, $esAdmin);
+                $this->crearLiquidacionEnSireb($reserva);
             } catch (\Throwable $e) {
                 if ($esAdmin) {
                     $this->rechazarPorFallaLiquidacion($reserva, $e);
+
+                    throw $e;
                 }
 
-                throw $e;
+                Log::channel('sireb')->error('Error al crear liquidación SIREB en primer intento', [
+                    'reserva_id' => $reserva->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                ReintentarPiscinaReservaJob::dispatch($reserva->id);
             }
 
             ExpirarPiscinaReservaJob::dispatch($reserva->id)->delay($reserva->expira_en);
@@ -231,79 +246,30 @@ class PiscinaReservaService
     }
 
     /**
-     * Crea liquidación en SIREB después de crear la reserva local.
-     * Si falla, despacha job de reintento.
+     * Construye los items de piscina y delega la liquidación al helper central.
+     *
+     * NO atrapa excepciones ni decide reintentos: eso vive en crear(), para
+     * que público y ventanilla se comporten distinto. La construcción de items
+     * sí es dominio de piscina (usa tarifa_sireb_id ya guardado en el detalle,
+     * a diferencia de canchas que resuelve tarifa por campo/hora).
      */
-    private function crearLiquidacionEnSireb(PiscinaReserva $reserva, bool $esAdmin = false): void
+    private function crearLiquidacionEnSireb(PiscinaReserva $reserva): void
     {
-        try {
-            // Buscar o registrar cliente en SIREB
-            $clienteSireb = $this->recaudaciones->buscarCliente($reserva->ci_nit_pagador);
-            if (!$clienteSireb) {
-                $clienteSireb = $this->recaudaciones->registrarCliente([
-                    'ci_nit' => $reserva->ci_nit_pagador,
-                    'nombre_completo' => $reserva->nombre_pagador,
-                    'telefono' => $reserva->telefono_pagador,
-                ]);
-            }
+        $items = [];
 
-            // Construir items (uno por perfil con tarifa_id resuelto)
-            $items = [];
-            foreach ($reserva->detalles as $detalle) {
-                $items[] = [
-                    'tarifa_id' => $detalle->tarifa_sireb_id,
-                    'cantidad' => $detalle->cantidad,
-                ];
-            }
-
-            // Crear liquidación con idempotencia
-            $idempotencyKey = "sedede:piscina:{$reserva->id}";
-            $liquidacion = $this->recaudaciones->crearLiquidacion(
-                items: $items,
-                clienteId: $clienteSireb['id'],
-                idempotencyKey: $idempotencyKey,
-                referenciaExterna: $reserva->codigo_seguimiento,
-            );
-
-            // Persistir referencias (SIREB manda el monto autoritativo)
-            $reserva->update([
-                'referencia_recaudaciones' => $liquidacion['codigo_publico'],
-                'liquidacion_id' => $liquidacion['id'],
-                'monto_total' => $liquidacion['monto'],
-                'datos_cobro_pendiente' => [
-                    'codigo_publico' => $liquidacion['codigo_publico'],
-                    'qr_string' => 'SIREB:' . $liquidacion['codigo_publico'],
-                    'qr_image_base64' => null,
-                    'monto' => $liquidacion['monto'],
-                    'fecha_vencimiento' => $liquidacion['fecha_vencimiento'],
-                    'items' => $liquidacion['items'],
-                ],
-            ]);
-
-            $this->auditoria->registrar(
-                'piscina_reservas',
-                $reserva->id,
-                'liquidacion_creada_sireb',
-                null,
-                ['estado' => 'pendiente'],
-                [
-                    'liquidacion_id' => $liquidacion['id'],
-                    'codigo_publico' => $liquidacion['codigo_publico'],
-                    'monto' => $liquidacion['monto'],
-                ],
-            );
-        } catch (\Throwable $e) {
-            if ($esAdmin) {
-                throw $e;
-            }
-
-            Log::channel('sireb')->error('Error al crear liquidación SIREB en primer intento', [
-                'reserva_id' => $reserva->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            ReintentarPiscinaReservaJob::dispatch($reserva->id);
+        foreach ($reserva->detalles as $detalle) {
+            $items[] = [
+                'tarifa_id' => $detalle->tarifa_sireb_id,
+                'cantidad' => $detalle->cantidad,
+            ];
         }
+
+        $this->liquidaciones->crearYPersistir(
+            reserva: $reserva,
+            items: $items,
+            idempotencyPrefix: 'sedede:piscina',
+            tablaAuditoria: 'piscina_reservas',
+        );
     }
 
     /**
