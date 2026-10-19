@@ -17,7 +17,9 @@ class SolicitudReservaVentanillaTest extends TestCase
     use RefreshDatabase;
 
     private Funcionario $admin;
+
     private Funcionario $control;
+
     private CampoDeportivo $campo;
 
     protected function setUp(): void

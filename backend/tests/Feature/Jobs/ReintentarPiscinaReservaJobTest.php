@@ -23,6 +23,7 @@ class ReintentarPiscinaReservaJobTest extends TestCase
     use RefreshDatabase;
 
     private const TARIFA_SIREB_ID = '9f1e2d3c-4b5a-4697-8c3d-1e2f3a4b5c6d';
+
     private const SERVICIO_SIREB_ID = '8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d';
 
     private function reservaConCupo(): PiscinaReserva

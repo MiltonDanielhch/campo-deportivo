@@ -9,7 +9,6 @@ use App\Exceptions\FranjaNoDisponibleException;
 use App\Jobs\ExpirarPiscinaReservaJob;
 use App\Jobs\PollingPiscinaReservaJob;
 use App\Jobs\ReintentarPiscinaReservaJob;
-use App\Models\CampoDeportivo;
 use App\Models\ParametroSistema;
 use App\Models\PiscinaReserva;
 use App\Models\PiscinaReservaDetalle;
@@ -42,15 +41,16 @@ use Illuminate\Support\Facades\Log;
 class PiscinaReservaService
 {
     private const VENTANA_DIAS = 60;
+
     private const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
     private const TIMEZONE_BOLIVIA = 'America/La_Paz';
 
     public function __construct(
         private PiscinaTarifaResolver $tarifaResolver,
         private AuditoriaService $auditoria,
         private SirebLiquidacionService $liquidaciones,
-    ) {
-    }
+    ) {}
 
     public function crear(PiscinaReservaDTO $datos, bool $esAdmin = false): array
     {
@@ -59,12 +59,12 @@ class PiscinaReservaService
 
         // Obtener turno para validar y obtener campo
         $turno = PiscinaTurno::with('campo')->find($datos->turnoId);
-        if (!$turno) {
+        if (! $turno) {
             throw new \InvalidArgumentException('Turno no encontrado');
         }
 
         $campo = $turno->campo;
-        if (!$campo) {
+        if (! $campo) {
             throw new \InvalidArgumentException('Campo no encontrado');
         }
 
@@ -86,7 +86,7 @@ class PiscinaReservaService
         }
 
         if ($fechaTurno->gt($hoy->copy()->addDays(self::VENTANA_DIAS))) {
-            throw new \InvalidArgumentException('La fecha excede el máximo de anticipación de ' . self::VENTANA_DIAS . ' días');
+            throw new \InvalidArgumentException('La fecha excede el máximo de anticipación de '.self::VENTANA_DIAS.' días');
         }
 
         // Validar items y calcular monto
@@ -120,7 +120,7 @@ class PiscinaReservaService
                         ->lockForUpdate()
                         ->first();
 
-                    if (!$perfilTurno) {
+                    if (! $perfilTurno) {
                         throw new \InvalidArgumentException('Perfil no disponible en este turno');
                     }
 
@@ -227,7 +227,7 @@ class PiscinaReservaService
                 $turno->hora_inicio,
             );
 
-            if (!$tarifa) {
+            if (! $tarifa) {
                 throw new \InvalidArgumentException("No hay tarifa vigente para el perfil {$perfil}");
             }
 
@@ -282,7 +282,7 @@ class PiscinaReservaService
             for ($i = 0; $i < 6; $i++) {
                 $aleatorio .= self::ALFABETO_CODIGO[random_int(0, strlen(self::ALFABETO_CODIGO) - 1)];
             }
-            $codigo = 'PIS-' . now()->format('Ymd') . '-' . $aleatorio;
+            $codigo = 'PIS-'.now()->format('Ymd').'-'.$aleatorio;
         } while (PiscinaReserva::where('codigo_seguimiento', $codigo)->exists());
 
         return $codigo;

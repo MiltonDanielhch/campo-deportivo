@@ -34,13 +34,11 @@ class SirebLiquidacionService
     public function __construct(
         private RecaudacionesApiClientInterface $recaudaciones,
         private AuditoriaService $auditoria,
-    ) {
-    }
+    ) {}
 
     /**
      * Crea la liquidación en SIREB y persiste las referencias en el modelo.
      *
-     * @param  SolicitudReserva|PiscinaReserva  $reserva
      * @param  array<int, array{tarifa_id: string|null, cantidad: int}>  $items
      * @param  string  $idempotencyPrefix  Ej. 'sedede:reserva' o 'sedede:piscina'
      * @param  string  $tablaAuditoria  Ej. 'solicitudes_reserva' o 'piscina_reservas'
@@ -48,7 +46,7 @@ class SirebLiquidacionService
      * @param  array<string, mixed>  $antesAuditoria  Default ['estado' => 'pendiente']
      *
      * @throws \Throwable Si SIREB no responde o la persistencia falla. El caller
-     *         decide la política (reintento público / rechazo ventanilla).
+     *                    decide la política (reintento público / rechazo ventanilla).
      */
     public function crearYPersistir(
         SolicitudReserva|PiscinaReserva $reserva,

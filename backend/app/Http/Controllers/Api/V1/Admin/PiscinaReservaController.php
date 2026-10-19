@@ -2,17 +2,17 @@
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\DTOs\PiscinaReservaDTO;
 use App\Enums\EstadoPiscinaReserva;
+use App\Exceptions\FranjaNoDisponibleException;
+use App\Exceptions\RecaudacionesApiException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Piscina\StorePiscinaReservaRequest;
 use App\Models\PiscinaReserva;
+use App\Services\Piscina\PiscinaReservaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\DTOs\PiscinaReservaDTO;
-use App\Exceptions\FranjaNoDisponibleException;
-use App\Exceptions\RecaudacionesApiException;
-use App\Http\Requests\Piscina\StorePiscinaReservaRequest;
-use App\Services\Piscina\PiscinaReservaService;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -20,12 +20,10 @@ use Illuminate\Support\Facades\Log;
  */
 class PiscinaReservaController extends Controller
 {
-
     public function __construct(
         private PiscinaReservaService $reservas,
-    ) {
-    }
-    
+    ) {}
+
     /**
      * GET /api/v1/admin/piscina/reservas
      *
@@ -174,7 +172,7 @@ class PiscinaReservaController extends Controller
         $reserva = PiscinaReserva::with(['detalles.turno.perfiles', 'campo'])
             ->find($id);
 
-        if (!$reserva) {
+        if (! $reserva) {
             return response()->json(['message' => 'Reserva no encontrada'], 404);
         }
 
@@ -191,7 +189,7 @@ class PiscinaReservaController extends Controller
     public function cancelar(Request $request, string $id): JsonResponse
     {
         $reserva = PiscinaReserva::find($id);
-        if (!$reserva) {
+        if (! $reserva) {
             return response()->json(['message' => 'Reserva no encontrada'], 404);
         }
 

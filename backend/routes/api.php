@@ -1,30 +1,30 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Admin\AsistenciaController as AdminAsistenciaController;
+use App\Http\Controllers\Api\V1\Admin\CatalogoSirebController;
+use App\Http\Controllers\Api\V1\Admin\PiscinaReservaController as AdminPiscinaReservaController;
+use App\Http\Controllers\Api\V1\Admin\PiscinaTurnoController;
+use App\Http\Controllers\Api\V1\Admin\ReservasExportController as AdminReservasExportController;
+use App\Http\Controllers\Api\V1\Admin\SolicitudReservaController as AdminSolicitudReservaController;
 use App\Http\Controllers\Api\V1\AsignacionFuncionarioController;
 use App\Http\Controllers\Api\V1\CampoDeportivoController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\FuncionarioController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\OcupacionController;
 use App\Http\Controllers\Api\V1\Public\CampoController as PublicCampoController;
+use App\Http\Controllers\Api\V1\Public\ConsultaEstadoController;
+use App\Http\Controllers\Api\V1\Public\DisponibilidadController;
+use App\Http\Controllers\Api\V1\Public\PiscinaController;
+use App\Http\Controllers\Api\V1\Public\SolicitudEstadoController;
+use App\Http\Controllers\Api\V1\Public\SolicitudReservaController;
+use App\Http\Controllers\Api\V1\ReportesController;
 use App\Http\Controllers\Api\V1\RolController;
 use App\Http\Controllers\Api\V1\TarifaCampoController;
 use App\Http\Controllers\Api\V1\TipoCampoController;
+use App\Http\Controllers\Api\V1\WebhookRecaudacionesController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\V1\Public\DisponibilidadController;
-use App\Http\Controllers\Api\V1\Public\SolicitudReservaController;
-use App\Http\Controllers\Api\V1\WebhookRecaudacionesController;
-use App\Http\Controllers\Api\V1\Public\SolicitudEstadoController;
-use App\Http\Controllers\Api\V1\Public\ConsultaEstadoController;
-use App\Http\Controllers\Api\V1\Admin\SolicitudReservaController as AdminSolicitudReservaController;
-use App\Http\Controllers\Api\V1\Admin\AsistenciaController as AdminAsistenciaController;
-use App\Http\Controllers\Api\V1\Admin\CatalogoSirebController;
-use App\Http\Controllers\Api\V1\Admin\ReservasExportController as AdminReservasExportController;
-use App\Http\Controllers\Api\V1\Admin\PiscinaTurnoController;
-use App\Http\Controllers\Api\V1\Admin\PiscinaReservaController as AdminPiscinaReservaController;
-use App\Http\Controllers\Api\V1\OcupacionController;
-use App\Http\Controllers\Api\V1\ReportesController;
-use App\Http\Controllers\Api\V1\DashboardController;
-use App\Http\Controllers\Api\V1\Public\PiscinaController;
 
 /*
 |--------------------------------------------------------------------------
@@ -53,9 +53,9 @@ Route::get('/v1/public/storage/{path}', function (string $path) {
     }
 
     $base = realpath(storage_path('app/public'));
-    $fullPath = realpath(storage_path('app/public/' . $path));
+    $fullPath = realpath(storage_path('app/public/'.$path));
 
-    if (! $base || ! $fullPath || ! str_starts_with($fullPath, $base . DIRECTORY_SEPARATOR)) {
+    if (! $base || ! $fullPath || ! str_starts_with($fullPath, $base.DIRECTORY_SEPARATOR)) {
         abort(404);
     }
 
@@ -75,7 +75,7 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
     // Consulta ciudadana unificada: campos + piscina, por seguimiento, código
     // de ventanilla o CI/NIT/teléfono.
     Route::get('/consultas/{termino}/estado', [ConsultaEstadoController::class, 'show']);
-    Route::get('/tipos-campo', [\App\Http\Controllers\Api\V1\Public\TipoCampoController::class, 'index']);
+    Route::get('/tipos-campo', [App\Http\Controllers\Api\V1\Public\TipoCampoController::class, 'index']);
 
     // ─── Módulo Piscina (Fase P7) ───
     Route::get('/piscina/campos/{campoId}/turnos', [PiscinaController::class, 'turnos']);
@@ -215,7 +215,7 @@ Route::middleware('auth.oauth')->group(function () {
     });
     // ─── FIN Fase 7.1 ───
 
-        // ─── Fase 7.2: Asistencia en reservas ───
+    // ─── Fase 7.2: Asistencia en reservas ───
     Route::middleware('role:admin_parametricas|admin_reservas|funcionario_control')
         ->prefix('v1/admin/reservas')
         ->group(function () {

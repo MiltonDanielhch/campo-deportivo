@@ -2,24 +2,26 @@
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\DTOs\FranjaSolicitadaDTO;
 use App\DTOs\SolicitudFiltrosDTO;
+use App\DTOs\SolicitudReservaDTO;
 use App\Enums\EstadoSolicitudReserva;
+use App\Exceptions\FranjaNoDisponibleException;
 use App\Exceptions\RecaudacionesApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AnularLiquidacionRequest;
+use App\Http\Requests\StoreSolicitudReservaRequest;
 use App\Http\Resources\AuditoriaResource;
 use App\Http\Resources\SolicitudReservaAdminResource;
 use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
+use App\Models\Funcionario;
+use App\Models\SolicitudReserva;
 use App\Services\AuditoriaService;
 use App\Services\SolicitudReservaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use App\DTOs\FranjaSolicitadaDTO;
-use App\DTOs\SolicitudReservaDTO;
-use App\Exceptions\FranjaNoDisponibleException;
-use App\Http\Requests\StoreSolicitudReservaRequest;
-use App\Models\SolicitudReserva;
 
 /**
  * Endpoints administrativos para gestión de solicitudes de reserva e integración SIREB.
@@ -35,8 +37,7 @@ class SolicitudReservaController extends Controller
         private RecaudacionesApiClientInterface $sirebClient,
         private AuditoriaService $auditoria,
         private SolicitudReservaService $solicitudes,
-    ) {
-    }
+    ) {}
 
     /**
      * GET /v1/admin/solicitudes-reserva
@@ -44,7 +45,7 @@ class SolicitudReservaController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        /** @var \App\Models\Funcionario $funcionario */
+        /** @var Funcionario $funcionario */
         $funcionario = $request->user();
 
         $filtros = SolicitudFiltrosDTO::fromRequest($request);
@@ -83,7 +84,7 @@ class SolicitudReservaController extends Controller
      */
     public function store(StoreSolicitudReservaRequest $request): JsonResponse
     {
-        /** @var \App\Models\Funcionario $funcionario */
+        /** @var Funcionario $funcionario */
         $funcionario = $request->user();
 
         if (! $this->solicitudes->esAdministrador($funcionario)) {
@@ -151,7 +152,7 @@ class SolicitudReservaController extends Controller
      */
     public function show(Request $request, string $id): JsonResponse
     {
-        /** @var \App\Models\Funcionario $funcionario */
+        /** @var Funcionario $funcionario */
         $funcionario = $request->user();
 
         $resultado = $this->solicitudes->obtenerAdmin($id, $funcionario);
@@ -159,7 +160,7 @@ class SolicitudReservaController extends Controller
         /** @var SolicitudReserva $solicitud */
         $solicitud = $resultado['solicitud'];
 
-        /** @var \Illuminate\Support\Collection $auditoria */
+        /** @var Collection $auditoria */
         $auditoria = $resultado['auditoria'];
 
         $estadoSireb = null;

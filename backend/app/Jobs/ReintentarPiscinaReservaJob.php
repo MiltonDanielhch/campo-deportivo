@@ -30,6 +30,7 @@ class ReintentarPiscinaReservaJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public const MAX_REINTENTOS = 5;
+
     public const RETRASO_SEGUNDOS = 60;
 
     public function __construct(
@@ -45,7 +46,7 @@ class ReintentarPiscinaReservaJob implements ShouldQueue
     ): void {
         $reserva = PiscinaReserva::find($this->reservaId);
 
-        if (!$reserva || $reserva->estado !== EstadoPiscinaReserva::Pendiente) {
+        if (! $reserva || $reserva->estado !== EstadoPiscinaReserva::Pendiente) {
             return;
         }
 

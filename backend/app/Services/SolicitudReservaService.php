@@ -3,31 +3,32 @@
 namespace App\Services;
 
 use App\DTOs\FranjaSolicitadaDTO;
+use App\DTOs\RespuestaCobroDTO;
 use App\DTOs\SolicitudCreadaDTO;
+use App\DTOs\SolicitudFiltrosDTO;
 use App\DTOs\SolicitudReservaDTO;
 use App\Enums\EstadoSolicitudReserva;
 use App\Exceptions\FranjaNoDisponibleException;
 use App\Jobs\ExpirarSolicitudJob;
 use App\Jobs\PollingSolicitudJob;
 use App\Jobs\ReintentarSolicitudJob;
+use App\Models\Auditoria;
 use App\Models\CampoDeportivo;
+use App\Models\Funcionario;
 use App\Models\ParametroSistema;
 use App\Models\SolicitudReserva;
+use App\Models\TarifaCampo;
 use App\Services\Sireb\SirebLiquidacionService;
 use Carbon\Carbon;
+use Generator;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
-
-use App\DTOs\SolicitudFiltrosDTO;
-use App\Models\Auditoria;
-use App\Models\Funcionario;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Builder;
-use Generator;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Creación de solicitudes de reserva multi-franja (HU-D1, HU-D2, HU-D3, HU-D8).
@@ -77,8 +78,7 @@ class SolicitudReservaService
         private AuditoriaService $auditoria,
         private CatalogoSirebService $catalogo,
         private SirebLiquidacionService $liquidaciones,
-    ) {
-    }
+    ) {}
 
     public function crear(SolicitudReservaDTO $datos, bool $esAdmin = false): SolicitudCreadaDTO
     {
@@ -231,7 +231,7 @@ class SolicitudReservaService
         // aplican en SIREB v1 (solo pago manual). El qr_string se arma
         // localmente con el codigo_publico para que el frontend renderice
         // un QR escaneable/copiable en ventanilla.
-        $respuestaCore = new \App\DTOs\RespuestaCobroDTO(
+        $respuestaCore = new RespuestaCobroDTO(
             referenciaRecaudaciones: $datosCobro['codigo_publico'] ?? $solicitud->codigo_seguimiento,
             qrString: $datosCobro['qr_string'] ?? null,
             qrImageBase64: null,
@@ -247,7 +247,7 @@ class SolicitudReservaService
      * y que la franja no haya comenzado aún.
      *
      * @param  FranjaSolicitadaDTO[]  $franjas
-     * @return array<string, array{tarifas: Collection<string, \App\Models\TarifaCampo>, inicio_noche: int}>
+     * @return array<string, array{tarifas: Collection<string, TarifaCampo>, inicio_noche: int}>
      */
     private function verificarFranjas(array $franjas): array
     {
@@ -554,7 +554,6 @@ class SolicitudReservaService
         return Carbon::now(self::TIMEZONE_BOLIVIA);
     }
 
-
     public function esAdministrador(Funcionario $funcionario): bool
     {
         return $funcionario->tienePermiso('*')
@@ -668,7 +667,7 @@ class SolicitudReservaService
     }
 
     /**
-     * @return array{solicitud: \App\Models\SolicitudReserva, auditoria: \Illuminate\Support\Collection<int, \App\Models\Auditoria>}
+     * @return array{solicitud: SolicitudReserva, auditoria: Collection<int, Auditoria>}
      */
     public function obtenerAdmin(string $id, Funcionario $funcionario): array
     {

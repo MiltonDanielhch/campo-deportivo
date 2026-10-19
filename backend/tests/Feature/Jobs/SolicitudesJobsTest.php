@@ -18,11 +18,11 @@ use App\Models\TipoCampo;
 use App\Services\AuditoriaService;
 use App\Services\CatalogoSirebService;
 use App\Services\Sireb\SirebLiquidacionService;
+use Illuminate\Contracts\Queue\Job as QueueJob;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Mockery;
 use Tests\TestCase;
-use Illuminate\Contracts\Queue\Job as QueueJob;
 
 class SolicitudesJobsTest extends TestCase
 {
@@ -37,8 +37,8 @@ class SolicitudesJobsTest extends TestCase
         $rol = Rol::create(['nombre' => 'admin_test', 'permisos' => ['*']]);
         $admin = Funcionario::create([
             'nombre_completo' => 'Admin Test',
-            'ci' => 'TEST-' . uniqid(),
-            'usuario' => 'admin_' . uniqid(),
+            'ci' => 'TEST-'.uniqid(),
+            'usuario' => 'admin_'.uniqid(),
             'password_hash' => bcrypt('x'),
             'rol_id' => $rol->id,
             'estado' => 'activo',

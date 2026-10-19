@@ -31,12 +31,12 @@ class ReintentarSolicitudJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $tries = 5;
+
     public $backoff = 60;
 
     public function __construct(
         public readonly string $solicitudId,
-    ) {
-    }
+    ) {}
 
     public function middleware(): array
     {
