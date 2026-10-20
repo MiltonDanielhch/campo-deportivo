@@ -258,11 +258,12 @@ Route::middleware('auth.oauth')->group(function () {
         });
     // ─── FIN Fase P7.7 ───
 
-    // ─── Fase P8.2C: variantes arancelarias por campo ───
+    // ─── Fase P8.2C / P8.3A: variantes y servicios adicionales por campo ───
     Route::middleware('role:admin_parametricas|admin_reservas')
         ->prefix('v1/admin/campos/{campoDeportivo}')
         ->group(function () {
             Route::get('/variantes', [ArancelVarianteController::class, 'index']);
+            Route::get('/servicios-adicionales', [ArancelVarianteController::class, 'serviciosAdicionales']);
         });
-    // ─── FIN Fase P8.2C ───
+    // ─── FIN Fase P8.2C / P8.3A ───
 });

@@ -44,4 +44,9 @@ class SolicitudReserva extends Model
     {
         return $this->hasMany(Reserva::class, 'solicitud_reserva_id');
     }
+
+    public function servicios(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(SolicitudReservaServicio::class, 'solicitud_reserva_id');
+    }
 }
