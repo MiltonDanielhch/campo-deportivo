@@ -7,6 +7,7 @@ use App\Models\ArancelVariante;
 use App\Models\CampoDeportivo;
 use App\Models\TipoCampo;
 use Illuminate\Database\Seeder;
+use App\Models\HorarioAtencion;
 
 /**
  * Piloto de variantes arancelarias: Cancha Vieja.
@@ -43,6 +44,19 @@ class ArancelVariantePilotoSeeder extends Seeder
                 'servicio_sireb_codigo' => null,
             ]
         );
+
+        foreach (range(1, 7) as $dia) {
+            HorarioAtencion::updateOrCreate(
+                [
+                    'campo_id' => $campo->id,
+                    'dia_semana' => $dia,
+                ],
+                [
+                    'hora_apertura' => '08:00:00',
+                    'hora_cierre' => '20:00:00',
+                ]
+            );
+        }
 
         $variantes = [
             [
