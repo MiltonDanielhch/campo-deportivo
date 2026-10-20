@@ -19,8 +19,17 @@ class SolicitudReservaDetalle extends Model
     // estado_solicitud y rango_horario NO son fillables:
     // los mantienen el trigger y la columna generada de PostgreSQL.
     protected $fillable = [
-        'solicitud_reserva_id', 'campo_id', 'fecha_reserva',
-        'hora_inicio', 'hora_fin', 'tarifa_aplicada',
+        'solicitud_reserva_id',
+        'campo_id',
+        'variante_id',
+        'servicio_sireb_id',
+        'tarifa_sireb_id',
+        'etiqueta_sireb',
+        'cantidad',
+        'fecha_reserva',
+        'hora_inicio',
+        'hora_fin',
+        'tarifa_aplicada',
     ];
 
     protected function casts(): array
@@ -28,6 +37,7 @@ class SolicitudReservaDetalle extends Model
         return [
             'tarifa_aplicada' => 'decimal:2',
             'fecha_reserva' => 'date',
+            'cantidad' => 'integer',
         ];
     }
 
@@ -44,5 +54,9 @@ class SolicitudReservaDetalle extends Model
     public function reserva(): HasOne
     {
         return $this->hasOne(Reserva::class, 'solicitud_reserva_detalle_id');
+    }
+    public function variante(): BelongsTo
+    {
+        return $this->belongsTo(ArancelVariante::class, 'variante_id');
     }
 }
