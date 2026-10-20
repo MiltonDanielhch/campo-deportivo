@@ -58,6 +58,11 @@ class SolicitudReservaAdminResource extends JsonResource
                         'id' => $detalle->id,
                         'campo_id' => $detalle->campo_id,
                         'campo_nombre' => $detalle->campo?->nombre,
+                        'variante_id' => $detalle->variante_id,
+                        'variante_codigo' => $detalle->variante?->codigo,
+                        'variante_nombre' => $detalle->variante?->nombre,
+                        'servicio_sireb_codigo' => $detalle->variante?->servicio_sireb_codigo
+                            ?? $detalle->campo?->servicio_sireb_codigo,
                         'fecha_reserva' => $detalle->fecha_reserva?->toDateString(),
                         'hora_inicio' => substr((string) $detalle->hora_inicio, 0, 5),
                         'hora_fin' => substr((string) $detalle->hora_fin, 0, 5),

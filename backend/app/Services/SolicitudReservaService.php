@@ -825,6 +825,7 @@ class SolicitudReservaService
         $solicitud = SolicitudReserva::with([
             'detalles',
             'detalles.campo',
+            'detalles.variante',
             'detalles.reserva',
         ])->find($id);
 
@@ -847,7 +848,7 @@ class SolicitudReservaService
                 ->whereHas('campo.asignacionesFuncionario', function ($q) use ($funcionario) {
                     $q->where('funcionario_id', $funcionario->id);
                 })
-                ->with(['campo', 'reserva'])
+                ->with(['campo', 'variante', 'reserva'])
                 ->get();
 
             $solicitud->setRelation('detalles', $detallesVisibles);
@@ -887,6 +888,7 @@ class SolicitudReservaService
             $query->with([
                 'detalles',
                 'detalles.campo',
+                'detalles.variante',
                 'detalles.reserva',
             ]);
         } else {
@@ -897,6 +899,7 @@ class SolicitudReservaService
                     });
                 },
                 'detalles.campo',
+                'detalles.variante',
                 'detalles.reserva',
             ]);
         }

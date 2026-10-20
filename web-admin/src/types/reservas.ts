@@ -21,6 +21,10 @@ export interface DetalleSolicitudAdmin {
   id: string;
   campo_id: string;
   campo_nombre: string | null;
+  variante_id?: string | null;
+  variante_codigo?: string | null;
+  variante_nombre?: string | null;
+  servicio_sireb_codigo?: string | null;
   fecha_reserva: string | null;
   hora_inicio: string;
   hora_fin: string;

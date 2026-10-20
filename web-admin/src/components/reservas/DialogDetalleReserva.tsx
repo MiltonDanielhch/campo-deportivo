@@ -719,6 +719,16 @@ export default function DialogDetalleReserva({
                               <p className="text-sm font-medium">
                                 {detalle.campo_nombre || 'Campo'}
                               </p>
+
+                              {detalle.variante_nombre && (
+                                <p className="text-xs text-muted-foreground">
+                                  Variante: {detalle.variante_nombre}
+                                  {detalle.servicio_sireb_codigo
+                                    ? ` · ${detalle.servicio_sireb_codigo}`
+                                    : ''}
+                                </p>
+                              )}
+
                               <p className="text-xs text-muted-foreground">
                                 {detalle.fecha_reserva ?? '—'} ·{' '}
                                 {detalle.hora_inicio?.substring(0, 5)} -{' '}
