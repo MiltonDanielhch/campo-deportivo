@@ -25,6 +25,7 @@ class StoreSolicitudReservaRequest extends FormRequest
             ],
             'franjas' => ['required', 'array', 'min:1', 'max:6'],
             'franjas.*.campo_id' => ['required', 'uuid', 'exists:campos_deportivos,id'],
+            'franjas.*.variante_id' => ['nullable', 'uuid', 'exists:arancel_variantes,id'],
             'franjas.*.fecha' => ['required', 'date_format:Y-m-d'],
             'franjas.*.hora_inicio' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/'],
             'franjas.*.hora_fin' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/'],
@@ -56,6 +57,9 @@ class StoreSolicitudReservaRequest extends FormRequest
             'franjas.*.campo_id.uuid' => 'El identificador del campo es inválido.',
             'franjas.*.campo_id.exists' => 'Uno de los campos seleccionados no existe.',
 
+            'franjas.*.variante_id.uuid' => 'El identificador de la variante arancelaria es inválido.',
+            'franjas.*.variante_id.exists' => 'La variante arancelaria seleccionada no existe.',
+
             'franjas.*.fecha.required' => 'Cada franja debe indicar una fecha.',
             'franjas.*.fecha.date_format' => 'El formato de fecha debe ser YYYY-MM-DD.',
 
@@ -78,6 +82,7 @@ class StoreSolicitudReservaRequest extends FormRequest
             'ci_nit_pagador' => 'CI / NIT / identificación',
             'franjas' => 'franjas horarias',
             'franjas.*.campo_id' => 'campo deportivo',
+            'franjas.*.variante_id' => 'variante arancelaria',
             'franjas.*.fecha' => 'fecha de reserva',
             'franjas.*.hora_inicio' => 'hora de inicio',
             'franjas.*.hora_fin' => 'hora de fin',

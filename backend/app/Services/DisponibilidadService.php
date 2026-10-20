@@ -76,9 +76,21 @@ class DisponibilidadService
             ->whereIn('estado_solicitud', self::ESTADOS_ACTIVOS)
             ->get(['hora_inicio', 'hora_fin', 'estado_solicitud']);
 
-        // Tarifa vigente para calcular el precio de cada bloque.
-        // El controller la carga con whereNull('vigente_hasta').
-        $precioPorHora = $campo->tarifas->first()?->precio_por_hora;
+        // P8.2B: si el campo tiene varias variantes/servicios espejados, la
+        // grilla física no puede mostrar un único precio. El precio depende
+        // de la variante seleccionada por el funcionario/ciudadano.
+        $tarifasGrilla = $campo->tarifas ?? collect();
+
+        $serviciosDistintos = $tarifasGrilla
+            ->pluck('servicio_sireb_id')
+            ->filter()
+            ->unique()
+            ->count();
+
+        $precioPorHora = $serviciosDistintos <= 1
+            ? $tarifasGrilla->first()?->precio_por_hora
+            : null;
+
         $precioFloat = $precioPorHora !== null ? (float) $precioPorHora : null;
 
         // [FIX #1 grilla] ¿La fecha pedida es HOY en hora Bolivia? Si sí,

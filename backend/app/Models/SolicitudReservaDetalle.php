@@ -51,12 +51,13 @@ class SolicitudReservaDetalle extends Model
         return $this->belongsTo(CampoDeportivo::class, 'campo_id');
     }
 
-    public function reserva(): HasOne
-    {
-        return $this->hasOne(Reserva::class, 'solicitud_reserva_detalle_id');
-    }
     public function variante(): BelongsTo
     {
         return $this->belongsTo(ArancelVariante::class, 'variante_id');
+    }
+
+    public function reserva(): HasOne
+    {
+        return $this->hasOne(Reserva::class, 'solicitud_reserva_detalle_id');
     }
 }

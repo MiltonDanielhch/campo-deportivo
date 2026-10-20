@@ -18,6 +18,7 @@ use App\Models\Funcionario;
 use App\Models\ParametroSistema;
 use App\Models\SolicitudReserva;
 use App\Models\TarifaCampo;
+use App\Models\ArancelVariante;
 use App\Services\Sireb\SirebLiquidacionService;
 use Carbon\Carbon;
 use Generator;
@@ -93,29 +94,41 @@ class SolicitudReservaService
         // ── Capa 1: verificación rápida (aplicativa) ──
         $campos = $this->verificarFranjas($datos->franjas);
 
+        // ── P8.2B: resolver variante/tarifa/cantidad ANTES de persistir ──
+        $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin);
+        $montoTotal = collect($franjasResueltas)->sum('subtotal');
+
         // ── Capa 2: escritura protegida (EXCLUDE) ──
         $expiracionMinutos = $this->minutosExpiracion();
 
         try {
-            $solicitud = DB::transaction(function () use ($datos, $campos, $expiracionMinutos) {
+            $solicitud = DB::transaction(function () use ($datos, $franjasResueltas, $montoTotal, $expiracionMinutos) {
                 $solicitudNueva = SolicitudReserva::create([
                     'codigo_seguimiento' => $this->generarCodigoSeguimiento(),
-                    'monto_total' => $this->calcularMontoTotal($datos->franjas, $campos),
+                    'monto_total' => $montoTotal,
                     'nombre_pagador' => $datos->nombrePagador,
                     'telefono_pagador' => $datos->telefonoPagador,
                     'ci_nit_pagador' => $datos->ciNitPagador,
-                    'ip_cobrador' => $datos->ipCobrador,  // ← NUEVO
+                    'ip_cobrador' => $datos->ipCobrador,
                     'estado' => EstadoSolicitudReserva::Pendiente,
                     'expira_en' => now()->addMinutes($expiracionMinutos),
                 ]);
 
-                foreach ($datos->franjas as $franja) {
+                foreach ($franjasResueltas as $resuelta) {
+                    /** @var \App\DTOs\FranjaSolicitadaDTO $franja */
+                    $franja = $resuelta['franja'];
+
                     $solicitudNueva->detalles()->create([
                         'campo_id' => $franja->campoId,
+                        'variante_id' => $resuelta['variante_id'],
+                        'servicio_sireb_id' => $resuelta['servicio_sireb_id'],
+                        'tarifa_sireb_id' => $resuelta['tarifa_sireb_id'],
+                        'etiqueta_sireb' => $resuelta['etiqueta_sireb'],
+                        'cantidad' => $resuelta['cantidad'],
                         'fecha_reserva' => $franja->fecha,
                         'hora_inicio' => $franja->horaInicio,
                         'hora_fin' => $franja->horaFin,
-                        'tarifa_aplicada' => $this->precioDeFranja($franja, $campos[$franja->campoId]),
+                        'tarifa_aplicada' => $resuelta['precio_unitario'],
                     ]);
                 }
 
@@ -202,12 +215,20 @@ class SolicitudReservaService
         $items = [];
 
         foreach ($solicitud->detalles as $detalle) {
-            $campo = $detalle->campo;
-            $tarifaId = $this->catalogo->resolverTarifaId($campo, $detalle->hora_inicio);
+            // P8.2B: usar snapshot persistido en la línea.
+            // Esto evita que un cambio posterior en el catálogo SIREB altere
+            // una liquidación en curso o un reintento.
+            $tarifaId = $detalle->tarifa_sireb_id;
+
+            // Fallback para solicitudes antiguas creadas antes de P8.2B.
+            if (blank($tarifaId)) {
+                $campo = $detalle->campo;
+                $tarifaId = $this->catalogo->resolverTarifaId($campo, $detalle->hora_inicio);
+            }
 
             $items[] = [
                 'tarifa_id' => $tarifaId,
-                'cantidad' => 1,
+                'cantidad' => (int) ($detalle->cantidad ?? 1),
             ];
         }
 
@@ -277,17 +298,34 @@ class SolicitudReservaService
                 ]);
             }
 
-            $porClasificacion = $tarifasActivas->groupBy('clasificacion');
-            foreach ($porClasificacion as $clasificacion => $coleccion) {
+            // P8.2B: un campo físico puede tener varias variantes/servicios SIREB.
+            // La unicidad ya no es solo por clasificacion, sino por
+            // servicio_sireb_id + clasificacion.
+            $variantes = ArancelVariante::query()
+                ->where('campo_id', $campo->id)
+                ->where('activo', true)
+                ->orderBy('orden')
+                ->get()
+                ->keyBy('id');
+
+            $porServicioYClasificacion = $tarifasActivas->groupBy(
+                fn (TarifaCampo $t) => ($t->servicio_sireb_id ?? 'legacy').'|'.$t->clasificacion
+            );
+
+            foreach ($porServicioYClasificacion as $clave => $coleccion) {
                 if ($coleccion->count() > 1) {
+                    [$servicio, $clasificacion] = array_pad(explode('|', (string) $clave, 2), 2, '');
+
                     throw ValidationException::withMessages([
-                        'franjas' => "El campo {$campo->nombre} tiene más de una tarifa espejada activa para '{$clasificacion}'. Revisá el tarifario en SIREB.",
+                        'franjas' => "El campo {$campo->nombre} tiene más de una tarifa espejada activa para el servicio '{$servicio}' y clasificación '{$clasificacion}'. Revisá el tarifario en SIREB.",
                     ]);
                 }
             }
 
             $campos[$campo->id] = [
-                'tarifas' => $tarifasActivas->keyBy('clasificacion'),
+                'campo' => $campo,
+                'tarifas' => $tarifasActivas,
+                'variantes' => $variantes,
                 'inicio_noche' => self::aSegundos($campo->hora_inicio_noche ?? '18:00:00'),
             ];
 
@@ -427,42 +465,153 @@ class SolicitudReservaService
         }
     }
 
-    private function calcularMontoTotal(array $franjas, array $campos): float
+    /**
+     * P8.2B: resuelve variante/tarifa/cantidad para cada franja antes de persistir.
+     *
+     * Esto permite guardar snapshot en solicitud_reserva_detalle y que la
+     * liquidación SIREB use exactamente la tarifa elegida, no una resolución
+     * posterior que podría cambiar con el tiempo.
+     *
+     * @param  FranjaSolicitadaDTO[]  $franjas
+     * @return array<int, array<string, mixed>>
+     */
+    private function resolverFranjasParaCrear(array $franjas, array $campos, bool $esAdmin): array
     {
-        return (float) collect($franjas)->sum(
-            fn (FranjaSolicitadaDTO $f) => $this->precioDeFranja($f, $campos[$f->campoId]),
-        );
+        $resueltas = [];
+
+        foreach ($franjas as $franja) {
+            $resuelta = $this->resolverTarifaParaFranja(
+                $franja,
+                $campos[$franja->campoId],
+                $esAdmin
+            );
+
+            $resuelta['franja'] = $franja;
+            $resuelta['subtotal'] = (float) $resuelta['precio_unitario'] * (int) $resuelta['cantidad'];
+
+            $resueltas[] = $resuelta;
+        }
+
+        return $resueltas;
     }
 
     /**
-     * Precio por hora de una franja según su tipo (diurna/nocturna).
+     * Resuelve la tarifa SIREB aplicable a una franja.
      *
-     * Decide comparando hora_inicio de la franja contra hora_inicio_noche
-     * del campo. Si no existe la tarifa del tipo calculado (ej. un campo
-     * con solo diurna), cae a la primera activa disponible.
+     * Reglas:
+     * - Si la franja trae variante_id, usa las tarifas de esa variante.
+     * - Si no trae variante_id y el campo tiene variantes activas sin servicio
+     *   base, exige variante.
+     * - Si no trae variante_id y el campo es legacy, mantiene comportamiento actual.
+     * - Público solo puede usar variantes con visible_publico = true.
+     *
+     * @return array{
+     *     variante_id: ?string,
+     *     servicio_sireb_id: ?string,
+     *     tarifa_sireb_id: string,
+     *     etiqueta_sireb: ?string,
+     *     cantidad: int,
+     *     precio_unitario: float
+     * }
      */
-    private function precioDeFranja(FranjaSolicitadaDTO $franja, array $campoInfo): float
+    private function resolverTarifaParaFranja(FranjaSolicitadaDTO $franja, array $campoInfo, bool $esAdmin): array
     {
+        $variante = null;
         $tarifas = $campoInfo['tarifas'];
 
-        $unica = $tarifas->get('unica');
-        if ($unica) {
-            return (float) $unica->precio_por_hora;
+        if (filled($franja->varianteId)) {
+            $variante = $campoInfo['variantes']->get($franja->varianteId);
+
+            if (! $variante) {
+                throw ValidationException::withMessages([
+                    'franjas' => "La variante seleccionada no pertenece al campo {$campoInfo['campo']->nombre}.",
+                ]);
+            }
+
+            if (! $esAdmin && ! $variante->visible_publico) {
+                throw ValidationException::withMessages([
+                    'franjas' => "La variante {$variante->nombre} solo está disponible en ventanilla.",
+                ]);
+            }
+
+            if ($variante->unidad_medida !== 'hora') {
+                throw ValidationException::withMessages([
+                    'franjas' => "La variante {$variante->nombre} no es reservable por franja horaria en esta etapa.",
+                ]);
+            }
+
+            if (blank($variante->servicio_sireb_id)) {
+                throw ValidationException::withMessages([
+                    'franjas' => "La variante {$variante->nombre} no está vinculada a SIREB. Ejecutá la sincronización.",
+                ]);
+            }
+
+            $tarifas = $tarifas->where('servicio_sireb_id', $variante->servicio_sireb_id);
+        } else {
+            // Si el campo tiene variantes arancelarias y no tiene servicio base,
+            // no se puede adivinar cuál cobrar.
+            if ($campoInfo['variantes']->isNotEmpty() && blank($campoInfo['campo']->servicio_sireb_id)) {
+                throw ValidationException::withMessages([
+                    'franjas' => "El campo {$campoInfo['campo']->nombre} requiere seleccionar una variante arancelaria.",
+                ]);
+            }
+
+            // Legacy: si el campo tiene servicio base, priorizamos tarifas de ese
+            // servicio. Si no hay coincidencia (datos viejos sin servicio_sireb_id
+            // en la tarifa), caemos al comportamiento actual.
+            if (filled($campoInfo['campo']->servicio_sireb_id)) {
+                $filtradas = $tarifas->where('servicio_sireb_id', $campoInfo['campo']->servicio_sireb_id);
+
+                if ($filtradas->isNotEmpty()) {
+                    $tarifas = $filtradas;
+                }
+            }
         }
 
-        $tipo = self::aSegundos($franja->horaInicio) < $campoInfo['inicio_noche']
-            ? 'diurna'
-            : 'nocturna';
-
-        $tarifa = $tarifas->get($tipo);
-
-        if (! $tarifa) {
+        if ($tarifas->isEmpty()) {
             throw ValidationException::withMessages([
-                'franjas' => "No hay tarifa {$tipo} vigente espejada para la franja solicitada.",
+                'franjas' => "No hay tarifa SIREB vigente espejada para la selección del campo {$campoInfo['campo']->nombre}.",
             ]);
         }
 
-        return (float) $tarifa->precio_por_hora;
+        $unica = $tarifas->firstWhere('clasificacion', 'unica');
+
+        if ($unica) {
+            $tarifa = $unica;
+        } else {
+            $tipo = self::aSegundos($franja->horaInicio) < $campoInfo['inicio_noche']
+                ? 'diurna'
+                : 'nocturna';
+
+            $tarifa = $tarifas->firstWhere('clasificacion', $tipo);
+
+            if (! $tarifa) {
+                throw ValidationException::withMessages([
+                    'franjas' => "No hay tarifa {$tipo} vigente espejada para la franja solicitada.",
+                ]);
+            }
+        }
+
+        // P8.2B: en variantes la tarifa SIREB es obligatoria porque el cobro
+        // depende de la variante elegida. En campos legacy permitimos null y
+        // dejamos que la liquidación caiga al resolvedor viejo: público queda
+        // pendiente con reintento, ventanilla rechaza ruidoso. Así no rompemos
+        // HU-D8 ni los fixtures viejos.
+        if ($variante !== null && blank($tarifa->tarifa_sireb_id)) {
+            throw ValidationException::withMessages([
+                'franjas' => "La variante {$variante->nombre} no tiene tarifa SIREB espejada. Ejecutá la sincronización.",
+            ]);
+        }
+
+        return [
+            'variante_id' => $variante?->id,
+            'servicio_sireb_id' => $tarifa->servicio_sireb_id ?? $variante?->servicio_sireb_id,
+            // Legacy puede quedar null; variantes ya fueron validadas arriba.
+            'tarifa_sireb_id' => $tarifa->tarifa_sireb_id,
+            'etiqueta_sireb' => $tarifa->etiqueta_sireb,
+            'cantidad' => 1,
+            'precio_unitario' => (float) $tarifa->precio_por_hora,
+        ];
     }
 
     private function minutosExpiracion(): int

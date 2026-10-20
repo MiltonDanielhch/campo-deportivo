@@ -78,12 +78,20 @@ class ReintentarSolicitudJob implements ShouldQueue
             $items = [];
 
             foreach ($solicitud->detalles as $detalle) {
-                $campo = $detalle->campo;
-                $tarifaId = $catalogo->resolverTarifaId($campo, $detalle->hora_inicio);
+                // P8.2B: usar snapshot persistido en la línea.
+                // Esto garantiza que el reintento cobre exactamente la misma
+                // tarifa/variante que se resolvió al crear la solicitud.
+                $tarifaId = $detalle->tarifa_sireb_id;
+
+                // Fallback para solicitudes antiguas creadas antes de P8.2B.
+                if (blank($tarifaId)) {
+                    $campo = $detalle->campo;
+                    $tarifaId = $catalogo->resolverTarifaId($campo, $detalle->hora_inicio);
+                }
 
                 $items[] = [
                     'tarifa_id' => $tarifaId,
-                    'cantidad' => 1,
+                    'cantidad' => (int) ($detalle->cantidad ?? 1),
                 ];
             }
 

@@ -12,7 +12,7 @@ readonly class SolicitudReservaDTO
         public string $telefonoPagador,
         public ?string $ciNitPagador,
         public array $franjas,
-        public ?string $ipCobrador = null,  // ← NUEVO
+        public ?string $ipCobrador = null,
     ) {
     }
 
@@ -24,6 +24,7 @@ readonly class SolicitudReservaDTO
                 fecha: $f['fecha'],
                 horaInicio: $f['hora_inicio'],
                 horaFin: $f['hora_fin'],
+                varianteId: $f['variante_id'] ?? null,
             ))
             ->all();
 
@@ -32,7 +33,7 @@ readonly class SolicitudReservaDTO
             telefonoPagador: $data['telefono_pagador'],
             ciNitPagador: $data['ci_nit_pagador'] ?? null,
             franjas: $franjas,
-            ipCobrador: $data['ip_cobrador'] ?? null,  // ← NUEVO
+            ipCobrador: $data['ip_cobrador'] ?? null,
         );
     }
 }
