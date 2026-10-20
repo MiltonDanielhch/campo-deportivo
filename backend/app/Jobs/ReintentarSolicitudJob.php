@@ -95,6 +95,17 @@ class ReintentarSolicitudJob implements ShouldQueue
                 ];
             }
 
+            foreach ($solicitud->servicios as $servicio) {
+                if (blank($servicio->tarifa_sireb_id)) {
+                    throw new \RuntimeException("Servicio adicional sin tarifa SIREB espejada: {$servicio->id}");
+                }
+
+                $items[] = [
+                    'tarifa_id' => $servicio->tarifa_sireb_id,
+                    'cantidad' => (int) ($servicio->cantidad ?? 1),
+                ];
+            }
+
             // Delegar al helper central: cliente + liquidación + persistencia + auditoría.
             $liquidaciones->crearYPersistir(
                 reserva: $solicitud,

@@ -30,7 +30,11 @@ class SincronizarTarifasVariantesTest extends TestCase
 
         $campo = CampoDeportivo::where('codigo', 'CV-001')->firstOrFail();
 
-        $this->assertSame(2, ArancelVariante::where('campo_id', $campo->id)->count());
+        $variantes = ArancelVariante::where('campo_id', $campo->id)->get();
+
+        $this->assertSame(5, $variantes->count());
+        $this->assertSame(2, $variantes->where('unidad_medida', 'hora')->count());
+        $this->assertSame(3, $variantes->where('unidad_medida', 'servicio')->count());
 
         // El campo padre NO debe tener servicio_sireb_id: el vínculo vive en variantes.
         $this->assertNull($campo->servicio_sireb_id);

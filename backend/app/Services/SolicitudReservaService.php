@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use App\DTOs\ServicioAdicionalDTO;
 
 /**
  * Creación de solicitudes de reserva multi-franja (HU-D1, HU-D2, HU-D3, HU-D8).
@@ -96,13 +97,21 @@ class SolicitudReservaService
 
         // ── P8.2B: resolver variante/tarifa/cantidad ANTES de persistir ──
         $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin);
-        $montoTotal = collect($franjasResueltas)->sum('subtotal');
+
+        // ── P8.3B: resolver servicios adicionales ANTES de persistir ──
+        $serviciosResueltos = $this->resolverServiciosParaCrear($datos->servicios, $campos, $esAdmin);
+
+        $montoTotal = round(
+            collect($franjasResueltas)->sum('subtotal')
+            + collect($serviciosResueltos)->sum('subtotal'),
+            2
+        );
 
         // ── Capa 2: escritura protegida (EXCLUDE) ──
         $expiracionMinutos = $this->minutosExpiracion();
 
         try {
-            $solicitud = DB::transaction(function () use ($datos, $franjasResueltas, $montoTotal, $expiracionMinutos) {
+            $solicitud = DB::transaction(function () use ($datos, $franjasResueltas, $serviciosResueltos, $montoTotal, $expiracionMinutos) {
                 $solicitudNueva = SolicitudReserva::create([
                     'codigo_seguimiento' => $this->generarCodigoSeguimiento(),
                     'monto_total' => $montoTotal,
@@ -129,6 +138,22 @@ class SolicitudReservaService
                         'hora_inicio' => $franja->horaInicio,
                         'hora_fin' => $franja->horaFin,
                         'tarifa_aplicada' => $resuelta['precio_unitario'],
+                    ]);
+                }
+
+                foreach ($serviciosResueltos as $resuelto) {
+                    /** @var \App\DTOs\ServicioAdicionalDTO $servicio */
+                    $servicio = $resuelto['servicio'];
+
+                    $solicitudNueva->servicios()->create([
+                        'campo_id' => $resuelto['campo_id'],
+                        'variante_id' => $resuelto['variante_id'],
+                        'servicio_sireb_id' => $resuelto['servicio_sireb_id'],
+                        'tarifa_sireb_id' => $resuelto['tarifa_sireb_id'],
+                        'etiqueta_sireb' => $resuelto['etiqueta_sireb'],
+                        'cantidad' => $resuelto['cantidad'],
+                        'precio_unitario' => $resuelto['precio_unitario'],
+                        'subtotal' => $resuelto['subtotal'],
                     ]);
                 }
 
@@ -229,6 +254,17 @@ class SolicitudReservaService
             $items[] = [
                 'tarifa_id' => $tarifaId,
                 'cantidad' => (int) ($detalle->cantidad ?? 1),
+            ];
+        }
+
+        foreach ($solicitud->servicios as $servicio) {
+            if (blank($servicio->tarifa_sireb_id)) {
+                throw new \RuntimeException("Servicio adicional sin tarifa SIREB espejada: {$servicio->id}");
+            }
+
+            $items[] = [
+                'tarifa_id' => $servicio->tarifa_sireb_id,
+                'cantidad' => (int) ($servicio->cantidad ?? 1),
             ];
         }
 
@@ -612,6 +648,110 @@ class SolicitudReservaService
             'cantidad' => 1,
             'precio_unitario' => (float) $tarifa->precio_por_hora,
         ];
+    }
+
+    /**
+     * P8.3B: resuelve servicios adicionales antes de persistir.
+     *
+     * Reglas:
+     * - El servicio debe pertenecer a un campo presente en las franjas.
+     * - La variante debe estar activa.
+     * - No se aceptan variantes horarias como servicio adicional.
+     * - Público solo puede usar servicios visibles públicamente.
+     * - Debe tener servicio_sireb_id y tarifa SIREB espejada.
+     *
+     * @param  ServicioAdicionalDTO[]  $servicios
+     * @return array<int, array<string, mixed>>
+     */
+    private function resolverServiciosParaCrear(array $servicios, array $campos, bool $esAdmin): array
+    {
+        $resueltos = [];
+
+        foreach ($servicios as $servicio) {
+            if (! isset($campos[$servicio->campoId])) {
+                throw ValidationException::withMessages([
+                    'servicios' => 'Los servicios adicionales deben corresponder a un campo incluido en la reserva.',
+                ]);
+            }
+
+            $campoInfo = $campos[$servicio->campoId];
+
+            $variante = $campoInfo['variantes']->get($servicio->varianteId);
+
+            if (! $variante) {
+                throw ValidationException::withMessages([
+                    'servicios' => "La variante del servicio adicional no pertenece al campo {$campoInfo['campo']->nombre}.",
+                ]);
+            }
+
+            if ($variante->unidad_medida === 'hora') {
+                throw ValidationException::withMessages([
+                    'servicios' => "El servicio {$variante->nombre} no puede agregarse como servicio adicional porque es una variante horaria.",
+                ]);
+            }
+
+            if (! $esAdmin && ! $variante->visible_publico) {
+                throw ValidationException::withMessages([
+                    'servicios' => "El servicio {$variante->nombre} solo está disponible en ventanilla.",
+                ]);
+            }
+
+            if (blank($variante->servicio_sireb_id)) {
+                throw ValidationException::withMessages([
+                    'servicios' => "El servicio {$variante->nombre} no está vinculado a SIREB. Ejecutá la sincronización.",
+                ]);
+            }
+
+            $tarifas = TarifaCampo::query()
+                ->where('campo_id', $variante->campo_id)
+                ->where('servicio_sireb_id', $variante->servicio_sireb_id)
+                ->whereNull('vigente_hasta')
+                ->where('liquidable', true)
+                ->where('tarifario_estado', 'vigente')
+                ->get();
+
+            if ($tarifas->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'servicios' => "No hay tarifa SIREB vigente espejada para el servicio {$variante->nombre}.",
+                ]);
+            }
+
+            $unica = $tarifas->firstWhere('clasificacion', 'unica');
+
+            if ($unica) {
+                $tarifa = $unica;
+            } elseif ($tarifas->count() === 1) {
+                $tarifa = $tarifas->first();
+            } else {
+                throw ValidationException::withMessages([
+                    'servicios' => "El servicio {$variante->nombre} tiene varias tarifas vigentes y no se puede resolver automáticamente.",
+                ]);
+            }
+
+            if (blank($tarifa->tarifa_sireb_id)) {
+                throw ValidationException::withMessages([
+                    'servicios' => "El servicio {$variante->nombre} no tiene tarifa SIREB espejada. Ejecutá la sincronización.",
+                ]);
+            }
+
+            $cantidad = max(1, (int) $servicio->cantidad);
+            $precioUnitario = (float) $tarifa->precio_por_hora;
+            $subtotal = round($precioUnitario * $cantidad, 2);
+
+            $resueltos[] = [
+                'servicio' => $servicio,
+                'campo_id' => $variante->campo_id,
+                'variante_id' => $variante->id,
+                'servicio_sireb_id' => $variante->servicio_sireb_id,
+                'tarifa_sireb_id' => $tarifa->tarifa_sireb_id,
+                'etiqueta_sireb' => $tarifa->etiqueta_sireb,
+                'cantidad' => $cantidad,
+                'precio_unitario' => $precioUnitario,
+                'subtotal' => $subtotal,
+            ];
+        }
+
+        return $resueltos;
     }
 
     private function minutosExpiracion(): int

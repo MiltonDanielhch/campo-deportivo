@@ -81,7 +81,7 @@ class ArancelVarianteController extends Controller
             ->where('campo_id', $campoDeportivo->id)
             ->where('activo', true)
             ->where(function ($query) {
-                $query->where('unidad_medida', '!=', 'hora')
+                $query->where('unidad_medida', 'servicio')
                     ->orWhere('tipo_uso', 'servicio_adicional');
             })
             ->orderBy('orden')
@@ -97,8 +97,11 @@ class ArancelVarianteController extends Controller
         $tarifasPorServicio = collect();
 
         if ($servicioIds->isNotEmpty()) {
-            $tarifasPorServicio = TarifaCampo::paraGrillaHoraria()
+            $tarifasPorServicio = TarifaCampo::query()
                 ->where('campo_id', $campoDeportivo->id)
+                ->whereNull('vigente_hasta')
+                ->where('liquidable', true)
+                ->where('tarifario_estado', 'vigente')
                 ->whereIn('servicio_sireb_id', $servicioIds)
                 ->get()
                 ->groupBy('servicio_sireb_id');

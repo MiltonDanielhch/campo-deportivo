@@ -15,6 +15,7 @@ use App\Http\Resources\AuditoriaResource;
 use App\Http\Resources\SolicitudReservaAdminResource;
 use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Models\Funcionario;
+use App\DTOs\ServicioAdicionalDTO;
 use App\Models\SolicitudReserva;
 use App\Services\AuditoriaService;
 use App\Services\SolicitudReservaService;
@@ -106,8 +107,18 @@ class SolicitudReservaController extends Controller
             $v['franjas'],
         );
 
+        $servicios = array_map(
+            fn (array $s) => new ServicioAdicionalDTO(
+                campoId: $s['campo_id'],
+                varianteId: $s['variante_id'],
+                cantidad: (int) ($s['cantidad'] ?? 1),
+            ),
+            $v['servicios'] ?? [],
+        );
+
         $datos = new SolicitudReservaDTO(
             franjas: $franjas,
+            servicios: $servicios,
             nombrePagador: $v['nombre_pagador'],
             telefonoPagador: $v['telefono_pagador'] ?? null,
             ciNitPagador: $v['ci_nit_pagador'],

@@ -29,6 +29,11 @@ class StoreSolicitudReservaRequest extends FormRequest
             'franjas.*.fecha' => ['required', 'date_format:Y-m-d'],
             'franjas.*.hora_inicio' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/'],
             'franjas.*.hora_fin' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/'],
+
+            'servicios' => ['nullable', 'array', 'max:10'],
+            'servicios.*.campo_id' => ['required', 'uuid', 'exists:campos_deportivos,id'],
+            'servicios.*.variante_id' => ['required', 'uuid', 'exists:arancel_variantes,id'],
+            'servicios.*.cantidad' => ['required', 'integer', 'min:1', 'max:100'],
         ];
     }
 
@@ -68,6 +73,22 @@ class StoreSolicitudReservaRequest extends FormRequest
 
             'franjas.*.hora_fin.required' => 'Cada franja debe indicar hora de fin.',
             'franjas.*.hora_fin.regex' => 'El formato de hora debe ser HH:MM o HH:MM:SS.',
+
+            'servicios.array' => 'Los servicios adicionales deben enviarse como lista.',
+            'servicios.max' => 'No podés agregar más de 10 servicios adicionales.',
+
+            'servicios.*.campo_id.required' => 'Cada servicio adicional debe indicar el campo.',
+            'servicios.*.campo_id.uuid' => 'El identificador del campo del servicio es inválido.',
+            'servicios.*.campo_id.exists' => 'El campo del servicio adicional no existe.',
+
+            'servicios.*.variante_id.required' => 'Cada servicio adicional debe indicar la variante arancelaria.',
+            'servicios.*.variante_id.uuid' => 'El identificador de la variante del servicio es inválido.',
+            'servicios.*.variante_id.exists' => 'La variante del servicio adicional no existe.',
+
+            'servicios.*.cantidad.required' => 'Cada servicio adicional debe indicar cantidad.',
+            'servicios.*.cantidad.integer' => 'La cantidad del servicio debe ser un número entero.',
+            'servicios.*.cantidad.min' => 'La cantidad del servicio debe ser al menos 1.',
+            'servicios.*.cantidad.max' => 'La cantidad del servicio no puede superar 100.',
         ];
     }
 
@@ -86,6 +107,11 @@ class StoreSolicitudReservaRequest extends FormRequest
             'franjas.*.fecha' => 'fecha de reserva',
             'franjas.*.hora_inicio' => 'hora de inicio',
             'franjas.*.hora_fin' => 'hora de fin',
+
+            'servicios' => 'servicios adicionales',
+            'servicios.*.campo_id' => 'campo del servicio adicional',
+            'servicios.*.variante_id' => 'variante del servicio adicional',
+            'servicios.*.cantidad' => 'cantidad del servicio adicional',
         ];
     }
 }

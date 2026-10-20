@@ -75,6 +75,30 @@ class ArancelVariantePilotoSeeder extends Seeder
                 'unidad_medida' => 'hora',
                 'orden' => 20,
             ],
+            [
+                'codigo' => 'LIMPIEZA',
+                'nombre' => 'Limpieza post-evento',
+                'tipo_uso' => 'servicio_adicional',
+                'servicio_sireb_codigo' => 'SEDEDE-CV-EVENTO-DEP-LIMPIEZA',
+                'unidad_medida' => 'servicio',
+                'orden' => 30,
+            ],
+            [
+                'codigo' => 'ENERGIA_MONO',
+                'nombre' => 'Energía monofásica',
+                'tipo_uso' => 'servicio_adicional',
+                'servicio_sireb_codigo' => 'SEDEDE-CV-EVENTO-NO-ENER-MONO',
+                'unidad_medida' => 'servicio',
+                'orden' => 40,
+            ],
+            [
+                'codigo' => 'ENERGIA_TRI',
+                'nombre' => 'Energía trifásica',
+                'tipo_uso' => 'servicio_adicional',
+                'servicio_sireb_codigo' => 'SEDEDE-CV-EVENTO-NO-ENER-TRI',
+                'unidad_medida' => 'servicio',
+                'orden' => 50,
+            ],
         ];
 
         foreach ($variantes as $v) {
@@ -93,6 +117,6 @@ class ArancelVariantePilotoSeeder extends Seeder
             );
         }
 
-        $this->command?->info("Piloto Cancha Vieja ({$campo->codigo}) con 2 variantes DPTO/MUNI.");
+        $this->command?->info("Piloto Cancha Vieja ({$campo->codigo}) con 2 variantes horarias y 3 servicios adicionales.");
     }
 }

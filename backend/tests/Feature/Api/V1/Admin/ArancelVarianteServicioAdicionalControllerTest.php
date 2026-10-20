@@ -84,7 +84,7 @@ class ArancelVarianteServicioAdicionalControllerTest extends TestCase
             'estado_tarifa_sireb' => 'activo',
             'categorias_sireb' => [],
             'perfil' => null,
-            'clasificacion' => 'unica',
+            'clasificacion' => 'no_clasificada',
             'precio_por_hora' => 15.00,
             'vigente_desde' => now(),
             'vigente_hasta' => null,
