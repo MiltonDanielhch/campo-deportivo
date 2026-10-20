@@ -16,6 +16,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * - solicitudes_reserva NO tiene columna confirmado_en.
  * - La confirmación vive en reservas.confirmado_en.
  * - Por eso el confirmado_en del resource se deriva de la primera reserva.
+ *
+ * P8.3D: expone servicios adicionales cuando la relación está cargada.
  */
 class SolicitudReservaAdminResource extends JsonResource
 {
@@ -73,6 +75,29 @@ class SolicitudReservaAdminResource extends JsonResource
                             'confirmado_en' => $detalle->reserva->confirmado_en?->toIso8601String(),
                             'asistencia_marcada_en' => $detalle->reserva->asistencia_marcada_en?->toIso8601String(),
                         ] : null,
+                    ])
+                    ->values()
+                    ->all()
+            ),
+
+            // P8.3D: servicios adicionales cobrados en la misma liquidación.
+            'servicios' => $this->whenLoaded(
+                'servicios',
+                fn () => $this->servicios
+                    ->map(fn ($servicio) => [
+                        'id' => $servicio->id,
+                        'campo_id' => $servicio->campo_id,
+                        'campo_nombre' => $servicio->campo?->nombre,
+                        'variante_id' => $servicio->variante_id,
+                        'variante_codigo' => $servicio->variante?->codigo,
+                        'variante_nombre' => $servicio->variante?->nombre,
+                        'servicio_sireb_id' => $servicio->servicio_sireb_id,
+                        'servicio_sireb_codigo' => $servicio->variante?->servicio_sireb_codigo,
+                        'tarifa_sireb_id' => $servicio->tarifa_sireb_id,
+                        'etiqueta_sireb' => $servicio->etiqueta_sireb,
+                        'cantidad' => (int) ($servicio->cantidad ?? 1),
+                        'precio_unitario' => (float) $servicio->precio_unitario,
+                        'subtotal' => (float) $servicio->subtotal,
                     ])
                     ->values()
                     ->all()

@@ -32,6 +32,22 @@ export interface DetalleSolicitudAdmin {
   reserva: ReservaAnidada | null;
 }
 
+export interface ServicioAdicionalDetalle {
+  id: string;
+  campo_id: string;
+  campo_nombre: string | null;
+  variante_id: string | null;
+  variante_codigo: string | null;
+  variante_nombre: string | null;
+  servicio_sireb_id: string | null;
+  servicio_sireb_codigo: string | null;
+  tarifa_sireb_id: string | null;
+  etiqueta_sireb: string | null;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+}
+
 export interface SolicitudReservaAdmin {
   id: string;
   codigo_seguimiento: string;
@@ -47,6 +63,7 @@ export interface SolicitudReservaAdmin {
   expira_en: string | null;
   confirmado_en?: string | null;
   detalles?: DetalleSolicitudAdmin[];
+  servicios?: ServicioAdicionalDetalle[];
 }
 
 export interface EntradaAuditoria {

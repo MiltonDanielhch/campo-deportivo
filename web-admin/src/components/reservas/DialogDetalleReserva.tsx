@@ -391,10 +391,19 @@ export default function DialogDetalleReserva({
   const puedeAnularse = data?.puede_anularse ?? false;
   const codigoPublico = solicitud?.referencia_recaudaciones;
 
+  const servicios = solicitud?.servicios ?? [];
+  const totalServicios = servicios.reduce(
+    (acc, servicio) => acc + Number(servicio.subtotal ?? 0),
+    0,
+  );
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogContent
+            className="max-h-[90vh] w-full overflow-y-auto"
+            style={{ maxWidth: '56rem' }}
+          >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Detalle de reserva
@@ -817,6 +826,80 @@ export default function DialogDetalleReserva({
                   </div>
                 )}
               </div>
+
+              {servicios.length > 0 && (
+                <>
+                  <Separator />
+
+                  <div>
+                    <h3 className="mb-3 text-sm font-semibold">
+                      Servicios adicionales
+                    </h3>
+
+                    <div className="space-y-2">
+                      {servicios.map((servicio) => {
+                        const titulo =
+                          servicio.variante_nombre ||
+                          servicio.etiqueta_sireb ||
+                          'Servicio adicional';
+
+                        const codigo =
+                          servicio.servicio_sireb_codigo ||
+                          servicio.etiqueta_sireb ||
+                          '—';
+
+                        return (
+                          <div
+                            key={servicio.id}
+                            className="rounded-lg border bg-slate-50 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p
+                                  className="truncate text-sm font-medium"
+                                  title={titulo}
+                                >
+                                  {titulo}
+                                </p>
+
+                                <p
+                                  className="truncate text-xs text-muted-foreground"
+                                  title={codigo}
+                                >
+                                  {codigo}
+                                </p>
+
+                                {servicio.campo_nombre && (
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    Campo: {servicio.campo_nombre}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="shrink-0 text-right">
+                                <p className="text-sm font-semibold tabular-nums">
+                                  {formatoMonto(servicio.subtotal)}
+                                </p>
+
+                                <p className="text-xs text-muted-foreground tabular-nums">
+                                  {servicio.cantidad} × {formatoMonto(servicio.precio_unitario)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <div className="flex items-center justify-end gap-2 pt-1 text-sm font-semibold tabular-nums">
+                        <span className="text-muted-foreground">
+                          Total servicios:
+                        </span>
+                        <span>{formatoMonto(totalServicios)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           ) : null}
         </DialogContent>
