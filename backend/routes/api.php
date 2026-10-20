@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\WebhookRecaudacionesController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\Admin\CatalogoArancelarioController;
+use App\Http\Controllers\Api\V1\Admin\ArancelVarianteController;
 
 /*
 |--------------------------------------------------------------------------
@@ -256,4 +257,12 @@ Route::middleware('auth.oauth')->group(function () {
             Route::post('/reservas/{id}/cancelar', [AdminPiscinaReservaController::class, 'cancelar']);
         });
     // ─── FIN Fase P7.7 ───
+
+    // ─── Fase P8.2C: variantes arancelarias por campo ───
+    Route::middleware('role:admin_parametricas|admin_reservas')
+        ->prefix('v1/admin/campos/{campoDeportivo}')
+        ->group(function () {
+            Route::get('/variantes', [ArancelVarianteController::class, 'index']);
+        });
+    // ─── FIN Fase P8.2C ───
 });
