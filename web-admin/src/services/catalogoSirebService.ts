@@ -38,6 +38,28 @@ export interface CatalogoSirebResponse {
   };
 }
 
+export interface VarianteArancelariaTarifa {
+  tarifa_sireb_id: string;
+  etiqueta: string | null;
+  clasificacion: string | null;
+  monto: number;
+}
+
+export interface VarianteArancelaria {
+  id: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string | null;
+  tipo_uso?: string | null;
+  servicio_sireb_id?: string | null;
+  servicio_sireb_codigo?: string | null;
+  unidad_medida: string;
+  visible_publico: boolean;
+  activo: boolean;
+  orden: number;
+  tarifas: VarianteArancelariaTarifa[];
+}
+
 export const catalogoSirebService = {
   /**
    * Lista todos los servicios SIREB con su campo local vinculado (si existe).
@@ -47,6 +69,22 @@ export const catalogoSirebService = {
       '/v1/admin/catalogo-sireb/campos',
     );
     return data;
+  },
+
+
+  /**
+   * Lista las variantes arancelarias activas de un campo físico.
+   *
+   * P8.2D: usado por ventanilla para campos como Cancha Vieja,
+   * donde un mismo espacio físico tiene varios servicios SIREB
+   * según el tipo de uso: asociación departamental, municipal, etc.
+   */
+  async listarVariantesPorCampo(campoId: string): Promise<VarianteArancelaria[]> {
+    const { data } = await apiClient.get<{ data: VarianteArancelaria[] }>(
+      `/v1/admin/campos/${campoId}/variantes`,
+    );
+
+    return data.data ?? [];
   },
 
   /**

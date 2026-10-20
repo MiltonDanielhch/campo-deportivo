@@ -68,7 +68,13 @@ export const solicitudesReservaService = {
 
   /** Creación desde ventanilla (admin). Devuelve código de seguimiento + cobro. */
   async crearDesdeVentanilla(payload: {
-    franjas: Array<{ campo_id: string; fecha: string; hora_inicio: string; hora_fin: string }>;
+    franjas: Array<{
+      campo_id: string;
+      variante_id?: string;
+      fecha: string;
+      hora_inicio: string;
+      hora_fin: string;
+    }>;
     nombre_pagador: string;
     ci_nit_pagador: string;
     telefono_pagador?: string;

@@ -14,7 +14,7 @@ import {
   Filter,
   Loader2,
   MapPin,
-  Plus,    
+  Plus,
   RotateCcw,
   Search,
   UserCheck,
@@ -498,10 +498,12 @@ export default function Reservas() {
             )}
             Exportar CSV
           </Button>
-          <Button onClick={() => setCrearOpen(true)} className="bg-teal-600 hover:bg-teal-700">
-            <Plus className="mr-2 size-4" />
-            Nueva Reserva
-          </Button>
+          {esAdmin && (
+            <Button onClick={() => setCrearOpen(true)} className="bg-teal-600 hover:bg-teal-700">
+              <Plus className="mr-2 size-4" />
+              Nueva Reserva
+            </Button>
+          )}
         </div>
       </div>
 
