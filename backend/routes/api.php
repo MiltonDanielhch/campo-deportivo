@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\V1\TipoCampoController;
 use App\Http\Controllers\Api\V1\WebhookRecaudacionesController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\V1\Admin\CatalogoArancelarioController;
 
 /*
 |--------------------------------------------------------------------------
@@ -139,6 +140,12 @@ Route::middleware('auth.oauth')->group(function () {
             // de los servicios recién dados de alta en SIREB.
             Route::post('/refrescar', [CatalogoSirebController::class, 'refrescar']);
         });
+
+        // ─── Catálogo arancelario clasificado (P8.1, solo lectura) ───
+        // Agrupa los servicios SIREB por naturaleza comercial (base / adicional /
+        // mensual / hospedaje / piscina / especial) sin tocar reservas. Sirve para
+        // validar la clasificación con datos reales antes de modelar variantes (P8.2).
+        Route::get('/v1/admin/catalogo-arancelario', [CatalogoArancelarioController::class, 'index']);
 
         // ─── Sincronización SIREB (Fase C.4) ───
         Route::prefix('v1/admin/sireb')->group(function () {
