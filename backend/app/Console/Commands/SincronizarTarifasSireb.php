@@ -13,6 +13,8 @@ use App\Services\Sireb\ClasificadorTarifaSireb;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Models\ArancelVariante;
+use Illuminate\Support\Collection;
 
 class SincronizarTarifasSireb extends Command
 {
@@ -31,7 +33,10 @@ class SincronizarTarifasSireb extends Command
         }
 
         $serviciosPorId = collect($catalogo)->keyBy('id');
+        $serviciosPorCodigo = collect($catalogo)->keyBy(fn ($s) => (string) ($s['codigo'] ?? ''));
         $dryRun = (bool) $this->option('dry-run');
+
+        $this->sincronizarVariantes($serviciosPorCodigo, $clasificador, $dryRun);
 
         // ─── Pre-paso: auto-crear campo_deportivo para servicios SIREB nuevos ───
         // Cualquier servicio SIREB con tarifario=liquidable + estado=activo
@@ -135,6 +140,10 @@ class SincronizarTarifasSireb extends Command
             if (isset($existentesSet[$id])) {
                 continue;
             }
+            if (ArancelVariante::where('servicio_sireb_codigo', $codigo)->exists()) {
+                continue;
+            }
+
             // Solo auto-crear para servicios que SIREB marca como cobrables.
             if (($servicio['estado'] ?? null) !== 'activo') {
                 continue;
@@ -213,5 +222,123 @@ class SincronizarTarifasSireb extends Command
             AuditoriaService::registrar(tabla: 'tarifas_campo', registroId: $nueva->id, accion: 'sincronizar_tarifa_sireb', usuarioId: null, datosAnteriores: $snapshot, datosNuevos: $nueva->only(['id', 'tarifa_sireb_id', 'clasificacion', 'perfil', 'precio_por_hora', 'vigente_desde', 'vigente_hasta', 'tarifario_estado', 'liquidable', 'sincronizado_en']));
             return $nueva;
         });
+    }
+
+    /**
+     * Sincroniza arancel_variantes con el catálogo SIREB y espeja sus tarifas.
+     *
+     * Esto permite que un mismo campo físico tenga varias variantes arancelarias
+     * sin crear un campo_deportivo distinto por cada servicio SIREB.
+     */
+    private function sincronizarVariantes(
+        Collection $serviciosPorCodigo,
+        ClasificadorTarifaSireb $clasificador,
+        bool $dryRun,
+    ): void {
+        $variantes = ArancelVariante::with('campo')
+            ->whereNotNull('servicio_sireb_codigo')
+            ->get();
+
+        if ($variantes->isEmpty()) {
+            return;
+        }
+
+        $serviciosVariantesIds = [];
+
+        foreach ($variantes as $variante) {
+            if (! $variante->campo) {
+                continue;
+            }
+
+            $servicio = $serviciosPorCodigo->get((string) $variante->servicio_sireb_codigo);
+
+            if (! $servicio) {
+                continue;
+            }
+
+            $servicioId = (string) ($servicio['id'] ?? '');
+
+            if ($servicioId === '') {
+                continue;
+            }
+
+            if ($variante->servicio_sireb_id !== $servicioId) {
+                if (! $dryRun) {
+                    $variante->update([
+                        'servicio_sireb_id' => $servicioId,
+                    ]);
+                }
+            }
+
+            if (($servicio['estado'] ?? null) !== 'activo') {
+                continue;
+            }
+
+            $serviciosVariantesIds[$servicioId] = true;
+
+            if ($dryRun) {
+                continue;
+            }
+
+            foreach ($servicio['tarifas'] ?? [] as $tarifaSireb) {
+                $tarifaSirebId = $tarifaSireb['id'] ?? null;
+
+                if ($tarifaSirebId === null) {
+                    continue;
+                }
+
+                $clas = $clasificador->clasificar($tarifaSireb, $servicio);
+                $precioSireb = (float) ($tarifaSireb['monto'] ?? 0);
+
+                $local = TarifaCampo::query()
+                    ->where('campo_id', $variante->campo_id)
+                    ->where('servicio_sireb_id', $servicioId)
+                    ->where('tarifa_sireb_id', $tarifaSirebId)
+                    ->whereNull('vigente_hasta')
+                    ->first();
+
+                $difiere = $local && (
+                    abs((float) $local->precio_por_hora - $precioSireb) > 0.005
+                    || $local->clasificacion !== $clas->tipo->value
+                    || ($local->perfil ?? null) !== $clas->perfil
+                );
+
+                if ($local === null || $difiere) {
+                    $this->espejar(
+                        $variante->campo,
+                        $servicio,
+                        $tarifaSireb,
+                        $clas,
+                        $precioSireb,
+                        $local
+                    );
+                }
+            }
+        }
+
+        if (! $dryRun) {
+            $this->desactivarCamposDuplicadosDeVariantes(array_keys($serviciosVariantesIds));
+        }
+    }
+
+    /**
+     * Si SIREB antes auto-creó campos SIR-* para servicios que ahora son
+     * variantes de un campo físico, esos campos quedan inactivos y sin vínculo
+     * para evitar doble reserva del mismo espacio.
+     */
+    private function desactivarCamposDuplicadosDeVariantes(array $servicioIds): void
+    {
+        if (empty($servicioIds)) {
+            return;
+        }
+
+        CampoDeportivo::query()
+            ->where('codigo', 'like', 'SIR-%')
+            ->whereIn('servicio_sireb_id', $servicioIds)
+            ->update([
+                'estado' => 'inactivo',
+                'servicio_sireb_id' => null,
+                'servicio_sireb_codigo' => null,
+            ]);
     }
 }
