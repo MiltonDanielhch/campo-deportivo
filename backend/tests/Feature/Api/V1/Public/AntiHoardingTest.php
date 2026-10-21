@@ -25,7 +25,7 @@ class AntiHoardingTest extends TestCase
         // Mockear CatalogoSirebService para que los tests de gates no fallen en SIREB
         $this->mock(\App\Services\CatalogoSirebService::class, function ($mock) {
             $mock->shouldReceive('resolverTarifaId')
-                ->andReturn('tarifa-fake-uuid-' . uniqid());
+                ->andReturn('01a0f3f8-29e8-71f8-acca-a3c23716c69f'); // existe en CATALOGO_FAKE → monto > 0
         });
     }
 

@@ -80,25 +80,53 @@ class SirebLiquidacionService
             referenciaExterna: $reserva->codigo_seguimiento,
         );
 
+        // [FIX dinero #1] Validar el contrato de SIREB ANTES de pisar el
+        // estimado local. Si la liquidación viene malformada (sin id, sin
+        // codigo_publico, o con monto <= 0 / no numérico), NO sobrescribimos
+        // monto_total ni armamos datos_cobro_pendiente: lanzamos y el caller
+        // decide la política (público → ReintentarSolicitudJob; ventanilla →
+        // rechazo inline + 422). Sin este guard, un tarifario mal cargado o un
+        // bug del gateway que devuelva monto 0 hacía que el ciudadano viera un
+        // QR de Bs 0, pagara 0 y la reserva naciera con monto_pagado = tarifa
+        // local (Bs 50): cobro cero + reporte inflado. El reintento re-usa la
+        // misma idempotency key, así que no doble-cobra.
+        $montoAutoritativo = $liquidacion['monto'] ?? null;
+        $codigoPublico = $liquidacion['codigo_publico'] ?? null;
+        $liquidacionId = $liquidacion['id'] ?? null;
+
+        if (blank($liquidacionId) || blank($codigoPublico)
+            || ! is_numeric($montoAutoritativo)
+            || (float) $montoAutoritativo <= 0) {
+            throw new \RuntimeException(
+                'SIREB devolvió una liquidación con contrato inválido '
+                . '(id=' . var_export($liquidacionId, true)
+                . ', codigo_publico=' . var_export($codigoPublico, true)
+                . ', monto=' . var_export($montoAutoritativo, true)
+                . ") para {$reserva->codigo_seguimiento}"
+            );
+        }
+
+        $montoAutoritativo = (float) $montoAutoritativo;
+
         // 3. Persistir referencias.
         // SIREB es la fuente de verdad del monto: sobrescribimos el estimado
-        // local con el autoritativo devuelto por el gateway. El shape de
-        // datos_cobro_pendiente es SIEMPRE el mismo, inline o reintento, para
-        // que el frontend (QR + código copiable) no tenga que distinguir.
+        // local con el autoritativo devuelto por el gateway (ya validado > 0).
+        // El shape de datos_cobro_pendiente es SIEMPRE el mismo, inline o
+        // reintento, para que el frontend (QR + código copiable) no tenga que
+        // distinguir.
         $reserva->update([
-            'referencia_recaudaciones' => $liquidacion['codigo_publico'],
-            'liquidacion_id' => $liquidacion['id'],
-            'monto_total' => $liquidacion['monto'],
+            'referencia_recaudaciones' => $codigoPublico,
+            'liquidacion_id' => $liquidacionId,
+            'monto_total' => $montoAutoritativo,
             'datos_cobro_pendiente' => [
-                'codigo_publico' => $liquidacion['codigo_publico'],
-                'qr_string' => 'SIREB:'.$liquidacion['codigo_publico'],
+                'codigo_publico' => $codigoPublico,
+                'qr_string' => 'SIREB:' . $codigoPublico,
                 'qr_image_base64' => null,
-                'monto' => $liquidacion['monto'],
-                'fecha_vencimiento' => $liquidacion['fecha_vencimiento'],
-                'items' => $liquidacion['items'],
+                'monto' => $montoAutoritativo,
+                'fecha_vencimiento' => $liquidacion['fecha_vencimiento'] ?? null,
+                'items' => $liquidacion['items'] ?? [],
             ],
         ]);
-
         // 4. Auditoría.
         $this->auditoria->registrar(
             $tablaAuditoria,
