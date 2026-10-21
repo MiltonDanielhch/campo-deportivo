@@ -192,17 +192,16 @@ export const solicitudesReservaService = {
   },
 
   /**
-   * Solo para admin_parametricas.
-   * Si falla por permisos, la pantalla oculta el filtro de campo.
+   * Solo para admin_parametricas / ventanilla.
+   * Endpoint ADMIN (/v1/campos-deportivos): NO filtra padres-de-variantes ni
+   * sin_reserva_online, porque el funcionario SÍ puede reservarlos. El filtro
+   * de esos es del ENDPOINT PÚBLICO (Bug A), no de acá.
    */
-  /**
-   * Solo para admin_parametricas.
-   * Si falla por permisos, la pantalla oculta el filtro de campo.
-   */
-  async listarCampos(): Promise<CampoOption[]> {
+  async listarCampos(params?: { estado?: string }): Promise<CampoOption[]> {
     const { data } = await apiClient.get<unknown>('/v1/campos-deportivos', {
       params: {
         per_page: 100,
+        ...(params?.estado ? { estado: params.estado } : {}),
       },
     });
 

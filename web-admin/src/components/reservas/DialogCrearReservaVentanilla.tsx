@@ -48,6 +48,16 @@ interface Bloque {
   hora_inicio: string;
   hora_fin: string;
   estado: string;
+  /** Espejo SIREB por bloque. Llega del backend (calcularGrilla).
+   *  null en campos con variantes (ahí el precio vive en la variante). */
+  precio?: number | null;
+}
+
+/** Franja seleccionada: de la grilla (1h en punto) o a medida (inicio libre). */
+interface SlotSel {
+  inicio: string; // HH:MM:SS
+  fin: string;    // HH:MM:SS
+  origen: 'grilla' | 'amedida';
 }
 
 interface Resultado {
@@ -70,6 +80,15 @@ type ApiError = {
 };
 
 const hhmm = (h: string) => h.substring(0, 5);
+
+/** Suma 60 min a "HH:MM" (para el fin de una franja a medida de 1 hora). */
+function sumarHora(hhmmStr: string): string {
+  const [h, m] = hhmmStr.split(':').map(Number);
+  const total = (h || 0) * 60 + (m || 0) + 60;
+  const nh = Math.floor(total / 60) % 24;
+  const nm = total % 60;
+  return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
+}
 
 /**
  * Espejo frontend de resolverServiciosParaCrear: única > única-sola >
@@ -179,7 +198,8 @@ export default function DialogCrearReservaVentanilla({
   const [fecha, setFecha] = useState<string>('');
   const [bloques, setBloques] = useState<Bloque[]>([]);
   const [cargandoSlots, setCargandoSlots] = useState(false);
-  const [slots, setSlots] = useState<string[]>([]);
+  const [slots, setSlots] = useState<SlotSel[]>([]);
+  const [horaAmedida, setHoraAmedida] = useState<string>('');
 
   const [nombre, setNombre] = useState('');
   const [ciNit, setCiNit] = useState('');
@@ -206,7 +226,7 @@ export default function DialogCrearReservaVentanilla({
 
   const clasificacionAplicable = useMemo(() => {
     if (slots.length === 0) return null;
-    const hora = parseInt(slots[0].slice(0, 2), 10);
+    const hora = parseInt(slots[0].inicio.slice(0, 2), 10);
     if (Number.isNaN(hora)) return null;
     return hora < HORA_INICIO_NOCHE_ESTIMADA ? 'diurna' : 'nocturna';
   }, [slots]);
@@ -241,16 +261,39 @@ export default function DialogCrearReservaVentanilla({
   }, [serviciosSeleccionados, serviciosAdicionalesValidos, clasificacionAplicable]);
 
   const subtotalFranja = useMemo(() => {
-    if (!varianteSeleccionada || slots.length === 0) return 0;
-    const tarifas = varianteSeleccionada.tarifas;
-    const unica = tarifas.find((t) => t.clasificacion === 'unica');
-    const porClas = clasificacionAplicable
-      ? tarifas.find((t) => t.clasificacion === clasificacionAplicable)
-      : null;
-    const tarifa = unica ?? porClas;
-    if (!tarifa) return 0;
-    return Number(tarifa.monto) * slots.length;
-  }, [varianteSeleccionada, slots, clasificacionAplicable]);
+    if (slots.length === 0) return 0;
+
+    // Campo con variante: precio desde la tarifa de la variante, resuelto por tramo.
+    if (varianteSeleccionada) {
+      const tarifas = varianteSeleccionada.tarifas;
+      const unica = tarifas.find((t) => t.clasificacion === 'unica');
+      const porClas = clasificacionAplicable
+        ? tarifas.find((t) => t.clasificacion === clasificacionAplicable)
+        : null;
+      const tarifa = unica ?? porClas;
+      if (tarifa) return Number(tarifa.monto) * slots.length;
+      return 0;
+    }
+
+    // Legacy (sin variantes): precio espejado que el backend ya devuelve por
+    // bloque. Antes devolvía 0 porque varianteSeleccionada era null y no había
+    // fallback → el funcionario veía "Bs 0.00" en Cancha Sintética aunque el
+    // monto final lo confirmara SIREB. Para franjas a medida (no están en
+    // bloques) se toma el precio de un bloque libre del mismo tramo.
+    const precioTramo = (inicio: string): number => {
+      const enGrilla = bloques.find((b) => b.hora_inicio === inicio);
+      if (enGrilla?.precio != null) return Number(enGrilla.precio);
+      const hora = parseInt(inicio.slice(0, 2), 10);
+      const tipo = hora < HORA_INICIO_NOCHE_ESTIMADA ? 'diurna' : 'nocturna';
+      const ref = bloques.find((b) => {
+        const bh = parseInt(b.hora_inicio.slice(0, 2), 10);
+        const bt = bh < HORA_INICIO_NOCHE_ESTIMADA ? 'diurna' : 'nocturna';
+        return bt === tipo && b.precio != null;
+      });
+      return ref?.precio != null ? Number(ref.precio) : 0;
+    };
+    return slots.reduce((acc, o) => acc + precioTramo(o.inicio), 0);
+  }, [varianteSeleccionada, slots, clasificacionAplicable, bloques]);
 
   const totalEstimado = subtotalFranja + totalServicios;
 
@@ -267,6 +310,7 @@ export default function DialogCrearReservaVentanilla({
       setFecha('');
       setBloques([]);
       setSlots([]);
+      setHoraAmedida('');
       setNombre('');
       setCiNit('');
       setTelefono('');
@@ -277,7 +321,7 @@ export default function DialogCrearReservaVentanilla({
   useEffect(() => {
     if (!open) return;
     solicitudesReservaService
-      .listarCamposPublicos()
+      .listarCampos({ estado: 'activo' })   // ← era listarCamposPublicos()
       .then((lista) => {
         setCampos(lista);
         const sinNombre = lista.filter((c) => !c.nombre || c.nombre === c.id);
@@ -372,6 +416,8 @@ export default function DialogCrearReservaVentanilla({
     setVariantes([]);
     setServiciosAdicionales([]);
     setServiciosSeleccionados({});
+    setSlots([]);
+    setHoraAmedida('');
   };
 
   const handleVarianteChange = (nuevoId: string) => {
@@ -386,7 +432,7 @@ export default function DialogCrearReservaVentanilla({
     setSlots([]);
     try {
       const disp = await solicitudesReservaService.disponibilidad(campoId, fecha);
-      setBloques(disp.abierto ? disp.bloques.filter((b) => b.estado === 'libre') : []);
+      setBloques(disp.abierto ? disp.bloques.filter((b: Bloque) => b.estado === 'libre') : []);
     } catch {
       setBloques([]);
       toast.error('No se pudo consultar la disponibilidad del campo.');
@@ -399,10 +445,27 @@ export default function DialogCrearReservaVentanilla({
     cargarSlots();
   }, [cargarSlots]);
 
-  const toggleSlot = (hora: string) =>
+  const toggleSlot = (b: Bloque) =>
     setSlots((prev) =>
-      prev.includes(hora) ? prev.filter((h) => h !== hora) : [...prev, hora].sort(),
+      prev.some((s) => s.inicio === b.hora_inicio)
+        ? prev.filter((s) => s.inicio !== b.hora_inicio)
+        : [...prev, { inicio: b.hora_inicio, fin: b.hora_fin, origen: 'grilla' as const }].sort(
+            (a, z) => a.inicio.localeCompare(z.inicio),
+          ),
     );
+
+  const toggleAmedida = (hora: string) => {
+    const inicio = `${hora}:00`;
+    setSlots((prev) => {
+      if (prev.some((s) => s.inicio === inicio)) {
+        return prev.filter((s) => s.inicio !== inicio);
+      }
+      const fin = `${sumarHora(hora)}:00`;
+      return [...prev, { inicio, fin, origen: 'amedida' as const }].sort(
+        (a, z) => a.inicio.localeCompare(z.inicio),
+      );
+    });
+  };
 
   const copiar = async (texto: string, clave: string) => {
     await navigator.clipboard.writeText(texto);
@@ -475,7 +538,6 @@ export default function DialogCrearReservaVentanilla({
 
   const enviar = async () => {
     if (!puedeEnviar) return;
-    const bloqueDe = (hora: string) => bloques.find((b) => b.hora_inicio === hora)!;
     const serviciosPayload = Object.entries(serviciosSeleccionados)
       .filter(([, cantidad]) => cantidad > 0)
       .map(([vid, cantidad]) => ({ campo_id: campoId, variante_id: vid, cantidad }));
@@ -483,12 +545,12 @@ export default function DialogCrearReservaVentanilla({
     setEnviando(true);
     try {
       const res = await solicitudesReservaService.crearDesdeVentanilla({
-        franjas: slots.map((hora) => ({
+        franjas: slots.map((o) => ({
           campo_id: campoId,
           ...(varianteId ? { variante_id: varianteId } : {}),
           fecha,
-          hora_inicio: bloqueDe(hora).hora_inicio,
-          hora_fin: bloqueDe(hora).hora_fin,
+          hora_inicio: o.inicio,
+          hora_fin: o.fin,
         })),
         ...(serviciosPayload.length > 0 ? { servicios: serviciosPayload } : {}),
         nombre_pagador: nombre.trim(),
@@ -511,6 +573,8 @@ export default function DialogCrearReservaVentanilla({
       setEnviando(false);
     }
   };
+
+  const slotsAmedida = slots.filter((s) => s.origen === 'amedida');
 
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(v) : cerrar())}>
@@ -759,27 +823,82 @@ export default function DialogCrearReservaVentanilla({
 
               {!campoId || !fecha ? (
                 <p className="text-sm text-muted-foreground">Elegí campo y fecha para ver horarios.</p>
-              ) : bloques.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {cargandoSlots ? 'Consultando…' : 'Sin franjas libres ese día.'}
-                </p>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {bloques.map((b) => {
-                    const activo = slots.includes(b.hora_inicio);
-                    return (
+                <>
+                  {bloques.length === 0 && !cargandoSlots && (
+                    <p className="text-sm text-muted-foreground">Sin franjas libres ese día.</p>
+                  )}
+
+                  {bloques.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {bloques.map((b) => {
+                        const activo = slots.some((s) => s.inicio === b.hora_inicio);
+                        return (
+                          <Button
+                            key={b.hora_inicio}
+                            type="button"
+                            variant={activo ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => toggleSlot(b)}
+                          >
+                            {hhmm(b.hora_inicio)}–{hhmm(b.hora_fin)}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* ── Opción B: franja a medida (inicio libre + 1 hora) ── */}
+                  <div className="space-y-2 rounded-lg border border-dashed bg-muted/30 p-3">
+                    <Label className="text-xs font-semibold text-muted-foreground">
+                      Otra franja a medida (inicio + 1 hora)
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="time"
+                        step={1800}
+                        value={horaAmedida}
+                        onChange={(e) => setHoraAmedida(e.target.value)}
+                        className="w-32"
+                        disabled={!campoId || !fecha}
+                        aria-label="Hora de inicio a medida"
+                      />
                       <Button
-                        key={b.hora_inicio}
                         type="button"
-                        variant={activo ? 'default' : 'outline'}
+                        variant="outline"
                         size="sm"
-                        onClick={() => toggleSlot(b.hora_inicio)}
+                        disabled={!horaAmedida || !campoId || !fecha}
+                        onClick={() => {
+                          toggleAmedida(horaAmedida);
+                          setHoraAmedida('');
+                        }}
                       >
-                        {hhmm(b.hora_inicio)}–{hhmm(b.hora_fin)}
+                        <Plus className="mr-1 size-4" /> Agregar
                       </Button>
-                    );
-                  })}
-                </div>
+                    </div>
+
+                    {slotsAmedida.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {slotsAmedida.map((o) => (
+                          <Button
+                            key={o.inicio}
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            onClick={() => toggleAmedida(o.inicio.slice(0, 5))}
+                          >
+                            {hhmm(o.inicio)}–{hhmm(o.fin)}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      Para horarios que no están en la grilla (ej. 08:30). Se cobra como 1 hora.
+                      El solape con otras franjas lo valida el sistema al crear.
+                    </p>
+                  </div>
+                </>
               )}
             </div>
 

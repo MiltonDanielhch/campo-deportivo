@@ -486,123 +486,141 @@ export default function CamposDeportivos() {
       {/* ─── Catálogo oficial de SIREB ─── */}
       {vistaSireb && (
         <div className="rounded-xl border bg-card overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead>Código</TableHead>
-                <TableHead>Servicio SIREB</TableHead>
-                <TableHead>Rubro / Tarifario</TableHead>
-                <TableHead className="w-40">Precio</TableHead>
-                <TableHead className="w-56">Campo local</TableHead>
-                <TableHead className="w-32">Estado</TableHead>
-                <TableHead className="w-32 text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cargandoSireb ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                    Consultando el catálogo de SIREB…
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table className="table-fixed w-full">
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="w-[150px]">Código</TableHead>
+                  <TableHead className="w-[250px]">Servicio SIREB</TableHead>
+                  <TableHead className="hidden lg:table-cell w-[120px]">Rubro</TableHead>
+                  <TableHead className="w-[150px]">Precio</TableHead>
+                  <TableHead className="w-[300px]">Campo local</TableHead>
+                  <TableHead className="w-[120px]">Estado</TableHead>
+                  <TableHead className="w-[140px] text-right">Acciones</TableHead>
                 </TableRow>
-              ) : errorSireb ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center">
-                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                      <AlertTriangle className="size-8 text-amber-500" />
-                      <p className="font-medium">{errorSireb}</p>
-                      <Button variant="outline" size="sm" onClick={cargarCatalogoSireb}>
-                        Reintentar
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : catalogoSirebFiltrado.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                    {catalogoSireb.length === 0
-                      ? 'SIREB no devolvió servicios liquidables.'
-                      : 'Ningún servicio coincide con la búsqueda.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                catalogoSirebFiltrado.map((item) => (
-                  <TableRow key={item.sireb.id} className="hover:bg-muted/20 transition-colors">
-                    <TableCell className="font-mono text-xs font-semibold">
-                      {item.sireb.codigo}
-                    </TableCell>
-                    <TableCell className="font-semibold">{item.sireb.nombre}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {item.sireb.tarifario ?? 'liquidable'}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {item.sireb.precio_min != null && item.sireb.precio_max != null
-                        ? item.sireb.precio_min === item.sireb.precio_max
-                          ? `Bs. ${item.sireb.precio_min.toFixed(2)}`
-                          : `Bs. ${item.sireb.precio_min.toFixed(2)} – Bs. ${item.sireb.precio_max.toFixed(2)}`
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {item.campo_local ? (
-                        <span>
-                          {item.campo_local.nombre}
-                          <span className="ml-1 font-mono text-xs text-muted-foreground">
-                            {item.campo_local.codigo}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="text-amber-600 dark:text-amber-400">
-                          Sin campo local
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {item.vinculacion === 'vinculado' ? (
-                        <Badge
-                          variant="default"
-                          className="gap-1.5 border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400"
-                        >
-                          <BadgeCheck className="size-3" />
-                          <span className="text-xs">Vinculado</span>
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="secondary"
-                          className="gap-1.5 border-amber-200 bg-amber-500/10 px-2.5 py-1 text-amber-700 dark:border-amber-500/30 dark:text-amber-400"
-                        >
-                          <span className="text-xs">Sin vincular</span>
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.campo_local ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            const campo = campos.find((c) => c.id === item.campo_local?.id);
-                            if (campo) desvincular(campo);
-                          }}
-                        >
-                          <Unlink className="mr-2 size-4" />
-                          Desvincular
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => abrirNuevoDesdeSireb(item)}
-                        >
-                          <Plus className="mr-2 size-4" />
-                          Crear campo
-                        </Button>
-                      )}
+              </TableHeader>
+              <TableBody>
+                {cargandoSireb ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                      Consultando el catálogo de SIREB…
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : errorSireb ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-32 text-center">
+                      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                        <AlertTriangle className="size-8 text-amber-500" />
+                        <p className="font-medium">{errorSireb}</p>
+                        <Button variant="outline" size="sm" onClick={cargarCatalogoSireb}>
+                          Reintentar
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : catalogoSirebFiltrado.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                      {catalogoSireb.length === 0
+                        ? 'SIREB no devolvió servicios liquidables.'
+                        : 'Ningún servicio coincide con la búsqueda.'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  catalogoSirebFiltrado.map((item) => (
+                    <TableRow key={item.sireb.id} className="hover:bg-muted/20 transition-colors">
+                      <TableCell className="font-mono text-xs font-semibold truncate" title={item.sireb.codigo}>
+                        {item.sireb.codigo}
+                      </TableCell>
+
+                      <TableCell>
+                        <p className="truncate font-semibold" title={item.sireb.nombre}>
+                          {item.sireb.nombre}
+                        </p>
+                      </TableCell>
+
+                      <TableCell className="hidden lg:table-cell">
+                        <p className="truncate text-sm text-muted-foreground">
+                          {item.sireb.tarifario ?? 'liquidable'}
+                        </p>
+                      </TableCell>
+
+                      <TableCell className="text-sm whitespace-nowrap">
+                        {item.sireb.precio_min != null && item.sireb.precio_max != null
+                          ? item.sireb.precio_min === item.sireb.precio_max
+                            ? `Bs. ${item.sireb.precio_min.toFixed(2)}`
+                            : `Bs. ${item.sireb.precio_min.toFixed(2)} – ${item.sireb.precio_max.toFixed(2)}`
+                          : '—'}
+                      </TableCell>
+
+                      <TableCell>
+                        {item.campo_local ? (
+                          <div className="flex flex-col">
+                            <span className="truncate font-medium" title={item.campo_local.nombre}>
+                              {item.campo_local.nombre}
+                            </span>
+                            {item.campo_local.codigo && (
+                              <span className="truncate font-mono text-xs text-muted-foreground" title={item.campo_local.codigo}>
+                                {item.campo_local.codigo}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                            Sin campo local
+                          </span>
+                        )}
+                      </TableCell>
+
+                      <TableCell>
+                        {item.vinculacion === 'vinculado' ? (
+                          <Badge
+                            variant="default"
+                            className="gap-1.5 border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400"
+                          >
+                            <BadgeCheck className="size-3" />
+                            <span className="text-xs">Vinculado</span>
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="secondary"
+                            className="gap-1.5 border-amber-200 bg-amber-500/10 px-2.5 py-1 text-amber-700 dark:border-amber-500/30 dark:text-amber-400"
+                          >
+                            <span className="text-xs">Sin vincular</span>
+                          </Badge>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="text-right">
+                        {item.campo_local ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const campo = campos.find((c) => c.id === item.campo_local?.id);
+                              if (campo) desvincular(campo);
+                            }}
+                          >
+                            <Unlink className="mr-2 size-4" />
+                            Desvincular
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => abrirNuevoDesdeSireb(item)}
+                          >
+                            <Plus className="mr-2 size-4" />
+                            Crear campo
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 

@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ArancelVariante;
 use App\Models\CampoDeportivo;
 use App\Services\CatalogoSirebService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\Rule;
 
 /**
  * Controller para gestión de integración SIREB en el panel administrativo.
@@ -32,15 +32,55 @@ class CatalogoSirebController extends Controller
      *
      * Lista todos los servicios SIREB del catálogo con su campo local vinculado (si existe).
      * Permite al admin ver qué servicios están vinculados y cuáles no.
+     *
+     * P8.4 Fix: Ahora también detecta vínculos a través de la tabla arancel_variantes,
+     * para que campos como Palacio o Estadio no aparezcan como "Sin campo local".
      */
     public function index(): JsonResponse
     {
         try {
             $catalogo = $this->catalogoSireb->catalogoCacheado();
-            $camposLocales = CampoDeportivo::all()->keyBy('servicio_sireb_id');
 
-            $data = collect($catalogo)->map(function ($servicio) use ($camposLocales) {
-                $campoLocal = $camposLocales->get($servicio['id']);
+            // 1. Campos con vínculo DIRECTO (1 a 1)
+            $camposDirectos = CampoDeportivo::whereNotNull('servicio_sireb_id')
+                ->get(['id', 'nombre', 'codigo', 'estado', 'direccion', 'servicio_sireb_id'])
+                ->keyBy('servicio_sireb_id');
+
+            // 2. Campos con vínculo por VARIANTE (1 a N)
+            $variantes = ArancelVariante::whereNotNull('servicio_sireb_id')
+                ->with('campo:id,nombre,codigo,estado,direccion')
+                ->get(['id', 'nombre', 'servicio_sireb_id', 'campo_id'])
+                ->keyBy('servicio_sireb_id');
+
+            $data = collect($catalogo)->map(function ($servicio) use ($camposDirectos, $variantes) {
+                $sirebId = $servicio['id'] ?? null;
+                $vinculacion = 'sin_vincular';
+                $campoLocal = null;
+
+                if ($sirebId && $camposDirectos->has($sirebId)) {
+                    // Caso A: Vínculo directo (ej. Cancha Sintética, Frontón)
+                    $vinculacion = 'vinculado';
+                    $campo = $camposDirectos->get($sirebId);
+                    $campoLocal = [
+                        'id' => $campo->id,
+                        'codigo' => $campo->codigo,
+                        'nombre' => $campo->nombre,
+                        'estado' => $campo->estado,
+                        'direccion' => $campo->direccion,
+                    ];
+                } elseif ($sirebId && $variantes->has($sirebId)) {
+                    // Caso B: Vínculo a través de una variante (ej. Palacio, Estadio, Cancha Vieja)
+                    $vinculacion = 'vinculado';
+                    $variante = $variantes->get($sirebId);
+                    $campo = $variante->campo; // Relación cargada por 'with'
+                    $campoLocal = [
+                        'id' => $campo->id,
+                        'codigo' => $campo->codigo,
+                        'nombre' => $campo->nombre . ' (vía ' . $variante->nombre . ')',
+                        'estado' => $campo->estado,
+                        'direccion' => $campo->direccion,
+                    ];
+                }
 
                 $reservable = $this->esReservable($servicio);
 
@@ -55,14 +95,8 @@ class CatalogoSirebController extends Controller
                         'precio_max' => $this->calcularPrecioMax($servicio),
                         'tarifas' => $servicio['tarifas'] ?? [],
                     ],
-                    'campo_local' => $campoLocal ? [
-                        'id' => $campoLocal->id,
-                        'codigo' => $campoLocal->codigo,
-                        'nombre' => $campoLocal->nombre,
-                        'estado' => $campoLocal->estado,
-                        'direccion' => $campoLocal->direccion,
-                    ] : null,
-                    'vinculacion' => $campoLocal ? 'vinculado' : 'sin_vincular',
+                    'campo_local' => $campoLocal,
+                    'vinculacion' => $vinculacion,
                     'reservable_online' => $reservable,
                     'mensaje_no_reservable' => $reservable ? null : $this->motivoNoReservable($servicio),
                 ];
@@ -98,12 +132,6 @@ class CatalogoSirebController extends Controller
      * PATCH /api/v1/admin/campos-deportivos/{campoId}/vinculo-sireb
      *
      * Vincula un campo local a un servicio SIREB.
-     *
-     * Reglas:
-     * - El servicio SIREB debe existir en el catálogo
-     * - No se puede vincular un servicio SIREB a más de un campo local
-     * - Si el servicio está inactivo, permitir vínculo pero mostrar warning
-     * - Si el servicio es sin_tarifa, permitir vínculo pero no será reservable online
      */
     public function vincular(Request $request, CampoDeportivo $campoDeportivo): JsonResponse
     {
@@ -121,7 +149,7 @@ class CatalogoSirebController extends Controller
                 ], 422);
             }
 
-            // Verificar que el servicio no esté ya vinculado a otro campo
+            // Verificar que el servicio no esté ya vinculado a otro campo (vínculo directo)
             $otroCampo = CampoDeportivo::where('servicio_sireb_id', $validated['servicio_sireb_id'])
                 ->where('id', '!=', $campoDeportivo->id)
                 ->first();
@@ -129,9 +157,12 @@ class CatalogoSirebController extends Controller
             if ($otroCampo) {
                 return response()->json([
                     'error' => 'Servicio ya vinculado',
-                    'message' => "Este servicio ya está vinculado al campo '{$otroCampo->nombre}'.",
+                    'message' => "Este servicio ya está vinculado directamente al campo '{$otroCampo->nombre}'.",
                 ], 422);
             }
+
+            // Nota: No bloqueamos si ya existe en arancel_variantes, porque ese es el comportamiento esperado
+            // para campos que agrupan múltiples servicios bajo un mismo espacio físico.
 
             DB::beginTransaction();
 
@@ -140,7 +171,6 @@ class CatalogoSirebController extends Controller
                 'servicio_sireb_codigo' => $servicio['codigo'] ?? null,
             ]);
 
-            // Auditoría
             Log::channel('auditoria')->info('Campo vinculado a servicio SIREB', [
                 'campo_id' => $campoDeportivo->id,
                 'campo_codigo' => $campoDeportivo->codigo,
@@ -180,7 +210,6 @@ class CatalogoSirebController extends Controller
      * DELETE /api/v1/admin/campos-deportivos/{campoId}/vinculo-sireb
      *
      * Desvincula un campo de su servicio SIREB.
-     * El campo dejará de ser reservable online hasta que se vuelva a vincular.
      */
     public function desvincular(CampoDeportivo $campoDeportivo): JsonResponse
     {
@@ -202,7 +231,6 @@ class CatalogoSirebController extends Controller
                 'servicio_sireb_codigo' => null,
             ]);
 
-            // Auditoría
             Log::channel('auditoria')->info('Campo desvinculado de servicio SIREB', [
                 'campo_id' => $campoDeportivo->id,
                 'campo_codigo' => $campoDeportivo->codigo,
@@ -236,23 +264,17 @@ class CatalogoSirebController extends Controller
 
     /**
      * POST /api/v1/admin/sireb/sincronizar-tarifas
-     *
-     * Espeja en tarifas_campo el tarifario vigente de SIREB.
-     * Es la ÚNICA vía por la que cambian los precios de este sistema.
      */
     public function sincronizarTarifas(): JsonResponse
     {
         try {
             $exitCode = \Illuminate\Support\Facades\Artisan::call('sireb:sincronizar-tarifas');
-
             $output = \Illuminate\Support\Facades\Artisan::output();
 
             if ($exitCode === 0) {
                 return response()->json([
                     'message' => 'Sincronización ejecutada exitosamente',
-                    'data' => [
-                        'output' => $output,
-                    ],
+                    'data' => ['output' => $output],
                 ]);
             }
 
@@ -274,11 +296,6 @@ class CatalogoSirebController extends Controller
 
     /**
      * POST /api/v1/admin/catalogo-sireb/refrescar
-     *
-     * Invalida la caché del catálogo SIREB y la repuebla iterando todas
-     * las páginas. Es el botón "Refrescar catálogo" del panel: SIN este
-     * endpoint, el operador esperaba un refresh y solo veía datos cacheados
-     * (hasta 10 min de retraso cuando se agrega un servicio en SIREB).
      */
     public function refrescar(): JsonResponse
     {
@@ -309,33 +326,28 @@ class CatalogoSirebController extends Controller
     private function esReservable(array $servicio): bool
     {
         $estado = $servicio['estado'] ?? null;
-
         if ($estado !== null && !in_array($estado, ['activo', 'ACTIVO'], true)) {
             return false;
         }
 
         $tarifario = $servicio['tarifario'] ?? null;
-
         if ($tarifario === 'sin_tarifa') {
             return false;
         }
 
         $tarifas = $servicio['tarifas'] ?? [];
-
         return count($tarifas) > 0;
     }
 
     private function motivoNoReservable(array $servicio): string
     {
         $estado = $servicio['estado'] ?? null;
-
         if ($estado !== null && !in_array($estado, ['activo', 'ACTIVO'], true)) {
             return 'El servicio no está activo en recaudaciones.';
         }
 
         $tarifario = $servicio['tarifario'] ?? null;
         $tarifas = $servicio['tarifas'] ?? [];
-
         if ($tarifario === 'sin_tarifa' || count($tarifas) === 0) {
             return 'Este servicio no tiene tarifa liquidable. Consultá precio en ventanilla.';
         }
@@ -366,13 +378,11 @@ class CatalogoSirebController extends Controller
     private function generarWarningVinculacion(array $servicio): ?string
     {
         $estado = $servicio['estado'] ?? null;
-
         if ($estado !== null && !in_array($estado, ['activo', 'ACTIVO'], true)) {
             return 'El servicio está inactivo en SIREB. El campo no será reservable online hasta que el servicio se active.';
         }
 
         $tarifario = $servicio['tarifario'] ?? null;
-
         if ($tarifario === 'sin_tarifa') {
             return 'El servicio no tiene tarifario liquidable. El campo no será reservable online.';
         }
