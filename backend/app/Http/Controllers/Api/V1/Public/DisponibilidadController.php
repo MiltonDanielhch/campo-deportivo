@@ -29,10 +29,19 @@ class DisponibilidadController extends Controller
             'fecha' => ['required', 'date'],
         ]);
 
-        // Validar ventana: hoy ≤ fecha ≤ hoy + 60 días
-        $fecha = Carbon::parse($data['fecha'])->startOfDay();
-        $hoy = Carbon::today();
-        $limite = $hoy->copy()->addDays(60);
+        // [FIX #2 tz — controller público] El gate de ventana debe comparar en
+        // el MISMO tz que DisponibilidadService usa para etiquetar 'pasada'
+        // (America/La_Paz). Antes usaba Carbon::today() = tz del servidor
+        // (UTC en Docker), así que a las 23:30 Bolivia el "hoy" del controller
+        // ya era mañana y rechazaba 422 una fecha legítima.
+        // TODO: unificar con DisponibilidadService en App\Support\FechaBolivia
+        // (mismo helper que propone el TODO de ese service). No se extrae acá
+        // para no tocar el service verde (224 tests) por higiene.
+        $timezoneBolivia = 'America/La_Paz';
+
+        $fecha = Carbon::parse($data['fecha'], $timezoneBolivia)->startOfDay();
+        $hoy = Carbon::now($timezoneBolivia)->startOfDay();
+        $limite = $hoy->copy()->addDays(60); // sincronizar con VENTANA_DIAS si el PO lo mueve
 
         if ($fecha->lt($hoy) || $fecha->gt($limite)) {
             throw ValidationException::withMessages([
