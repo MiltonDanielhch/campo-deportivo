@@ -31,6 +31,15 @@ class StoreCampoDeportivoRequest extends FormRequest
             ],
             'nombre' => ['required', 'string', 'max:100'],
             'direccion' => ['required', 'string', 'max:200'],
+            // ⟦GATE⟧ provincia valida contra config/beni.php (borrador a validar por PO).
+            // Si el array está vacío, se permite cualquier string (no bloquea dev).
+            'provincia' => array_filter([
+                'nullable', 'string', 'max:60',
+                count((array) config('beni.provincias', [])) > 0
+                    ? Rule::in(config('beni.provincias'))
+                    : null,
+            ]),
+            'municipio' => ['nullable', 'string', 'max:80'],
             // Coordenadas dentro del departamento del Beni (aproximado)
             'latitud' => ['required', 'numeric', 'between:-18.0,-9.6'],
             'longitud' => ['required', 'numeric', 'between:-67.5,-57.4'],
@@ -71,6 +80,8 @@ class StoreCampoDeportivoRequest extends FormRequest
             'codigo.regex' => 'El código solo permite letras mayúsculas, números y guiones.',
             'latitud.between' => 'La latitud debe estar dentro del departamento del Beni (-18.0 a -9.6).',
             'longitud.between' => 'La longitud debe estar dentro del departamento del Beni (-67.5 a -57.4).',
+            'provincia.in' => 'La provincia seleccionada no es válida.',
+            'municipio.string' => 'El municipio debe ser una cadena de texto.',
             'horarios.required' => 'Debe proporcionar al menos un horario de atención.',
             'horarios.*.hora_cierre.after' => 'La hora de cierre debe ser posterior a la de apertura.',
             'imagen.image' => 'El archivo debe ser una imagen (jpg, jpeg, png o webp).',

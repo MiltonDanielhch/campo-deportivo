@@ -91,6 +91,14 @@ class CampoController extends Controller
             }
         }
 
+        if ($request->filled('provincia')) {
+            $query->where('provincia', trim((string) $request->input('provincia')));
+        }
+
+        if ($request->filled('municipio')) {
+            $query->where('municipio', trim((string) $request->input('municipio')));
+        }
+
         $campos = $this->conRelaciones($query)
             ->orderBy('nombre')
             ->get();
@@ -109,5 +117,35 @@ class CampoController extends Controller
             ->findOrFail($campo);
 
         return response()->json($this->presenter->show($campoModel));
+    }
+
+    /**
+     * GET /api/v1/public/ubicaciones
+     * Catálogo de provincia/municipio DERIVADO de campos activos+visibles,
+     * para armar la cascada del front sin hardcodear en el cliente.
+     * Solo devuelve combinaciones que realmente tienen campos públicos.
+     */
+    public function ubicaciones(): JsonResponse
+    {
+        $filas = $this->visibles()
+            ->whereNotNull('provincia')
+            ->selectRaw('provincia, municipio, count(*) as total')
+            ->groupBy('provincia', 'municipio')
+            ->orderBy('provincia')
+            ->orderBy('municipio')
+            ->get();
+
+        $provincias = $filas->pluck('provincia')->unique()->values();
+        $municipios = $filas
+            ->groupBy('provincia')
+            ->map(fn ($g) => $g->pluck('municipio')->unique()->values())
+            ->all();
+
+        return response()->json([
+            'data' => [
+                'provincias' => $provincias,
+                'municipios' => $municipios,
+            ],
+        ]);
     }
 }

@@ -165,6 +165,8 @@ class CampoPublicoSirebPresenter
                 ]
                 : null,
             'direccion' => $campo->direccion,
+            'provincia' => $campo->provincia,      // ← F3
+            'municipio' => $campo->municipio,      // ← F3
             'imagen_url' => $campo->imagen_url,
             'latitud' => (float) $campo->latitud,
             'longitud' => (float) $campo->longitud,

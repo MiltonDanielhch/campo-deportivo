@@ -21,7 +21,7 @@ class CampoControllerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Crear tipo una sola vez para todos los tests
         $this->tipoFutbol = TipoCampo::create([
             'nombre' => 'Fútbol Test',
@@ -64,7 +64,7 @@ class CampoControllerTest extends TestCase
 
         $response->assertOk();
         $ids = collect($response->json('data'))->pluck('id')->all();
-        
+
         $this->assertContains($activo->id, $ids, 'El campo activo debe aparecer');
         $this->assertNotContains($inactivo->id, $ids, 'El campo inactivo NO debe aparecer');
     }
@@ -132,5 +132,28 @@ class CampoControllerTest extends TestCase
         $response = $this->getJson("/api/v1/public/campos/{$inactivo->id}");
 
         $response->assertNotFound();
+    }
+
+    public function test_filtro_por_provincia_y_municipio(): void
+    {
+        $enTrinidad = $this->crearCampo(['provincia' => 'Mamoré', 'municipio' => 'Trinidad']);
+        $enRiberalta = $this->crearCampo(['provincia' => 'Vaca', 'municipio' => 'Riberalta']);
+
+        $r = $this->getJson('/api/v1/public/campos?provincia=Mamoré&municipio=Trinidad');
+        $r->assertOk();
+        $ids = collect($r->json('data'))->pluck('id')->all();
+        $this->assertContains($enTrinidad->id, $ids);
+        $this->assertNotContains($enRiberalta->id, $ids, 'Filtro por provincia/municipio debe excluir otras sedes');
+    }
+
+    public function test_filtro_ubicacion_respeta_visibles_bug_a(): void
+    {
+        // Un campo inactivo con provincia NO debe aparecer aunque el filtro coincida.
+        $inactivo = $this->crearCampo(['estado' => 'inactivo', 'provincia' => 'Mamoré', 'municipio' => 'Trinidad']);
+
+        $r = $this->getJson('/api/v1/public/campos?provincia=Mamoré');
+        $r->assertOk();
+        $this->assertNotContains($inactivo->id, collect($r->json('data'))->pluck('id')->all(),
+            'visibles() debe seguir aplicando con filtro de ubicación (Bug A)');
     }
 }

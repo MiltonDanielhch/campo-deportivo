@@ -69,6 +69,7 @@ Route::get('/v1/public/storage/{path}', function (string $path) {
 // dispositivo llega con la Épica G (HU-G1).
 Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
     Route::get('/campos', [PublicCampoController::class, 'index']);
+    Route::get('/ubicaciones', [PublicCampoController::class, 'ubicaciones']);
     Route::get('/campos/{campo}', [PublicCampoController::class, 'show']);
     Route::get('/campos/{campo}/disponibilidad', [DisponibilidadController::class, 'show']);
     Route::post('/solicitudes-reserva', [SolicitudReservaController::class, 'store']);

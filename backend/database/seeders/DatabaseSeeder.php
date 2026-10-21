@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
             FuncionarioSeeder::class,       // 0.8 — admin de desarrollo
             ParametrosSistemaSeeder::class, // 1.6 — 2 parámetros operativos
             TipoCampoSeeder::class,
+            UbicacionCampoSeeder::class,   // ← F1
         ]);
     }
 }

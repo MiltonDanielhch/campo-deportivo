@@ -22,6 +22,7 @@ class CampoDeportivo extends Model
 
     protected $fillable = [
         'tipo_campo_id', 'codigo', 'nombre', 'direccion',
+        'provincia', 'municipio',                                   // ← NUEVO
         'latitud', 'longitud', 'estado', 'imagen_url', 'hora_inicio_noche',
         'servicio_sireb_id', 'servicio_sireb_codigo', 'modalidad_reserva',
     ];
