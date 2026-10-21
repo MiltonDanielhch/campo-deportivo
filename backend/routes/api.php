@@ -27,6 +27,7 @@ use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\Admin\CatalogoArancelarioController;
 use App\Http\Controllers\Api\V1\Admin\ArancelVarianteController;
+use App\Http\Controllers\Api\V1\UbicacionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -101,6 +102,7 @@ Route::middleware('auth.oauth')->group(function () {
 
     // Rutas de admin_parametricas (requieren rol específico)
     Route::middleware('role:admin_parametricas')->group(function () {
+        Route::get('/v1/ubicaciones', [UbicacionController::class, 'index']);
         // Tipos de campo
         Route::prefix('v1/tipos-campo')->group(function () {
             Route::get('/', [TipoCampoController::class, 'index']);

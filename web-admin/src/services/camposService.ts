@@ -4,6 +4,8 @@ import type {
   CampoDeportivo,
   CampoDeportivoPayload,
   PaginatedResponse,
+  UbicacionesOficiales,
+  UbicacionesOficialesResponse,
 } from '@/types/parametricas';
 
 const BASE = '/v1/campos-deportivos';
@@ -23,6 +25,13 @@ function construirFormData(payload: CampoDeportivoPayload): FormData {
   fd.append('codigo', payload.codigo);
   fd.append('nombre', payload.nombre);
   fd.append('direccion', payload.direccion);
+  if (payload.provincia) {
+    fd.append('provincia', payload.provincia);
+  }
+
+  if (payload.municipio) {
+    fd.append('municipio', payload.municipio);
+  }
   fd.append('latitud', String(payload.latitud));
   fd.append('longitud', String(payload.longitud));
 
@@ -134,6 +143,17 @@ export const camposService = {
       { servicio_sireb_id: servicioSirebId },
     );
     return data;
+  },
+
+  /**
+   * Catálogo oficial de provincias/municipios del Beni para el alta de campo.
+   * No usar /public/ubicaciones acá: ese deriva desde campos visibles.
+   */
+  async listarUbicacionesOficiales(): Promise<UbicacionesOficiales> {
+    const { data } = await apiClient.get<UbicacionesOficialesResponse>(
+      '/v1/ubicaciones',
+    );
+    return data.data;
   },
 
   /**

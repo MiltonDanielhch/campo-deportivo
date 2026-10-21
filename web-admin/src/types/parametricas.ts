@@ -59,6 +59,8 @@ export interface CampoDeportivo {
   codigo: string;
   nombre: string;
   direccion: string;
+  provincia?: string | null;
+  municipio?: string | null;
   latitud: string;
   longitud: string;
   estado: EstadoCampo;
@@ -81,6 +83,8 @@ export interface CampoDeportivoPayload {
   codigo: string;
   nombre: string;
   direccion: string;
+  provincia?: string | null;
+  municipio?: string | null;
   latitud: number;
   longitud: number;
   horarios: HorarioAtencionPayload[];
@@ -233,4 +237,14 @@ export interface PaginatedResponse<T> {
   per_page: number;
   to: number | null;
   total: number;
+}
+
+
+export interface UbicacionesOficiales {
+  provincias: string[];
+  municipios: Record<string, string[]>;
+}
+
+export interface UbicacionesOficialesResponse {
+  data: UbicacionesOficiales;
 }

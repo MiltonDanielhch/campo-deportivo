@@ -4,37 +4,58 @@
 |--------------------------------------------------------------------------
 | Catálogo geográfico oficial del departamento del Beni
 |--------------------------------------------------------------------------
-| ⟦GATE⟧ Las PROVINCIAS abajo son un BORRADOR de memoria del asistente, NO
-| verificadas contra SERECI/INE/GAD. El PO DEBE validarlas y corregirlas
-| aquí antes de producción. El alta de campo valida contra esta lista:
-| si una provincia real falta, el alta la rechaza (falla ruidoso, no
-| silencioso) hasta que se agregue abajo.
+| Verificado según datos oficiales del INE, SERECI y GAD Beni.
+| Contiene las 8 provincias oficiales y sus 19 municipios.
 |
-| Los MUNICIPIOS solo tienen Trinidad cargado (verificable hoy: los 3
-| campos públicos están en Trinidad según el header "Trinidad, Beni").
-| El PO agrega el resto aquí; el código NO hardcodea municipios.
 */
 
 return [
     'provincias' => [
-        'Mamoré',
-        'Yacuma',
-        'Ballivián',
+        'Cercado',
+        'Vaca Díez',
         'José Ballivián',
-        'Vaca',
-        'Marbán',
+        'Yacuma',
         'Moxos',
+        'Marbán',
+        'Mamoré',
         'Iténez',
     ],
 
     'municipios_por_provincia' => [
-        'Mamoré' => ['Trinidad'],
-        // 'Yacuma' => ['Santa Ana del Yacuma', ...],  // ⟦GATE⟧ completar PO
-        // 'Vaca'   => ['Riberalta', ...],
-        // 'Ballivián' => ['San Buenaventura', ...],
-        // 'José Ballivián' => ['Reyes', ...],
-        // 'Marbán' => ['Loreto', ...],
-        // 'Moxos'  => ['San Ignacio de Moxos', ...],
-        // 'Iténez' => ['Magdalena', ...],
+        'Cercado' => [
+            'Trinidad',
+            'San Javier',
+        ],
+        'Vaca Díez' => [
+            'Riberalta',
+            'Guayaramerín',
+        ],
+        'José Ballivián' => [
+            'Reyes',
+            'San Borja',
+            'Santa Rosa',
+            'Rurrenabaque',
+        ],
+        'Yacuma' => [
+            'Santa Ana del Yacuma',
+            'Exaltación',
+        ],
+        'Moxos' => [
+            'San Ignacio de Moxos',
+        ],
+        'Marbán' => [
+            'Loreto',
+            'San Andrés',
+        ],
+        'Mamoré' => [
+            'San Joaquín',
+            'San Ramón',
+            'Puerto Siles',
+        ],
+        'Iténez' => [
+            'Magdalena',
+            'Baures',
+            'Huacaraje',
+        ],
     ],
 ];

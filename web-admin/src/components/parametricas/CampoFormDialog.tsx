@@ -7,8 +7,9 @@ import {
   ExternalLink,
   FileText,
   ImageIcon,
-  Lock, // readonly SIREB: candadito en código/nombre
+  Lock,
   MapPin,
+  Building2,
   Trash2,
   Upload,
   X,
@@ -139,6 +140,12 @@ export default function CampoFormDialog({
   const [codigo, setCodigo] = useState('');
   const [nombre, setNombre] = useState('');
   const [direccion, setDireccion] = useState('');
+  const [provincia, setProvincia] = useState('');
+  const [municipio, setMunicipio] = useState('');
+  const [provincias, setProvincias] = useState<string[]>([]);
+  const [municipiosPorProvincia, setMunicipiosPorProvincia] = useState<
+    Record<string, string[]>
+  >({});
   const [latitud, setLatitud] = useState(LAT_TRINIDAD);
   const [longitud, setLongitud] = useState(LNG_TRINIDAD);
   const [horarios, setHorarios] = useState<FilaHorario[]>(horariosIniciales());
@@ -171,6 +178,8 @@ export default function CampoFormDialog({
       setCodigo(campo.codigo);
       setNombre(campo.nombre);
       setDireccion(campo.direccion);
+      setProvincia(campo.provincia ?? '');
+      setMunicipio(campo.municipio ?? '');
       setLatitud(String(campo.latitud));
       setLongitud(String(campo.longitud));
       setImagenPersistida(campo.imagen_url ?? null);
@@ -199,6 +208,8 @@ export default function CampoFormDialog({
       setCodigo(valoresIniciales?.codigo ?? '');
       setNombre(valoresIniciales?.nombre ?? '');
       setDireccion('');
+      setProvincia('');
+      setMunicipio('');
       setLatitud(LAT_TRINIDAD);
       setLongitud(LNG_TRINIDAD);
       setImagenPersistida(null);
@@ -206,6 +217,15 @@ export default function CampoFormDialog({
       setServicioSirebId(valoresIniciales?.servicioSirebId ?? '');
     }
 
+    camposService
+      .listarUbicacionesOficiales()
+      .then((cat) => {
+        setProvincias(cat.provincias);
+        setMunicipiosPorProvincia(cat.municipios);
+      })
+      .catch(() => {
+        toast.error('No se pudieron cargar las ubicaciones oficiales');
+      });
     // FIX carrera: el tipo del campo en edición se setea SOLO DESPUÉS de cargar
     // la lista. Así siempre existe el <SelectItem> que le da el label y Radix
     // nunca pinta el UUID crudo (el bug que veías en pantalla).
@@ -333,6 +353,24 @@ export default function CampoFormDialog({
       return;
     }
 
+    if (!provincia) {
+      setErrores((prev) => ({
+        ...prev,
+        provincia: ['Seleccioná la provincia.'],
+      }));
+      toast.error('Seleccioná la provincia');
+      return;
+    }
+
+    if (!municipio) {
+      setErrores((prev) => ({
+        ...prev,
+        municipio: ['Seleccioná el municipio.'],
+      }));
+      toast.error('Seleccioná el municipio');
+      return;
+    }
+
     setGuardando(true);
     try {
       const payload = {
@@ -340,6 +378,8 @@ export default function CampoFormDialog({
         codigo: codigo.trim().toUpperCase(),
         nombre: nombre.trim(),
         direccion: direccion.trim(),
+        provincia,
+        municipio,
         latitud: parseFloat(latitud),
         longitud: parseFloat(longitud),
         horarios: habilitados.map((h) => ({
@@ -677,6 +717,83 @@ export default function CampoFormDialog({
                 </div>
               }
             >
+              <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5 text-xs font-semibold">
+                    <Building2 className="size-3.5" />
+                    Provincia <span className="text-destructive">*</span>
+                  </Label>
+
+                  <Select
+                    value={provincia}
+                    onValueChange={(v) => {
+                      setProvincia(v);
+                      setMunicipio('');
+                    }}
+                  >
+                    <SelectTrigger>
+                      <span className={provincia ? '' : 'text-muted-foreground'}>
+                        {provincia || 'Selecciona una provincia'}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {provincias.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {errores.provincia && (
+                    <p className="text-xs text-destructive">
+                      {errores.provincia[0]}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">
+                    Municipio <span className="text-destructive">*</span>
+                  </Label>
+
+                  <Select
+                    value={municipio}
+                    onValueChange={setMunicipio}
+                    disabled={!provincia}
+                  >
+                    <SelectTrigger>
+                      <span className={municipio ? '' : 'text-muted-foreground'}>
+                        {municipio ||
+                          (provincia
+                            ? 'Selecciona un municipio'
+                            : 'Elegí primero la provincia')}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(municipiosPorProvincia[provincia] ?? []).map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {provincia &&
+                    (municipiosPorProvincia[provincia] ?? []).length === 0 && (
+                      <p className="text-xs text-amber-600">
+                        Faltan municipios para esta provincia en
+                        `config/beni.php`.
+                      </p>
+                    )}
+
+                  {errores.municipio && (
+                    <p className="text-xs text-destructive">
+                      {errores.municipio[0]}
+                    </p>
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold">

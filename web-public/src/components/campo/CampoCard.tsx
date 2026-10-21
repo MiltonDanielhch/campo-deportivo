@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapPin, ArrowRight, Sun, Lightbulb, AlertCircle, BadgeCheck } from 'lucide-react';
+import { MapPin, ArrowRight, Sun, Lightbulb, AlertCircle, BadgeCheck, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { CardContent } from '@/components/ui/card';
@@ -128,10 +128,24 @@ export default function CampoCard({ campo }: CampoCardProps) {
         <h3 className="text-lg font-bold leading-tight mb-2 group-hover:text-teal-700 transition-colors">
           {campo.nombre}
         </h3>
-        <p className="flex items-center gap-1 text-sm text-slate-600 mb-4 line-clamp-1">
-          <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
-          {campo.direccion}
-        </p>
+
+        {(campo.provincia || campo.municipio || campo.direccion) && (
+          <div className="mb-4 space-y-1">
+            {(campo.provincia || campo.municipio) && (
+              <p className="flex items-center gap-1 text-xs font-medium text-slate-500 line-clamp-1">
+                <Building2 className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+                {[campo.municipio, campo.provincia].filter(Boolean).join(' · ')}
+              </p>
+            )}
+
+            {campo.direccion && (
+              <p className="flex items-center gap-1 text-sm text-slate-600 line-clamp-1">
+                <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+                {campo.direccion}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ─── Fila de precios (mt-auto la ancla al fondo) ─── */}
         <div className="flex items-center gap-3 mt-auto pb-4 mb-4 border-b border-slate-100 min-h-[28px]">

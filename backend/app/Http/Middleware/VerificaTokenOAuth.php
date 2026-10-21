@@ -21,16 +21,6 @@ class VerificaTokenOAuth
 {
     public function handle(Request $request, Closure $next)
     {
-        // === LOGS DE DIAGNÓSTICO ===
-        \Log::info('Middleware VerificaTokenOAuth ejecutado', [
-            'path' => $request->path(),
-            'expected_cookie_name' => config('session.cookie'),
-            'received_cookies' => $request->header('cookie'),
-            'has_session' => $request->hasSession(),
-            'session_id' => $request->session()->getId(),
-            'session_token' => $request->session()->get('access_token'),
-        ]);
-        // ============================
 
         $token = $request->bearerToken();
         $desdeSesion = false;
@@ -63,7 +53,7 @@ class VerificaTokenOAuth
                     return response()->json(['error' => 'Token inválido o expirado'], 401);
                 }
             } else {
-                \Log::warning('Token OAuth inválido: '.$e->getMessage());
+                Log::warning('Token OAuth inválido: '.$e->getMessage());
 
                 return response()->json(['error' => 'Token inválido o expirado'], 401);
             }
@@ -126,14 +116,10 @@ class VerificaTokenOAuth
 
     private function validarToken(string $token): object
     {
-        Log::debug('Validando token', ['token' => substr($token, 0, 50)]);
-
         $payload = JWT::decode($token, $this->obtenerKeySet());
 
         // Convertimos a array para evitar "Undefined property" en PHP 8+
         $payloadArray = (array) $payload;
-
-        Log::debug('Payload decodificado', ['payload' => $payloadArray]);
 
         // Validamos el issuer SOLO si el payload lo incluye.
         // Si Ibare no lo emite en el access_token, lo omitimos (la firma JWKS ya garantiza la procedencia).

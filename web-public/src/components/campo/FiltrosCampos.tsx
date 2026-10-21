@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
+import type { UbicacionesResponse } from '@/types/campo';
 
 interface TipoCampo {
   id: string;
@@ -20,6 +21,8 @@ export interface FiltrosEstado {
   tipoCampoId: string | null;
   estado: string | null;
   buscar: string;
+  provincia: string | null;
+  municipio: string | null;
 }
 
 type VistaModo = 'lista' | 'mapa';
@@ -40,6 +43,13 @@ export default function FiltrosCampos({
   onVistaChange,
 }: FiltrosCamposProps) {
   const [tiposCampo, setTiposCampo] = useState<TipoCampo[]>([]);
+  const [ubicaciones, setUbicaciones] = useState<{
+    provincias: string[];
+    municipios: Record<string, string[]>;
+  }>({
+    provincias: [],
+    municipios: {},
+  });
   const [textoBusqueda, setTextoBusqueda] = useState(filtros.buscar);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -48,6 +58,13 @@ export default function FiltrosCampos({
       .get('/public/tipos-campo')
       .then((res) => setTiposCampo(res.data.data))
       .catch((err) => console.error('Error al cargar tipos de campo:', err));
+  }, []);
+
+  useEffect(() => {
+    api
+      .get<UbicacionesResponse>('/public/ubicaciones')
+      .then((res) => setUbicaciones(res.data.data))
+      .catch((err) => console.error('Error al cargar ubicaciones:', err));
   }, []);
 
   useEffect(() => {
@@ -77,6 +94,23 @@ export default function FiltrosCampos({
         ? 'En mantenimiento'
         : 'Todos';
 
+  const todosMunicipios = Object.values(ubicaciones.municipios).reduce<string[]>(
+    (acc, m) => acc.concat(m),
+    [],
+  );
+
+  const municipiosUnicos = Array.from(new Set(todosMunicipios));
+
+  const municipiosDisponibles = filtros.provincia
+    ? (ubicaciones.municipios[filtros.provincia] ?? [])
+    : municipiosUnicos;
+
+  const mostrarProvincia = ubicaciones.provincias.length > 1;
+  const mostrarMunicipio = municipiosDisponibles.length > 1;
+
+  const provinciaLabel = filtros.provincia ?? 'Todas las provincias';
+  const municipioLabel = filtros.municipio ?? 'Todos los municipios';
+
   // Nombre legible del tipo seleccionado (para el chip)
   const tipoSeleccionadoNombre = tiposCampo.find(
     (t) => t.id === filtros.tipoCampoId,
@@ -85,11 +119,19 @@ export default function FiltrosCampos({
   const tieneFiltros =
     filtros.tipoCampoId !== null ||
     filtros.estado !== null ||
+    filtros.provincia !== null ||
+    filtros.municipio !== null ||
     filtros.buscar.trim() !== '';
 
   const limpiarTodo = () => {
     setTextoBusqueda('');
-    onFiltrosChange({ tipoCampoId: null, estado: null, buscar: '' });
+    onFiltrosChange({
+      tipoCampoId: null,
+      estado: null,
+      buscar: '',
+      provincia: null,
+      municipio: null,
+    });
   };
 
   return (
@@ -101,7 +143,7 @@ export default function FiltrosCampos({
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             type="text"
-            placeholder="Buscar cancha por nombre o dirección..."
+            placeholder="Buscar cancha por nombre, dirección, provincia o municipio..."
             value={textoBusqueda}
             onChange={(e) => setTextoBusqueda(e.target.value)}
             className="pl-10 pr-10 h-11 bg-slate-50 border-slate-200 focus:bg-white"
@@ -122,7 +164,7 @@ export default function FiltrosCampos({
         </div>
 
         {/* Selects con etiqueta manual en el trigger */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Select
             value={filtros.tipoCampoId ?? 'todos'}
             onValueChange={(v) =>
@@ -163,6 +205,55 @@ export default function FiltrosCampos({
               <SelectItem value="mantenimiento">En mantenimiento</SelectItem>
             </SelectContent>
           </Select>
+
+          {mostrarProvincia && (
+            <Select
+              value={filtros.provincia ?? 'todas'}
+              onValueChange={(v) =>
+                onFiltrosChange({
+                  ...filtros,
+                  provincia: v === 'todas' ? null : v,
+                  municipio: null,
+                })
+              }
+            >
+              <SelectTrigger className="w-full sm:w-48 h-11 bg-slate-50 border-slate-200">
+                <span className="flex-1 truncate text-left">{provinciaLabel}</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas las provincias</SelectItem>
+                {ubicaciones.provincias.map((provincia) => (
+                  <SelectItem key={provincia} value={provincia}>
+                    {provincia}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {mostrarMunicipio && (
+            <Select
+              value={filtros.municipio ?? 'todas'}
+              onValueChange={(v) =>
+                onFiltrosChange({
+                  ...filtros,
+                  municipio: v === 'todas' ? null : v,
+                })
+              }
+            >
+              <SelectTrigger className="w-full sm:w-48 h-11 bg-slate-50 border-slate-200">
+                <span className="flex-1 truncate text-left">{municipioLabel}</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todos los municipios</SelectItem>
+                {municipiosDisponibles.map((municipio) => (
+                  <SelectItem key={municipio} value={municipio}>
+                    {municipio}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Toggle Lista / Mapa */}
@@ -247,6 +338,38 @@ export default function FiltrosCampos({
               {filtros.estado === 'activo' ? 'Activos' : 'En mantenimiento'}
               <button
                 onClick={() => onFiltrosChange({ ...filtros, estado: null })}
+                className="ml-1 rounded-full p-0.5 hover:bg-teal-200/60 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          )}
+
+          {filtros.provincia && (
+            <Badge
+              variant="outline"
+              className="gap-1 pl-2.5 pr-1 py-1 bg-teal-50 border-teal-200 text-teal-700"
+            >
+              {filtros.provincia}
+              <button
+                onClick={() =>
+                  onFiltrosChange({ ...filtros, provincia: null, municipio: null })
+                }
+                className="ml-1 rounded-full p-0.5 hover:bg-teal-200/60 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          )}
+
+          {filtros.municipio && (
+            <Badge
+              variant="outline"
+              className="gap-1 pl-2.5 pr-1 py-1 bg-teal-50 border-teal-200 text-teal-700"
+            >
+              {filtros.municipio}
+              <button
+                onClick={() => onFiltrosChange({ ...filtros, municipio: null })}
                 className="ml-1 rounded-full p-0.5 hover:bg-teal-200/60 transition-colors"
               >
                 <X className="w-3 h-3" />

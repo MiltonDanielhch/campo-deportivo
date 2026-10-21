@@ -61,6 +61,8 @@ export interface CampoPublico {
   nombre_local?: string;
   tipo_campo?: TipoCampo | null;
   direccion?: string | null;
+  provincia?: string | null;
+  municipio?: string | null;
   imagen_url?: string | null;
   latitud?: number | null;
   longitud?: number | null;
@@ -92,5 +94,12 @@ export interface CampoDetalleResponse {
     fuente_precios: string;
     sincronizado_en?: string | null;
     aviso?: string | null;
+  };
+}
+
+export interface UbicacionesResponse {
+  data: {
+    provincias: string[];
+    municipios: Record<string, string[]>;
   };
 }

@@ -68,75 +68,28 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
                 'Falta configurar SIREB_TOKEN_URL en .env'
             );
         }
-        $tokenUrl = $this->tokenUrl;
 
-        Log::channel('sireb')->info('=== INICIO diagnóstico OAuth2 ===', [
-            'token_url' => $tokenUrl,
-            'client_id' => $this->clientId,
-        ]);
-
-        // ─── Variante 1: form-urlencoded estándar (la que teníamos) ───
-        Log::channel('sireb')->info('Variante 1: form-urlencoded estándar');
-        $response1 = Http::timeout($this->timeoutSeconds)
+        // Variante 1 confirmada por el contrato real de Ibare/SIREB.
+        // NO loguear body: contiene access_token.
+        $response = Http::timeout($this->timeoutSeconds)
             ->asForm()
-            ->post($tokenUrl, [
+            ->post($this->tokenUrl, [
                 'grant_type' => 'client_credentials',
                 'client_id' => $this->clientId,
                 'client_secret' => $this->clientSecret,
             ]);
-        Log::channel('sireb')->info('Respuesta Variante 1', [
-            'status' => $response1->status(),
-            'body' => $response1->body(),
-        ]);
 
-        // ─── Variante 2: con scope=* (común en Laravel Passport) ───
-        Log::channel('sireb')->info('Variante 2: form-urlencoded con scope=*');
-        $response2 = Http::timeout($this->timeoutSeconds)
-            ->asForm()
-            ->post($tokenUrl, [
-                'grant_type' => 'client_credentials',
-                'client_id' => $this->clientId,
-                'client_secret' => $this->clientSecret,
-                'scope' => '*',
+        if ($response->failed()) {
+            Log::channel('sireb')->error('OAuth token falló', [
+                'status' => $response->status(),
+                'error' => $response->json('error') ?? 'sin_detalle',
             ]);
-        Log::channel('sireb')->info('Respuesta Variante 2', [
-            'status' => $response2->status(),
-            'body' => $response2->body(),
-        ]);
 
-        // ─── Variante 3: Basic Auth (credentials en header) ───
-        Log::channel('sireb')->info('Variante 3: Basic Auth');
-        $response3 = Http::timeout($this->timeoutSeconds)
-            ->withBasicAuth($this->clientId, $this->clientSecret)
-            ->asForm()
-            ->post($tokenUrl, [
-                'grant_type' => 'client_credentials',
-            ]);
-        Log::channel('sireb')->info('Respuesta Variante 3', [
-            'status' => $response3->status(),
-            'body' => $response3->body(),
-        ]);
-
-        // Tomar la primera que funcione
-        $response = null;
-        $varianteGanadora = null;
-        foreach ([$response1, $response2, $response3] as $i => $r) {
-            if ($r->successful()) {
-                $response = $r;
-                $varianteGanadora = $i + 1;
-                break;
-            }
-        }
-
-        if (!$response || $response->failed()) {
-            Log::channel('sireb')->error('=== FIN diagnóstico: ninguna variante funcionó ===');
             throw RecaudacionesApiException::respuestaInvalida(
-                $response?->status() ?? 0,
-                'Ninguna variante OAuth2 funcionó. Revisar storage/logs/sireb.log'
+                $response->status(),
+                'Ibare rechazó las credenciales OAuth2'
             );
         }
-
-        Log::channel('sireb')->info("=== FIN diagnóstico: Variante {$varianteGanadora} funcionó ===");
 
         $data = $response->json();
         $accessToken = $data['access_token'] ?? null;

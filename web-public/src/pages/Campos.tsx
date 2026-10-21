@@ -14,6 +14,8 @@ const FILTROS_INICIALES: FiltrosEstado = {
   tipoCampoId: null,
   estado: null,
   buscar: '',
+  provincia: null,
+  municipio: null,
 };
 
 export default function Campos() {
@@ -36,6 +38,8 @@ export default function Campos() {
     const params: Record<string, string> = {};
     if (filtros.tipoCampoId) params.tipo_campo_id = filtros.tipoCampoId;
     if (filtros.estado) params.estado = filtros.estado;
+    if (filtros.provincia) params.provincia = filtros.provincia;
+    if (filtros.municipio) params.municipio = filtros.municipio;
     if (filtros.buscar.trim()) params.buscar = filtros.buscar.trim();
 
     api
