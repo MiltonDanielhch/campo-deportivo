@@ -8,6 +8,7 @@ use App\Services\CampoPublicoSirebPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Enums\ModalidadReservaCampo;
 
 /**
  * Consulta pública de campos deportivos (Épica C, HU-C1).
@@ -40,11 +41,29 @@ class CampoController extends Controller
     /**
      * Base común: solo campos visibles al público.
      * 'inactivo' queda excluido por completo.
+     *
+     * Bug A (Fase 2): el público NO puede reservar
+     *  - campos "padre de variantes" (CV-001 / PAL-001 / EGM-001): tienen
+     *    servicio_sireb_id null y N servicios espejados, entonces
+     *    calcularGrilla no resuelve un único precio y la grilla sale gris.
+     *  - campos solo-ventanilla (sin_reserva_online).
+     * Se mantienen la piscina (turno_por_perfil) y los legacy (CS1/CS3),
+     * que no tienen filas activas en arancel_variantes.
+     *
+     * El NULL en modalidad_reserva se trata como "no es sin_reserva_online"
+     * (NOT IN / <> con NULL descartaría campos legacy sin modalidad set).
+     *
+     * TODO P8.5: cuando existan variantes visible_publico=true, revisar este
+     * filtro para no esconder un campo que sí tenga variante pública.
      */
     private function visibles(): Builder
     {
         return CampoDeportivo::query()
-            ->whereIn('estado', ['activo', 'mantenimiento']);
+            ->whereIn('estado', ['activo', 'mantenimiento'])
+            ->where(fn ($q) => $q
+                ->whereNull('modalidad_reserva')
+                ->orWhere('modalidad_reserva', '<>', ModalidadReservaCampo::SinReservaOnline->value))
+            ->whereDoesntHave('variantes', fn ($q) => $q->where('activo', true));
     }
 
     /**

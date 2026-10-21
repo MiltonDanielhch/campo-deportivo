@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use App\Enums\ModalidadReservaCampo;
-
+use App\Models\ArancelVariante;
 
 class CampoDeportivo extends Model
 {
@@ -87,5 +87,16 @@ class CampoDeportivo extends Model
     public function piscinaTurnos(): HasMany
     {
         return $this->hasMany(PiscinaTurno::class, 'campo_id');
+    }
+
+    /**
+     * Variantes arancelarias del campo (lado hijo de la relación).
+     * Un campo con variantes activas es "padre de variantes": su precio no
+     * vive en el campo sino en cada variante, y la grilla pública no puede
+     * resolver un único precio (ver DisponibilidadService::calcularGrilla).
+     */
+    public function variantes(): HasMany
+    {
+        return $this->hasMany(ArancelVariante::class, 'campo_id');
     }
 }
