@@ -75,6 +75,18 @@ class ArancelVariantePilotoSeeder extends Seeder
                 'unidad_medida' => 'hora',
                 'orden' => 20,
             ],
+            // Cat.2 fix: CV-EVENTO-DEP es "jornada" en SIREB pero se liquida
+            // por tramo (Diurno/Nocturno), igual que PAL-EVENTO-DEP. Se modela
+            // como horaria para entrar en la grilla de ventanilla, replicando
+            // la decisión ya vigente en el catálogo completo (no nueva).
+            [
+                'codigo' => 'EVENTO_DEP',
+                'nombre' => 'Evento Deportivo Jornada',
+                'tipo_uso' => 'deportivo',
+                'servicio_sireb_codigo' => 'SEDEDE-CV-EVENTO-DEP',
+                'unidad_medida' => 'hora',
+                'orden' => 25,
+            ],
             [
                 'codigo' => 'LIMPIEZA',
                 'nombre' => 'Limpieza post-evento',
@@ -99,6 +111,24 @@ class ArancelVariantePilotoSeeder extends Seeder
                 'unidad_medida' => 'servicio',
                 'orden' => 50,
             ],
+            // Cat.2 fix: escenario y limpieza no-deportiva, mismos tipo_uso /
+            // unidad_medida que sus pares en PAL/EGM (servicio_adicional / 'servicio').
+            [
+                'codigo' => 'ESCENARIO',
+                'nombre' => 'Escenario',
+                'tipo_uso' => 'servicio_adicional',
+                'servicio_sireb_codigo' => 'SEDEDE-CV-EVENTO-NO-ESCENARIO',
+                'unidad_medida' => 'servicio',
+                'orden' => 60,
+            ],
+            [
+                'codigo' => 'LIMPIEZA_NO_DEP',
+                'nombre' => 'Limpieza evento no deportivo',
+                'tipo_uso' => 'servicio_adicional',
+                'servicio_sireb_codigo' => 'SEDEDE-CV-EVENTO-NO-LIMPIEZA',
+                'unidad_medida' => 'servicio',
+                'orden' => 70,
+            ],
         ];
 
         foreach ($variantes as $v) {
@@ -117,6 +147,6 @@ class ArancelVariantePilotoSeeder extends Seeder
             );
         }
 
-        $this->command?->info("Piloto Cancha Vieja ({$campo->codigo}) con 2 variantes horarias y 3 servicios adicionales.");
+        $this->command?->info("Piloto Cancha Vieja ({$campo->codigo}) con 3 variantes horarias y 5 servicios adicionales.");
     }
 }
