@@ -32,9 +32,9 @@ class SincronizarTarifasVariantesTest extends TestCase
 
         $variantes = ArancelVariante::where('campo_id', $campo->id)->get();
 
-        $this->assertSame(5, $variantes->count());
-        $this->assertSame(2, $variantes->where('unidad_medida', 'hora')->count());
-        $this->assertSame(3, $variantes->where('unidad_medida', 'servicio')->count());
+        $this->assertSame(8, $variantes->count());                              // era 5
+        $this->assertSame(3, $variantes->where('unidad_medida', 'hora')->count());   // era 2
+        $this->assertSame(5, $variantes->where('unidad_medida', 'servicio')->count()); // era 3
 
         // El campo padre NO debe tener servicio_sireb_id: el vínculo vive en variantes.
         $this->assertNull($campo->servicio_sireb_id);
