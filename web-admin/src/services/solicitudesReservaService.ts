@@ -75,6 +75,11 @@ export const solicitudesReservaService = {
       hora_inicio: string;
       hora_fin: string;
     }>;
+    servicios?: Array<{
+      campo_id: string;
+      variante_id: string;
+      cantidad?: number;
+    }>;
     nombre_pagador: string;
     ci_nit_pagador: string;
     telefono_pagador?: string;

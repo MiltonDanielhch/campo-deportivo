@@ -30,7 +30,11 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import { solicitudesReservaService } from '@/services/solicitudesReservaService';
-import { catalogoSirebService, type VarianteArancelaria } from '@/services/catalogoSirebService';
+import {
+  catalogoSirebService,
+  type VarianteArancelaria,
+  type VarianteArancelariaTarifa,
+} from '@/services/catalogoSirebService';
 import type { CampoOption } from '@/types/reservas';
 import { QRCodeCanvas } from 'qrcode.react';
 
@@ -66,6 +70,26 @@ type ApiError = {
 };
 
 const hhmm = (h: string) => h.substring(0, 5);
+
+/**
+ * Espejo frontend de resolverServiciosParaCrear: única > única-sola >
+ * diurna/nocturna según la hora de la franja. Devuelve null si no se puede
+ * resolver (el servicio no entra al checkbox ni al estimado).
+ */
+function resolverTarifaServicio(
+  v: VarianteArancelaria,
+  clasif: string | null,
+): VarianteArancelariaTarifa | null {
+  const t = v.tarifas;
+  const unica = t.find((x) => x.clasificacion === 'unica');
+  if (unica) return unica;
+  if (t.length === 1) return t[0];
+  if (clasif) {
+    const por = t.find((x) => x.clasificacion === clasif);
+    if (por) return por;
+  }
+  return null;
+}
 
 // Umbral nocturno = default del backend (hora_inicio_noche ?? 18:00).
 // Solo para el ESTIMADO orientativo; el monto autoritativo lo confirma SIREB.
@@ -180,29 +204,41 @@ export default function DialogCrearReservaVentanilla({
     [variantesHorarias, varianteId],
   );
 
-  const serviciosAdicionalesValidos = useMemo(
-    () =>
-      serviciosAdicionales.filter(
-        (v) => Boolean(v.servicio_sireb_id) && v.tarifas.length === 1,
-      ),
-    [serviciosAdicionales],
-  );
-
-  const totalServicios = useMemo(() => {
-    return Object.entries(serviciosSeleccionados).reduce((acc, [id, cantidad]) => {
-      const variante = serviciosAdicionalesValidos.find((v) => v.id === id);
-      const tarifa = variante?.tarifas[0];
-      if (!tarifa) return acc;
-      return acc + Number(tarifa.monto) * Math.max(1, Number(cantidad) || 1);
-    }, 0);
-  }, [serviciosSeleccionados, serviciosAdicionalesValidos]);
-
   const clasificacionAplicable = useMemo(() => {
     if (slots.length === 0) return null;
     const hora = parseInt(slots[0].slice(0, 2), 10);
     if (Number.isNaN(hora)) return null;
     return hora < HORA_INICIO_NOCHE_ESTIMADA ? 'diurna' : 'nocturna';
   }, [slots]);
+
+  const serviciosAdicionalesValidos = useMemo(
+    () =>
+      serviciosAdicionales.filter((v) => {
+        if (!v.servicio_sireb_id) return false;
+        const t = v.tarifas;
+        if (t.length === 0) return false;
+        if (t.length === 1) return true;
+        // P8.4B: servicios con tramo (escenario) son válidos si tienen
+        // diurna o nocturna; el precio exacto se resuelve con la franja.
+        return t.some(
+          (x) =>
+            x.clasificacion === 'unica' ||
+            x.clasificacion === 'diurna' ||
+            x.clasificacion === 'nocturna',
+        );
+      }),
+    [serviciosAdicionales],
+  );
+
+  const totalServicios = useMemo(() => {
+    return Object.entries(serviciosSeleccionados).reduce((acc, [id, cantidad]) => {
+      const variante = serviciosAdicionalesValidos.find((v) => v.id === id);
+      if (!variante) return acc;
+      const tarifa = resolverTarifaServicio(variante, clasificacionAplicable);
+      if (!tarifa) return acc;
+      return acc + Number(tarifa.monto) * Math.max(1, Number(cantidad) || 1);
+    }, 0);
+  }, [serviciosSeleccionados, serviciosAdicionalesValidos, clasificacionAplicable]);
 
   const subtotalFranja = useMemo(() => {
     if (!varianteSeleccionada || slots.length === 0) return 0;
@@ -767,9 +803,10 @@ export default function DialogCrearReservaVentanilla({
                     {serviciosAdicionalesValidos.map((v) => {
                       const cantidad = serviciosSeleccionados[v.id] ?? 0;
                       const seleccionado = cantidad > 0;
-                      const tarifa = v.tarifas[0];
+                      const tarifa = resolverTarifaServicio(v, clasificacionAplicable);
                       if (!tarifa) return null;
                       const codigo = v.servicio_sireb_codigo ?? v.codigo;
+                      const esTramo = v.tarifas.length > 1;
 
                       return (
                         <div
@@ -799,9 +836,23 @@ export default function DialogCrearReservaVentanilla({
                           </div>
 
                           <div className="flex shrink-0 items-center gap-3">
-                            <span className="w-24 text-right text-sm font-semibold tabular-nums">
-                              Bs {Number(tarifa.monto).toFixed(2)}
-                            </span>
+                            <div className="w-28 text-right">
+                              <span className="block text-sm font-semibold tabular-nums">
+                                Bs {Number(tarifa.monto).toFixed(2)}
+                              </span>
+                              {esTramo && (
+                                <span className="block text-[10px] leading-tight text-muted-foreground">
+                                  Diurno Bs{' '}
+                                  {Number(
+                                    v.tarifas.find((t) => t.clasificacion === 'diurna')?.monto ?? 0,
+                                  ).toFixed(2)}{' '}
+                                  · Nocturno Bs{' '}
+                                  {Number(
+                                    v.tarifas.find((t) => t.clasificacion === 'nocturna')?.monto ?? 0,
+                                  ).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
                             {seleccionado && (
                               <StepperCantidad
                                 valor={cantidad}

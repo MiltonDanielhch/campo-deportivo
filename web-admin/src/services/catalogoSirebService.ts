@@ -88,6 +88,20 @@ export const catalogoSirebService = {
   },
 
   /**
+   * Lista los servicios adicionales de un campo físico.
+   *
+   * P8.3C: limpieza, energía, etc.
+   * No son franjas horarias y no ocupan disponibilidad física.
+   */
+  async listarServiciosAdicionalesPorCampo(campoId: string): Promise<VarianteArancelaria[]> {
+    const { data } = await apiClient.get<{ data: VarianteArancelaria[] }>(
+      `/v1/admin/campos/${campoId}/servicios-adicionales`,
+    );
+
+    return data.data ?? [];
+  },
+
+  /**
    * Vincula un campo local a un servicio SIREB.
    */
   async vincularCampo(
