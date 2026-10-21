@@ -13,6 +13,7 @@ use App\Models\SolicitudReservaServicio;
 use App\Models\TarifaCampo;
 use App\Models\TipoCampo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 use Mockery;
@@ -26,7 +27,12 @@ class SolicitudReservaVentanillaServicioAdicionalTest extends TestCase
     private const SVC_LIMPIEZA = '01a141f8-689a-707e-8b90-050c79331f47';
 
     private const TARIFA_MUNI_DIURNA = '01a141fb-78f8-7214-9822-691551a2d5c9';
+    private const TARIFA_MUNI_NOCTURNA = '01a141fb-b066-721c-b0a1-6b9800f2ec3c';
     private const TARIFA_LIMPIEZA = '01a141f9-70f6-716a-a436-035b7121ee48';
+
+    private const SVC_ESCENARIO = '01a141ff-2cca-73fe-9c56-feb77c30feb0';
+    private const TARIFA_ESCENARIO_DIURNA = '01a141ff-7726-71bb-ba3a-2de705099a01';
+    private const TARIFA_ESCENARIO_NOCTURNA = '01a141ff-7726-71bb-ba3a-2de705099a02';
 
     private const CLIENTE_SIREB = '01a141f9-70f6-716a-a436-035b7121ee99';
     private const LIQUIDACION_SIREB = '01a141f9-70f6-716a-a436-035b7121ee88';
@@ -38,6 +44,8 @@ class SolicitudReservaVentanillaServicioAdicionalTest extends TestCase
     private ArancelVariante $muni;
 
     private ArancelVariante $limpieza;
+
+    private ArancelVariante $escenario;
 
     protected function setUp(): void
     {
@@ -111,6 +119,20 @@ class SolicitudReservaVentanillaServicioAdicionalTest extends TestCase
             'orden' => 30,
         ]);
 
+        $this->escenario = ArancelVariante::create([
+            'campo_id' => $this->campo->id,
+            'codigo' => 'ESCENARIO',
+            'nombre' => 'Escenario',
+            'tipo_uso' => 'servicio_adicional',
+            'servicio_sireb_id' => self::SVC_ESCENARIO,
+            'servicio_sireb_codigo' => 'SEDEDE-CV-EVENTO-NO-ESCENARIO',
+            'unidad_medida' => 'servicio',
+            'visible_publico' => false,
+            'activo' => true,
+            'orden' => 40,
+        ]);
+
+        // MUNI diurna (30.00): necesaria para el test 1 (franja 14:00).
         TarifaCampo::create([
             'campo_id' => $this->campo->id,
             'servicio_sireb_id' => self::SVC_MUNI,
@@ -128,6 +150,25 @@ class SolicitudReservaVentanillaServicioAdicionalTest extends TestCase
             'creado_por' => null,
         ]);
 
+        // MUNI nocturna (50.00): necesaria para el test 3 (franja 19:00).
+        TarifaCampo::create([
+            'campo_id' => $this->campo->id,
+            'servicio_sireb_id' => self::SVC_MUNI,
+            'tarifa_sireb_id' => self::TARIFA_MUNI_NOCTURNA,
+            'etiqueta_sireb' => 'Nocturno',
+            'liquidable' => true,
+            'tarifario_estado' => 'vigente',
+            'estado_tarifa_sireb' => 'activo',
+            'categorias_sireb' => [],
+            'perfil' => null,
+            'clasificacion' => 'nocturna',
+            'precio_por_hora' => 50.00,
+            'vigente_desde' => now(),
+            'vigente_hasta' => null,
+            'creado_por' => null,
+        ]);
+
+        // Limpieza única (15.00).
         TarifaCampo::create([
             'campo_id' => $this->campo->id,
             'servicio_sireb_id' => self::SVC_LIMPIEZA,
@@ -144,6 +185,41 @@ class SolicitudReservaVentanillaServicioAdicionalTest extends TestCase
             'vigente_hasta' => null,
             'creado_por' => null,
         ]);
+
+        // Escenario diurna (100.00) y nocturna (150.00): servicio con tramo.
+        TarifaCampo::create([
+            'campo_id' => $this->campo->id,
+            'servicio_sireb_id' => self::SVC_ESCENARIO,
+            'tarifa_sireb_id' => self::TARIFA_ESCENARIO_DIURNA,
+            'etiqueta_sireb' => 'Diurno',
+            'liquidable' => true,
+            'tarifario_estado' => 'vigente',
+            'estado_tarifa_sireb' => 'activo',
+            'categorias_sireb' => [],
+            'perfil' => null,
+            'clasificacion' => 'diurna',
+            'precio_por_hora' => 100.00,
+            'vigente_desde' => now(),
+            'vigente_hasta' => null,
+            'creado_por' => null,
+        ]);
+
+        TarifaCampo::create([
+            'campo_id' => $this->campo->id,
+            'servicio_sireb_id' => self::SVC_ESCENARIO,
+            'tarifa_sireb_id' => self::TARIFA_ESCENARIO_NOCTURNA,
+            'etiqueta_sireb' => 'Nocturno',
+            'liquidable' => true,
+            'tarifario_estado' => 'vigente',
+            'estado_tarifa_sireb' => 'activo',
+            'categorias_sireb' => [],
+            'perfil' => null,
+            'clasificacion' => 'nocturna',
+            'precio_por_hora' => 150.00,
+            'vigente_desde' => now(),
+            'vigente_hasta' => null,
+            'creado_por' => null,
+        ]);
     }
 
     protected function tearDown(): void
@@ -156,6 +232,7 @@ class SolicitudReservaVentanillaServicioAdicionalTest extends TestCase
     public function test_admin_crea_reserva_con_servicio_adicional_y_sireb_recibe_ambos_items(): void
     {
         Queue::fake();
+        Http::fake();
         Sanctum::actingAs($this->admin);
 
         $itemsCapturados = null;
@@ -186,6 +263,9 @@ class SolicitudReservaVentanillaServicioAdicionalTest extends TestCase
             RecaudacionesApiClientInterface::class,
             $client
         );
+
+        $this->app->forgetInstance(\App\Services\Sireb\SirebLiquidacionService::class);
+        $this->app->forgetInstance(\App\Services\SolicitudReservaService::class);
 
         $fecha = now()->addDay()->toDateString();
 
@@ -274,6 +354,7 @@ class SolicitudReservaVentanillaServicioAdicionalTest extends TestCase
     public function test_no_se_puede_agregar_como_servicio_una_variante_horaria(): void
     {
         Queue::fake();
+        Http::fake();
         Sanctum::actingAs($this->admin);
 
         $fecha = now()->addDay()->toDateString();
@@ -306,5 +387,81 @@ class SolicitudReservaVentanillaServicioAdicionalTest extends TestCase
             'no puede agregarse como servicio adicional porque es una variante horaria',
             (string) $response->json('errors.servicios.0')
         );
+    }
+
+    public function test_servicio_con_tramo_se_cobra_por_la_hora_de_la_franja(): void
+    {
+        Queue::fake();
+        Http::fake();
+        Sanctum::actingAs($this->admin);
+
+        $itemsCapturados = null;
+
+        $client = Mockery::mock(RecaudacionesApiClientInterface::class);
+
+        $client->shouldReceive('buscarCliente')->once()->andReturn(['id' => self::CLIENTE_SIREB]);
+
+        $client->shouldReceive('crearLiquidacion')
+            ->once()
+            ->andReturnUsing(function (...$args) use (&$itemsCapturados) {
+                $itemsCapturados = $args[0] ?? [];
+
+                return [
+                    'id' => self::LIQUIDACION_SIREB,
+                    'codigo_publico' => 'SIM-TEST-TRAMO',
+                    'monto' => '200.00', // 50 MUNI nocturna + 150 escenario nocturna
+                    'fecha_vencimiento' => now()->addDays(3)->toDateString(),
+                    'items' => $itemsCapturados,
+                ];
+            });
+
+        $this->app->instance(RecaudacionesApiClientInterface::class, $client);
+
+        $this->app->forgetInstance(\App\Services\Sireb\SirebLiquidacionService::class);
+        $this->app->forgetInstance(\App\Services\SolicitudReservaService::class);
+
+        $fecha = now()->addDay()->toDateString();
+
+        $response = $this->postJson('/api/v1/admin/solicitudes-reserva', [
+            'nombre_pagador' => 'Vecino Tramo',
+            'ci_nit_pagador' => '9876543',
+            'telefono_pagador' => '70000001',
+            'franjas' => [
+                [
+                    'campo_id' => $this->campo->id,
+                    'variante_id' => $this->muni->id,
+                    'fecha' => $fecha,
+                    'hora_inicio' => '19:00:00',
+                    'hora_fin' => '20:00:00',
+                ],
+            ],
+            'servicios' => [
+                [
+                    'campo_id' => $this->campo->id,
+                    'variante_id' => $this->escenario->id,
+                    'cantidad' => 1,
+                ],
+            ],
+        ]);
+
+        $response->assertStatus(201);
+
+        // La franja nocturna (19:00 >= 18:00) debe arrastrar la tarifa
+        // NOCTURNA del escenario, no la diurna.
+        $this->assertSame(
+            [
+                ['tarifa_id' => self::TARIFA_MUNI_NOCTURNA, 'cantidad' => 1],
+                ['tarifa_id' => self::TARIFA_ESCENARIO_NOCTURNA, 'cantidad' => 1],
+            ],
+            $itemsCapturados,
+            'El escenario debe resolverse por el tramo de la franja (nocturno).',
+        );
+
+        $solicitud = SolicitudReserva::where('nombre_pagador', 'Vecino Tramo')->firstOrFail();
+        $servicio = SolicitudReservaServicio::where('solicitud_reserva_id', $solicitud->id)->firstOrFail();
+
+        $this->assertSame(self::TARIFA_ESCENARIO_NOCTURNA, $servicio->tarifa_sireb_id);
+        $this->assertSame(150.00, (float) $servicio->precio_unitario);
+        $this->assertSame(150.00, (float) $servicio->subtotal);
     }
 }

@@ -98,8 +98,25 @@ class SolicitudReservaService
         // ── P8.2B: resolver variante/tarifa/cantidad ANTES de persistir ──
         $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin);
 
-        // ── P8.3B: resolver servicios adicionales ANTES de persistir ──
-        $serviciosResueltos = $this->resolverServiciosParaCrear($datos->servicios, $campos, $esAdmin);
+        // ── P8.4B: hora de inicio más temprana por campo, para resolver
+        // servicios con tarifa diurna/nocturna (ej. escenario) según cuándo
+        // se usa el espacio. ──
+        $horasPorCampo = [];
+        foreach ($franjasResueltas as $r) {
+            $cid = $r['franja']->campoId;
+            $seg = self::aSegundos($r['franja']->horaInicio);
+            if (! isset($horasPorCampo[$cid]) || $seg < $horasPorCampo[$cid]) {
+                $horasPorCampo[$cid] = $seg;
+            }
+        }
+
+        // ── P8.3B / P8.4B: resolver servicios adicionales ANTES de persistir ──
+        $serviciosResueltos = $this->resolverServiciosParaCrear(
+            $datos->servicios,
+            $campos,
+            $esAdmin,
+            $horasPorCampo,
+        );
 
         $montoTotal = round(
             collect($franjasResueltas)->sum('subtotal')
@@ -663,8 +680,12 @@ class SolicitudReservaService
      * @param  ServicioAdicionalDTO[]  $servicios
      * @return array<int, array<string, mixed>>
      */
-    private function resolverServiciosParaCrear(array $servicios, array $campos, bool $esAdmin): array
-    {
+    private function resolverServiciosParaCrear(
+        array $servicios,
+        array $campos,
+        bool $esAdmin,
+        array $horasPorCampo = [],
+    ): array {
         $resueltos = [];
 
         foreach ($servicios as $servicio) {
@@ -723,9 +744,26 @@ class SolicitudReservaService
             } elseif ($tarifas->count() === 1) {
                 $tarifa = $tarifas->first();
             } else {
-                throw ValidationException::withMessages([
-                    'servicios' => "El servicio {$variante->nombre} tiene varias tarifas vigentes y no se puede resolver automáticamente.",
-                ]);
+                // P8.4B: servicios con tarifa diurna/nocturna (ej. escenario)
+                // se resuelven por la hora de la franja del mismo campo, igual
+                // que una franja horaria. Sin franja asociada no se puede
+                // adivinar el tramo: error ruidoso, no silencio.
+                $horaSeg = $horasPorCampo[$servicio->campoId] ?? null;
+
+                if ($horaSeg === null) {
+                    throw ValidationException::withMessages([
+                        'servicios' => "El servicio {$variante->nombre} se cobra por tramo (diurno/nocturno) y no hay franja horaria en el mismo campo para resolverlo.",
+                    ]);
+                }
+
+                $tipo = $horaSeg < $campoInfo['inicio_noche'] ? 'diurna' : 'nocturna';
+                $tarifa = $tarifas->firstWhere('clasificacion', $tipo);
+
+                if (! $tarifa) {
+                    throw ValidationException::withMessages([
+                        'servicios' => "No hay tarifa {$tipo} vigente espejada para el servicio {$variante->nombre}.",
+                    ]);
+                }
             }
 
             if (blank($tarifa->tarifa_sireb_id)) {
