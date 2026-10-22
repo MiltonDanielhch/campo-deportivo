@@ -169,7 +169,7 @@ export default function VincularSirebDialog({
             <ul className="space-y-2">
               {filtrados.map((item) => {
                 const ocupado =
-                  item.campo_local !== null && item.campo_local.id !== campo?.id;
+                  item.campo_local != null && item.campo_local.id !== campo?.id;
                 const seleccionado = seleccionId === item.sireb.id;
 
                 return (

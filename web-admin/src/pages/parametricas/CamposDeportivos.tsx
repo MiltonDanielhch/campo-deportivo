@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -78,6 +78,46 @@ const PERMITIR_ALTA_LIBRE_DE_CAMPO = false;
 
 const TODOS = 'todos';
 
+const CATEGORIA_LABEL: Record<string, string> = {
+  alquiler_base: 'Alquiler base',
+  servicio_adicional: 'Servicio adicional',
+  arriendo_periodico: 'Arriendo periódico',
+  hospedaje: 'Hospedaje',
+  piscina: 'Piscina',
+  servicio_especial: 'Servicio especial',
+  evento_especial: 'Evento especial',
+  no_clasificado: 'No clasificado',
+};
+
+const CATEGORIA_BADGE_CLASS: Record<string, string> = {
+  alquiler_base:
+    'border-emerald-200 bg-emerald-500/10 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400',
+  servicio_adicional:
+    'border-sky-200 bg-sky-500/10 text-sky-700 dark:border-sky-500/30 dark:text-sky-400',
+  arriendo_periodico:
+    'border-violet-200 bg-violet-500/10 text-violet-700 dark:border-violet-500/30 dark:text-violet-400',
+  hospedaje:
+    'border-amber-200 bg-amber-500/10 text-amber-700 dark:border-amber-500/30 dark:text-amber-400',
+  piscina:
+    'border-cyan-200 bg-cyan-500/10 text-cyan-700 dark:border-cyan-500/30 dark:text-cyan-400',
+  servicio_especial:
+    'border-orange-200 bg-orange-500/10 text-orange-700 dark:border-orange-500/30 dark:text-orange-400',
+  evento_especial:
+    'border-fuchsia-200 bg-fuchsia-500/10 text-fuchsia-700 dark:border-fuchsia-500/30 dark:text-fuchsia-400',
+  no_clasificado:
+    'border-slate-200 bg-slate-500/10 text-slate-700 dark:border-slate-500/30 dark:text-slate-400',
+};
+
+const ACCION_LABEL: Record<string, string> = {
+  crear_campo_simple: 'Crear campo simple',
+  agregar_como_variante: 'Agregar variante',
+  modulo_piscina: 'Módulo piscina',
+  desvincular_directo: 'Desvincular',
+  gestionar_variante: 'Gestionar variante',
+  fuera_de_alcance: 'Fuera de alcance',
+  revisar_clasificacion: 'Revisar',
+};
+
 const ESTADO_CONFIG: Record<
   EstadoCampo,
   {
@@ -118,6 +158,7 @@ export default function CamposDeportivos() {
   const [cargando, setCargando] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState<string>(TODOS);
   const [busqueda, setBusqueda] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState<string>(TODOS);
   const [pagina, setPagina] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState(1);
 
@@ -226,14 +267,44 @@ export default function CamposDeportivos() {
     };
   }, []);
 
-  const nombreServicioSireb = (campo: CampoDeportivo): string | null =>
-    catalogoSireb.find((i) => i.sireb.id === campo.servicio_sireb_id)?.sireb.nombre ??
-    null;
 
   const cambiarFiltro = (valor: string) => {
     setFiltroEstado(valor);
     setPagina(1);
   };
+
+  const vinculacionPorCampo = useMemo(() => {
+  const map = new Map<
+    string,
+    {
+      directo?: CatalogoSirebItem;
+      variantes: CatalogoSirebItem[];
+    }
+  >();
+
+  for (const item of catalogoSireb) {
+    const campoId = item.campo_local?.id;
+    if (!campoId) continue;
+
+    const entry = map.get(campoId) ?? { variantes: [] };
+
+    const campo = campos.find((c) => c.id === campoId);
+
+    const esDirecto =
+      item.tipo_vinculacion === 'directo' ||
+      (!!campo && campo.servicio_sireb_id === item.sireb.id);
+
+    if (esDirecto) {
+      entry.directo = item;
+    } else {
+      entry.variantes.push(item);
+    }
+
+    map.set(campoId, entry);
+  }
+
+  return map;
+}, [catalogoSireb, campos]);
 
   const abrirNuevo = () => {
     setModo('crear');
@@ -325,14 +396,27 @@ export default function CamposDeportivos() {
   };
 
   const statsSireb = {
-    total: catalogoSireb.length,
-    vinculados: catalogoSireb.filter((i) => i.vinculacion === 'vinculado').length,
-    sinCampoLocal: catalogoSireb.filter((i) => i.vinculacion === 'sin_vincular').length,
-  };
+      total: catalogoSireb.length,
+      vinculados: catalogoSireb.filter((i) => i.vinculacion === 'vinculado').length,
+      directos: catalogoSireb.filter((i) => i.tipo_vinculacion === 'directo').length,
+      porVariantes: catalogoSireb.filter((i) => i.tipo_vinculacion === 'variante').length,
+      sinCampoLocal: catalogoSireb.filter((i) => i.vinculacion === 'sin_vincular').length,
+    };
+
+    const categoriasDisponibles = useMemo(
+    () => Array.from(new Set(catalogoSireb.map((i) => i.clasificacion))).sort(),
+    [catalogoSireb],
+  );
 
   const catalogoSirebFiltrado = catalogoSireb.filter((i) => {
+    if (filtroCategoria !== TODOS && i.clasificacion !== filtroCategoria) {
+      return false;
+    }
+
     if (!busqueda.trim()) return true;
+
     const q = busqueda.toLowerCase();
+
     return (
       i.sireb.codigo.toLowerCase().includes(q) ||
       i.sireb.nombre.toLowerCase().includes(q) ||
@@ -470,6 +554,25 @@ export default function CamposDeportivos() {
             </Select>
           </div>
         )}
+
+        {vistaSireb && (
+          <div className="flex items-center gap-2">
+            <Filter className="size-4 text-muted-foreground" />
+            <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="Clasificación" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS}>Todas las clasificaciones</SelectItem>
+                {categoriasDisponibles.map((categoria) => (
+                  <SelectItem key={categoria} value={categoria}>
+                    {CATEGORIA_LABEL[categoria] ?? categoria}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {vistaSireb && (
           <Button
             variant="outline"
@@ -487,139 +590,200 @@ export default function CamposDeportivos() {
       {vistaSireb && (
         <div className="rounded-xl border bg-card overflow-hidden">
           <div className="overflow-x-auto">
-            <Table className="table-fixed w-full">
-              <TableHeader>
-                <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className="w-[150px]">Código</TableHead>
-                  <TableHead className="w-[250px]">Servicio SIREB</TableHead>
-                  <TableHead className="hidden lg:table-cell w-[120px]">Rubro</TableHead>
-                  <TableHead className="w-[150px]">Precio</TableHead>
-                  <TableHead className="w-[300px]">Campo local</TableHead>
-                  <TableHead className="w-[120px]">Estado</TableHead>
-                  <TableHead className="w-[140px] text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cargandoSireb ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                      Consultando el catálogo de SIREB…
-                    </TableCell>
-                  </TableRow>
-                ) : errorSireb ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center">
-                      <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                        <AlertTriangle className="size-8 text-amber-500" />
-                        <p className="font-medium">{errorSireb}</p>
-                        <Button variant="outline" size="sm" onClick={cargarCatalogoSireb}>
-                          Reintentar
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : catalogoSirebFiltrado.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                      {catalogoSireb.length === 0
-                        ? 'SIREB no devolvió servicios liquidables.'
-                        : 'Ningún servicio coincide con la búsqueda.'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  catalogoSirebFiltrado.map((item) => (
-                    <TableRow key={item.sireb.id} className="hover:bg-muted/20 transition-colors">
-                      <TableCell className="font-mono text-xs font-semibold truncate" title={item.sireb.codigo}>
-                        {item.sireb.codigo}
-                      </TableCell>
+<Table className="w-full min-w-[1020px] table-fixed">
+  <TableHeader>
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableHead className="w-[25%]">Servicio SIREB</TableHead>
+      <TableHead className="hidden lg:table-cell w-[14%]">Clasificación</TableHead>
+      <TableHead className="w-[12%]">Precio</TableHead>
+      <TableHead className="w-[22%]">Campo local</TableHead>
+      <TableHead className="w-[12%]">Vinculación</TableHead>
+      <TableHead className="w-[190px] text-right">Acciones</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    {cargandoSireb ? (
+      <TableRow>
+        <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+          Consultando el catálogo de SIREB…
+        </TableCell>
+      </TableRow>
+    ) : errorSireb ? (
+      <TableRow>
+        <TableCell colSpan={6} className="h-32 text-center">
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <AlertTriangle className="size-8 text-amber-500" />
+            <p className="font-medium">{errorSireb}</p>
+            <Button variant="outline" size="sm" onClick={cargarCatalogoSireb}>
+              Reintentar
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+    ) : catalogoSirebFiltrado.length === 0 ? (
+      <TableRow>
+        <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+          {catalogoSireb.length === 0
+            ? 'SIREB no devolvió servicios liquidables.'
+            : 'Ningún servicio coincide con la búsqueda.'}
+        </TableCell>
+      </TableRow>
+    ) : (
+      catalogoSirebFiltrado.map((item) => (
+        <TableRow key={item.sireb.id} className="hover:bg-muted/20 transition-colors">
+          {/* Servicio SIREB: nombre + código como subtítulo (absorbe la columna Código) */}
+           <TableCell className="overflow-hidden">
+            <p className="truncate font-semibold" title={item.sireb.nombre}>
+              {item.sireb.nombre}
+            </p>
+            <p
+              className="truncate font-mono text-[11px] text-muted-foreground"
+              title={item.sireb.codigo}
+            >
+              {item.sireb.codigo}
+            </p>
+          </TableCell>
 
-                      <TableCell>
-                        <p className="truncate font-semibold" title={item.sireb.nombre}>
-                          {item.sireb.nombre}
-                        </p>
-                      </TableCell>
+          <TableCell className="hidden lg:table-cell overflow-hidden">
+            <div className="space-y-1">
+              <Badge
+                variant="outline"
+                className={`gap-1.5 px-2 py-0.5 text-xs ${
+                  CATEGORIA_BADGE_CLASS[item.clasificacion] ??
+                  'border-slate-200 bg-slate-500/10 text-slate-700 dark:border-slate-500/30 dark:text-slate-400'
+                }`}
+              >
+                {CATEGORIA_LABEL[item.clasificacion] ?? item.clasificacion}
+              </Badge>
+              {item.sireb.unidad_medida && (
+                <p className="text-xs text-muted-foreground capitalize">
+                  {item.sireb.unidad_medida}
+                </p>
+              )}
+            </div>
+          </TableCell>
 
-                      <TableCell className="hidden lg:table-cell">
-                        <p className="truncate text-sm text-muted-foreground">
-                          {item.sireb.tarifario ?? 'liquidable'}
-                        </p>
-                      </TableCell>
+          <TableCell className="text-sm whitespace-nowrap overflow-hidden">
+            {item.sireb.precio_min != null && item.sireb.precio_max != null
+              ? item.sireb.precio_min === item.sireb.precio_max
+                ? `Bs. ${item.sireb.precio_min.toFixed(2)}`
+                : `Bs. ${item.sireb.precio_min.toFixed(2)} – ${item.sireb.precio_max.toFixed(2)}`
+              : '—'}
+          </TableCell>
 
-                      <TableCell className="text-sm whitespace-nowrap">
-                        {item.sireb.precio_min != null && item.sireb.precio_max != null
-                          ? item.sireb.precio_min === item.sireb.precio_max
-                            ? `Bs. ${item.sireb.precio_min.toFixed(2)}`
-                            : `Bs. ${item.sireb.precio_min.toFixed(2)} – ${item.sireb.precio_max.toFixed(2)}`
-                          : '—'}
-                      </TableCell>
-
-                      <TableCell>
-                        {item.campo_local ? (
-                          <div className="flex flex-col">
-                            <span className="truncate font-medium" title={item.campo_local.nombre}>
-                              {item.campo_local.nombre}
-                            </span>
-                            {item.campo_local.codigo && (
-                              <span className="truncate font-mono text-xs text-muted-foreground" title={item.campo_local.codigo}>
-                                {item.campo_local.codigo}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-amber-600 dark:text-amber-400 whitespace-nowrap">
-                            Sin campo local
-                          </span>
-                        )}
-                      </TableCell>
-
-                      <TableCell>
-                        {item.vinculacion === 'vinculado' ? (
-                          <Badge
-                            variant="default"
-                            className="gap-1.5 border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400"
-                          >
-                            <BadgeCheck className="size-3" />
-                            <span className="text-xs">Vinculado</span>
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="secondary"
-                            className="gap-1.5 border-amber-200 bg-amber-500/10 px-2.5 py-1 text-amber-700 dark:border-amber-500/30 dark:text-amber-400"
-                          >
-                            <span className="text-xs">Sin vincular</span>
-                          </Badge>
-                        )}
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        {item.campo_local ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const campo = campos.find((c) => c.id === item.campo_local?.id);
-                              if (campo) desvincular(campo);
-                            }}
-                          >
-                            <Unlink className="mr-2 size-4" />
-                            Desvincular
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => abrirNuevoDesdeSireb(item)}
-                          >
-                            <Plus className="mr-2 size-4" />
-                            Crear campo
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
+          <TableCell className="overflow-hidden">
+            {item.campo_local ? (
+              <div className="flex flex-col">
+                <span className="truncate font-medium" title={item.campo_local.nombre}>
+                  {item.campo_local.nombre}
+                </span>
+                {item.campo_local.codigo && (
+                  <span
+                    className="truncate font-mono text-xs text-muted-foreground"
+                    title={item.campo_local.codigo}
+                  >
+                    {item.campo_local.codigo}
+                  </span>
                 )}
-              </TableBody>
-            </Table>
+              </div>
+            ) : (
+              <span className="text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                Sin campo local
+              </span>
+            )}
+          </TableCell>
+
+           <TableCell className="overflow-hidden">
+            {item.vinculacion === 'vinculado' ? (
+              <div className="space-y-1">
+                <Badge
+                  variant="default"
+                  className="gap-1.5 border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400"
+                >
+                  <BadgeCheck className="size-3" />
+                  <span className="text-xs">
+                    {item.tipo_vinculacion === 'variante' ? 'Vía variante' : 'Directo'}
+                  </span>
+                </Badge>
+                {item.tipo_vinculacion === 'variante' && item.campo_local?.variante_nombre && (
+                  <p
+                    className="max-w-[12rem] truncate text-xs text-muted-foreground"
+                    title={item.campo_local.variante_nombre}
+                  >
+                    {item.campo_local.variante_nombre}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <Badge
+                variant="secondary"
+                className="gap-1.5 border-amber-200 bg-amber-500/10 px-2.5 py-1 text-amber-700 dark:border-amber-500/30 dark:text-amber-400"
+              >
+                <span className="text-xs">Sin vincular</span>
+              </Badge>
+            )}
+          </TableCell>
+
+          <TableCell className="overflow-hidden text-right">
+            {(() => {
+              const campoLocal = item.campo_local
+                ? campos.find((c) => c.id === item.campo_local?.id)
+                : null;
+              const label = ACCION_LABEL[item.accion_recomendada] ?? 'Revisar';
+              // icono-only <xl (con title), icono+texto xl+ → sin truncado "Crear campo si…"
+              const btn = (
+                contenido: React.ReactNode,
+                variant: 'outline' | 'ghost' | 'secondary',
+                disabled = false,
+                onClick?: () => void,
+                extraCls = '',
+              ) => (
+                <Button
+                  variant={variant}
+                  size="sm"
+                  disabled={disabled}
+                  onClick={onClick}
+                  title={label}
+                  className={`xl:px-3 px-2 max-w-full ${extraCls}`}
+                >
+                  {contenido}
+                  <span className="hidden xl:inline ml-2 truncate">{label}</span>
+                </Button>
+              );
+
+              switch (item.accion_recomendada) {
+                case 'crear_campo_simple':
+                  return btn(<Plus className="size-4" />, 'outline', false, () => abrirNuevoDesdeSireb(item));
+                case 'agregar_como_variante':
+                  return btn(<Link2 className="size-4" />, 'outline', true);
+                case 'modulo_piscina':
+                  return campoLocal
+                    ? btn(
+                        <Clock className="size-4" />,
+                        'ghost',
+                        false,
+                        () => navigate(`/panel/parametricas/campos/${campoLocal.id}/piscina/turnos`),
+                      )
+                    : <Badge variant="secondary" className="text-xs">{label}</Badge>;
+                case 'desvincular_directo':
+                  return campoLocal
+                    ? btn(<Unlink className="size-4" />, 'ghost', false, () => desvincular(campoLocal))
+                    : btn(<Unlink className="size-4" />, 'ghost', true);
+                case 'gestionar_variante':
+                  return btn(<Unlink className="size-4" />, 'ghost', true);
+                case 'fuera_de_alcance':
+                  return <Badge variant="secondary" className="text-xs">{label}</Badge>;
+                case 'revisar_clasificacion':
+                default:
+                  return btn(<AlertTriangle className="size-4" />, 'ghost', true);
+              }
+            })()}
+          </TableCell>
+        </TableRow>
+      ))
+    )}
+  </TableBody>
+</Table>
           </div>
         </div>
       )}
@@ -690,31 +854,89 @@ export default function CamposDeportivos() {
                       {campo.direccion}
                     </TableCell>
                     <TableCell>
-                      {campo.servicio_sireb_id ? (
-                        <div className="space-y-1">
-                          <Badge
-                            variant="default"
-                            className="gap-1.5 border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400"
-                          >
-                            <BadgeCheck className="size-3" />
-                            <span className="text-xs">
-                              {campo.servicio_sireb_codigo ?? 'Vinculado'}
-                            </span>
-                          </Badge>
-                          {nombreServicioSireb(campo) && (
-                            <p className="max-w-[10rem] truncate text-xs text-muted-foreground">
-                              {nombreServicioSireb(campo)}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <Badge
-                          variant="secondary"
-                          className="gap-1.5 border-slate-200 bg-slate-500/10 px-2.5 py-1 text-slate-700 dark:border-slate-500/30 dark:text-slate-400"
-                        >
-                          <span className="text-xs">Sin vincular</span>
-                        </Badge>
-                      )}
+                      {(() => {
+                        const info = vinculacionPorCampo.get(campo.id);
+                        const tieneCatalogo = catalogoSireb.length > 0;
+
+                        // Fallback si el catálogo SIREB no cargó: comportamiento viejo.
+                        if (!tieneCatalogo) {
+                          return campo.servicio_sireb_id ? (
+                            <div className="space-y-1">
+                              <Badge
+                                variant="default"
+                                className="gap-1.5 border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400"
+                              >
+                                <BadgeCheck className="size-3" />
+                                <span className="text-xs">
+                                  {campo.servicio_sireb_codigo ?? 'Vinculado'}
+                                </span>
+                              </Badge>
+                            </div>
+                          ) : (
+                            <Badge
+                              variant="secondary"
+                              className="gap-1.5 border-slate-200 bg-slate-500/10 px-2.5 py-1 text-slate-700 dark:border-slate-500/30 dark:text-slate-400"
+                            >
+                              <span className="text-xs">Sin vincular</span>
+                            </Badge>
+                          );
+                        }
+
+                        const directo = info?.directo;
+                        const variantes = info?.variantes ?? [];
+
+                        if (!directo && variantes.length === 0) {
+                          return (
+                            <Badge
+                              variant="secondary"
+                              className="gap-1.5 border-slate-200 bg-slate-500/10 px-2.5 py-1 text-slate-700 dark:border-slate-500/30 dark:text-slate-400"
+                            >
+                              <span className="text-xs">Sin vincular</span>
+                            </Badge>
+                          );
+                        }
+
+                        return (
+                          <div className="space-y-1">
+                            {directo && (
+                              <Badge
+                                variant="default"
+                                className="gap-1.5 border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400"
+                              >
+                                <BadgeCheck className="size-3" />
+                                <span className="text-xs">
+                                  {directo.sireb.codigo}
+                                </span>
+                              </Badge>
+                            )}
+
+                            {variantes.length > 0 && (
+                              <Badge
+                                variant="secondary"
+                                className="gap-1.5 border-sky-200 bg-sky-500/10 px-2.5 py-1 text-sky-700 dark:border-sky-500/30 dark:text-sky-400"
+                              >
+                                <Database className="size-3" />
+                                <span className="text-xs">
+                                  Variantes ({variantes.length})
+                                </span>
+                              </Badge>
+                            )}
+
+                            {variantes.length > 0 && (
+                              <p
+                                className="max-w-[12rem] truncate text-xs text-muted-foreground"
+                                title={variantes.map((v) => v.sireb.codigo).join(', ')}
+                              >
+                                {variantes
+                                  .slice(0, 2)
+                                  .map((v) => v.sireb.codigo)
+                                  .join(', ')}
+                                {variantes.length > 2 ? ` +${variantes.length - 2}` : ''}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -756,23 +978,42 @@ export default function CamposDeportivos() {
                               Gestionar turnos piscina
                             </DropdownMenuItem>
                           )}
-                          {campo.servicio_sireb_id ? (
+                          {(() => {
+                          const info = vinculacionPorCampo.get(campo.id);
+                          const tieneCatalogo = catalogoSireb.length > 0;
+                          const directo = info?.directo;
+                          const variantes = info?.variantes ?? [];
+
+                          const puedeDesvincularDirecto =
+                            tieneCatalogo
+                              ? Boolean(directo)
+                              : Boolean(campo.servicio_sireb_id);
+
+                          return (
                             <>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => desvincular(campo)}>
-                                <Unlink className="mr-2 size-4" />
-                                Desvincular de SIREB
-                              </DropdownMenuItem>
+
+                              {puedeDesvincularDirecto ? (
+                                <DropdownMenuItem onClick={() => desvincular(campo)}>
+                                  <Unlink className="mr-2 size-4" />
+                                  Desvincular servicio directo
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onClick={() => abrirVincular(campo)}>
+                                  <Link2 className="mr-2 size-4" />
+                                  Vincular servicio directo
+                                </DropdownMenuItem>
+                              )}
+
+                              {tieneCatalogo && variantes.length > 0 && (
+                                <DropdownMenuItem disabled>
+                                  <Database className="mr-2 size-4" />
+                                  Gestionar variantes ({variantes.length})
+                                </DropdownMenuItem>
+                              )}
                             </>
-                          ) : (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => abrirVincular(campo)}>
-                                <Link2 className="mr-2 size-4" />
-                                Vincular a SIREB
-                              </DropdownMenuItem>
-                            </>
-                          )}
+                          );
+                        })()}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => abrirCambioEstado(campo)}>
                             <Power className="mr-2 size-4" />

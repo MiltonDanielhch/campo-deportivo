@@ -79,6 +79,12 @@ type ApiError = {
   };
 };
 
+/** ⟦FIX modalidad⟧ CampoOption no declara modalidad_reserva en types/reservas.ts
+ *  (no lo tenemos tejido). Cast local para filtrar sin romper TS. Si el resource
+ *  de listarCampos no manda la señal, undefined !== 'turno_por_perfil' → pasa
+ *  (no se pierden canchas). Safe para el modal de cancha. */
+type CampoConModalidad = CampoOption & { modalidad_reserva?: string };
+
 const hhmm = (h: string) => h.substring(0, 5);
 
 /** Suma 60 min a "HH:MM" (para el fin de una franja a medida de 1 hora). */
@@ -208,6 +214,16 @@ export default function DialogCrearReservaVentanilla({
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
+
+  // ⟦FIX modalidad⟧ este modal es SOLO de franja horaria: excluye piscina
+  // (turno_por_perfil). Con undefined (señal ausente) pasa → no pierde canchas.
+  const camposCancha = useMemo(
+    () =>
+      (campos as CampoConModalidad[]).filter(
+        (c) => c.modalidad_reserva !== 'turno_por_perfil',
+      ),
+    [campos],
+  );
 
   const variantesHorarias = useMemo(
     () => variantes.filter((v) => v.unidad_medida === 'hora'),
@@ -707,12 +723,12 @@ export default function DialogCrearReservaVentanilla({
                     </span>
                   </SelectTrigger>
                   <SelectContent>
-                    {campos.length === 0 ? (
+                    {camposCancha.length === 0 ? (
                       <div className="px-2 py-1.5 text-sm text-muted-foreground">
                         Sin campos activos disponibles
                       </div>
                     ) : (
-                      campos.map((c) => (
+                      camposCancha.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           <span className="block truncate" title={c.nombre || c.id}>
                             {c.nombre || c.id}

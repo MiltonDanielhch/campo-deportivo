@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
+  AlertTriangle,
   Check,
   Copy,
   Download,
@@ -60,6 +61,10 @@ interface Resultado {
   qr_string: string | null;
 }
 
+/** ⟦FIX modalidad⟧ mismo cast que el modal de cancha: filtra piscina sin
+ *  depender de que types/reservas.ts declare modalidad_reserva todavía. */
+type CampoConModalidad = CampoOption & { modalidad_reserva?: string };
+
 const perfilLabel: Record<string, string> = {
   mayor_12: 'Mayores de 12',
   menor_12: 'Menores de 12',
@@ -67,6 +72,10 @@ const perfilLabel: Record<string, string> = {
 };
 
 const hhmm = (h: string) => (h || '').substring(0, 5);
+
+/** Ancho unificado con el modal de cancha (52rem ≈ 832px). Antes max-w-2xl
+ *  (672px) → se veía más chico que el de cancha. */
+const MODAL_MAX_WIDTH = '52rem';
 
 function extraerTurnos(resp: unknown): TurnoDisponible[] {
   const body = resp as any;
@@ -116,6 +125,17 @@ export default function DialogCrearReservaPiscinaVentanilla({
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
+
+  // ⟦FIX modalidad⟧ este modal es SOLO de piscina: incluye únicamente
+  // turno_por_perfil. Si el backend no manda la señal, undefined === 'turno_por_perfil'
+  // es false → queda vacío; por eso el aviso de gate de abajo (nunca misterio).
+  const camposPiscina = useMemo(
+    () =>
+      (campos as CampoConModalidad[]).filter(
+        (c) => c.modalidad_reserva === 'turno_por_perfil',
+      ),
+    [campos],
+  );
 
   const cerrar = () => {
     onOpenChange(false);
@@ -187,6 +207,36 @@ export default function DialogCrearReservaPiscinaVentanilla({
   const turnoSeleccionado = turnos.find((t) => t.id === turnoId);
   const totalPersonas = Object.values(cantidades).reduce((a, b) => a + b, 0);
 
+  // ⟦FIX submit⟧ antes el botón solo se deshabilitaba con enviando → se podía
+  // clickear con 0 turnos o 0 personas (tu captura: "Sin turnos disponibles"
+  // con botón verde activo). Ahora iguala la disciplina del modal de cancha.
+  const puedeEnviar =
+    !!campoId &&
+    !!fecha &&
+    !!turnoId &&
+    totalPersonas > 0 &&
+    !!nombre.trim() &&
+    !!ciNit.trim() &&
+    !cargandoTurnos;
+
+  const motivoDeshabilitado = !campoId
+    ? 'Elegí el campo de piscina.'
+    : !fecha
+      ? 'Elegí la fecha.'
+      : cargandoTurnos
+        ? 'Consultando turnos…'
+        : turnos.length === 0
+          ? 'No hay turnos con cupo para esa fecha. Configuralos en Paramétricas → Piscina.'
+          : !turnoId
+            ? 'Elegí un turno.'
+            : totalPersonas === 0
+              ? 'Asigná al menos una persona en algún perfil.'
+              : !nombre.trim()
+                ? 'Completá el nombre del pagador.'
+                : !ciNit.trim()
+                  ? 'Completá el CI/NIT del pagador.'
+                  : null;
+
   const copiar = async (texto: string, clave: string) => {
     await navigator.clipboard.writeText(texto);
     setCopiado(clave);
@@ -214,18 +264,7 @@ export default function DialogCrearReservaPiscinaVentanilla({
   };
 
   const enviar = async () => {
-    if (!campoId || !fecha || !turnoId) {
-      toast.error('Elegí campo, fecha y turno.');
-      return;
-    }
-    if (totalPersonas === 0) {
-      toast.error('Asigná al menos una persona en algún perfil.');
-      return;
-    }
-    if (!nombre.trim() || !ciNit.trim()) {
-      toast.error('Nombre y CI/NIT del pagador son obligatorios.');
-      return;
-    }
+    if (!puedeEnviar) return;
 
     const items = Object.entries(cantidades)
       .filter(([, cant]) => cant > 0)
@@ -255,7 +294,10 @@ export default function DialogCrearReservaPiscinaVentanilla({
 
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(v) : cerrar())}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent
+        className="max-h-[92vh] w-full overflow-y-auto"
+        style={{ maxWidth: MODAL_MAX_WIDTH }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Waves className="size-5 text-teal-600" />
@@ -360,13 +402,32 @@ export default function DialogCrearReservaPiscinaVentanilla({
                     </span>
                   </SelectTrigger>
                   <SelectContent>
-                    {campos.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.nombre || c.id}
-                      </SelectItem>
-                    ))}
+                    {camposPiscina.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        Sin campos de piscina disponibles
+                      </div>
+                    ) : (
+                      camposPiscina.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.nombre || c.id}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
+
+                {/* ⟦GATE si el backend no expone modalidad_reserva en este
+                    listado, camposPiscina queda vacío aunque haya campos. Aviso
+                    accionable en vez de select vacío silencioso. Si ves esto,
+                    pasame el resource de listarCamposPublicos (1 línea). */}
+                {campos.length > 0 && camposPiscina.length === 0 && (
+                  <p className="flex items-start gap-1.5 rounded-lg border border-amber-300/60 bg-amber-500/10 p-2 text-xs text-amber-800 dark:border-amber-700 dark:text-amber-200">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                    No se pudo identificar qué campos son de piscina: el listado
+                    no expone «modalidad_reserva». Confirmá el resource de
+                    listarCamposPublicos o creá los turnos en Paramétricas → Piscina.
+                  </p>
+                )}
               </div>
 
               <div className="min-w-0 space-y-2">
@@ -469,11 +530,19 @@ export default function DialogCrearReservaPiscinaVentanilla({
               </div>
             </div>
 
+            {/* Motivo de bloqueo, como el modal de cancha → el operador sabe
+                por qué no puede enviar (ej. "No hay turnos con cupo…"). */}
+            {!puedeEnviar && motivoDeshabilitado && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                {motivoDeshabilitado}
+              </p>
+            )}
+
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={cerrar} disabled={enviando}>
                 Cancelar
               </Button>
-              <Button onClick={enviar} disabled={enviando}>
+              <Button onClick={enviar} disabled={!puedeEnviar || enviando}>
                 {enviando && <Loader2 className="mr-2 size-4 animate-spin" />}
                 Crear reserva y código de pago
               </Button>

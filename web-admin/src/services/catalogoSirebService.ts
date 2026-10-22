@@ -20,20 +20,57 @@ export interface CampoLocalVinculado {
 }
 
 export interface CatalogoSirebItem {
-  sireb: ServicioSireb;
-  campo_local: CampoLocalVinculado | null;
+  sireb: {
+    id: string;
+    codigo: string;
+    nombre: string;
+    descripcion?: string | null;
+    rubro?: string | null;
+    unidad_medida?: string | null;
+    modo_tarifa?: string | null;
+    requiere_factura?: boolean | null;
+    plazo_pago_dias?: number | null;
+    estado?: string | null;
+    tarifario?: string | null;
+    precio_min?: number | null;
+    precio_max?: number | null;
+    tarifas: unknown[];
+  };
+
+  campo_local?: {
+    id: string;
+    codigo: string;
+    nombre: string;
+    estado: string;
+    direccion?: string | null;
+    vinculacion_tipo?: 'directo' | 'variante';
+    variante_id?: string | null;
+    variante_nombre?: string | null;
+    variante_tipo_uso?: string | null;
+    variante_unidad_medida?: string | null;
+  } | null;
+
   vinculacion: 'vinculado' | 'sin_vincular';
+  tipo_vinculacion?: 'directo' | 'variante' | null;
+  variante_id?: string | null;
+
+  clasificacion: string;
+  clasificacion_motivo: string;
+  accion_recomendada: string;
+
   reservable_online: boolean;
-  mensaje_no_reservable: string | null;
+  mensaje_no_reservable?: string | null;
 }
 
 export interface CatalogoSirebResponse {
   data: CatalogoSirebItem[];
   meta: {
     fuente: string;
-    sincronizado_en: string | null;
+    sincronizado_en?: string | null;
     total_servicios: number;
     vinculados: number;
+    vinculados_directos: number;
+    vinculados_por_variante: number;
     sin_vincular: number;
   };
 }
@@ -60,10 +97,20 @@ export interface VarianteArancelaria {
   tarifas: VarianteArancelariaTarifa[];
 }
 
+/** Payload de escritura de variante (store/update). */
+export interface VariantePayload {
+  codigo: string;
+  nombre: string;
+  descripcion?: string | null;
+  tipo_uso: string;
+  servicio_sireb_id?: string | null;
+  unidad_medida: string;
+  visible_publico?: boolean;
+  activo?: boolean;
+  orden?: number;
+}
+
 export const catalogoSirebService = {
-  /**
-   * Lista todos los servicios SIREB con su campo local vinculado (si existe).
-   */
   async listarCatalogo(): Promise<CatalogoSirebResponse> {
     const { data } = await apiClient.get<CatalogoSirebResponse>(
       '/v1/admin/catalogo-sireb/campos',
@@ -71,39 +118,56 @@ export const catalogoSirebService = {
     return data;
   },
 
-
-  /**
-   * Lista las variantes arancelarias activas de un campo físico.
-   *
-   * P8.2D: usado por ventanilla para campos como Cancha Vieja,
-   * donde un mismo espacio físico tiene varios servicios SIREB
-   * según el tipo de uso: asociación departamental, municipal, etc.
-   */
   async listarVariantesPorCampo(campoId: string): Promise<VarianteArancelaria[]> {
     const { data } = await apiClient.get<{ data: VarianteArancelaria[] }>(
       `/v1/admin/campos/${campoId}/variantes`,
     );
-
     return data.data ?? [];
   },
 
-  /**
-   * Lista los servicios adicionales de un campo físico.
-   *
-   * P8.3C: limpieza, energía, etc.
-   * No son franjas horarias y no ocupan disponibilidad física.
-   */
   async listarServiciosAdicionalesPorCampo(campoId: string): Promise<VarianteArancelaria[]> {
     const { data } = await apiClient.get<{ data: VarianteArancelaria[] }>(
       `/v1/admin/campos/${campoId}/servicios-adicionales`,
     );
-
     return data.data ?? [];
   },
 
-  /**
-   * Vincula un campo local a un servicio SIREB.
-   */
+  /** ⟦BLOQUE 2⟧ Cuelga un servicio SIREB como variante bajo un campo físico. */
+  async crearVariante(
+    campoId: string,
+    payload: VariantePayload,
+  ): Promise<{ message: string; data: VarianteArancelaria }> {
+    const { data } = await apiClient.post<{ message: string; data: VarianteArancelaria }>(
+      `/v1/admin/campos/${campoId}/variantes`,
+      payload,
+    );
+    return data;
+  },
+
+  /** ⟦BLOQUE 2⟧ Edita una variante existente. */
+  async actualizarVariante(
+    campoId: string,
+    varianteId: string,
+    payload: VariantePayload,
+  ): Promise<{ message: string; data: VarianteArancelaria }> {
+    const { data } = await apiClient.put<{ message: string; data: VarianteArancelaria }>(
+      `/v1/admin/campos/${campoId}/variantes/${varianteId}`,
+      payload,
+    );
+    return data;
+  },
+
+  /** ⟦BLOQUE 2⟧ Desvincula la variante del servicio SIREB y la desactiva. */
+  async desvincularVariante(
+    campoId: string,
+    varianteId: string,
+  ): Promise<{ message: string; data: VarianteArancelaria }> {
+    const { data } = await apiClient.delete<{ message: string; data: VarianteArancelaria }>(
+      `/v1/admin/campos/${campoId}/variantes/${varianteId}`,
+    );
+    return data;
+  },
+
   async vincularCampo(
     campoId: string,
     servicioSirebId: string,
@@ -115,9 +179,6 @@ export const catalogoSirebService = {
     return data;
   },
 
-  /**
-   * Desvincula un campo de su servicio SIREB.
-   */
   async desvincularCampo(
     campoId: string,
   ): Promise<{ message: string; data: any }> {
@@ -127,9 +188,6 @@ export const catalogoSirebService = {
     return data;
   },
 
-  /**
-   * Ejecuta sincronización manual de tarifas desde SIREB.
-   */
   async sincronizarTarifas(): Promise<{ message: string; data: any }> {
     const { data } = await apiClient.post<{ message: string; data: any }>(
       '/v1/admin/sireb/sincronizar-tarifas',
@@ -137,11 +195,6 @@ export const catalogoSirebService = {
     return data;
   },
 
-  /**
-   * Invalida la caché del catálogo SIREB (TTL 10min) y la repuebla
-   * iterando todas las páginas. Se usa cuando el operador agrega/quita
-   * un servicio en SIREB y no quiere esperar el TTL.
-   */
   async refrescarCatalogo(): Promise<{ message: string; data: any }> {
     const { data } = await apiClient.post<{ message: string; data: any }>(
       '/v1/admin/catalogo-sireb/refrescar',

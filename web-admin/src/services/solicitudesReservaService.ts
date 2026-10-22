@@ -9,6 +9,17 @@ import type {
 const BASE = '/v1/admin/solicitudes-reserva';
 const EXPORT_BASE = '/v1/admin/reservas/export';
 
+/**
+ * ⟦FIX modalidad⟧ CampoOption no declara modalidad_reserva; este tipo la agrega
+ * para que ventanilla pueda separar cancha (franja horaria) de piscina
+ * (turno_por_perfil) SIN depender de un cast local en cada modal. Es subtype de
+ * CampoOption, así que los consumidores que esperan CampoOption[] (tabla de
+ * reservas, etc.) siguen compilando sin cambios.
+ */
+export type CampoVentanilla = CampoOption & {
+  modalidad_reserva?: string | null;
+};
+
 function obtenerNombreArchivo(header?: string): string | null {
   if (!header) return null;
 
@@ -196,8 +207,11 @@ export const solicitudesReservaService = {
    * Endpoint ADMIN (/v1/campos-deportivos): NO filtra padres-de-variantes ni
    * sin_reserva_online, porque el funcionario SÍ puede reservarlos. El filtro
    * de esos es del ENDPOINT PÚBLICO (Bug A), no de acá.
+   *
+   * ⟦FIX modalidad⟧ propaga modalidad_reserva (el enum del modelo se serializa
+   * como su value string). Sin esto, el modal de cancha no podía excluir piscina.
    */
-  async listarCampos(params?: { estado?: string }): Promise<CampoOption[]> {
+  async listarCampos(params?: { estado?: string }): Promise<CampoVentanilla[]> {
     const { data } = await apiClient.get<unknown>('/v1/campos-deportivos', {
       params: {
         per_page: 100,
@@ -219,13 +233,20 @@ export const solicitudesReservaService = {
       .map((campo: any) => ({
         id: String(campo.id ?? ''),
         nombre: String(campo.nombre ?? 'Campo sin nombre'),
+        modalidad_reserva: campo.modalidad_reserva ?? null,
       }))
       .filter((campo) => campo.id)
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   },
 
-  /** Campos activos desde endpoint público (sin token, shape garantizado). */
-  async listarCamposPublicos(): Promise<CampoOption[]> {
+  /**
+   * Campos activos desde endpoint público (sin token, shape garantizado).
+   *
+   * ⟦FIX modalidad⟧ el presenter público YA manda modalidad_reserva en base();
+   * el .map viejo la descartaba → piscina nunca aparecía en ventanilla. Se
+   * propaga igual que en listarCampos.
+   */
+  async listarCamposPublicos(): Promise<CampoVentanilla[]> {
     const { data } = await apiClient.get<unknown>('/v1/public/campos');
 
     const body = data as { data?: unknown } | unknown[] | null;
@@ -240,6 +261,7 @@ export const solicitudesReservaService = {
       .map((c) => ({
         id: String(c.id ?? ''),
         nombre: String(c.nombre ?? c.descripcion ?? c.codigo ?? ''),
+        modalidad_reserva: (c.modalidad_reserva as string | null | undefined) ?? null,
       }))
       .filter((c) => c.id)
       .sort((a, b) => a.nombre.localeCompare(b.nombre));

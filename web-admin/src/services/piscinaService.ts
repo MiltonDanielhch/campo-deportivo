@@ -6,6 +6,12 @@ import type {
   PiscinaReservaAdmin,
 } from '@/types/reservas';
 
+export interface LoteResultado {
+  creados: number;
+  omitidas: string[];
+  procesadas: string[];
+}
+
 export const piscinaService = {
   async obtenerTurnos(campoId: string, params?: { fecha_desde?: string; fecha_hasta?: string }): Promise<PiscinaTurno[]> {
     const { data } = await apiClient.get<{ data: PiscinaTurno[] }>(
@@ -20,6 +26,20 @@ export const piscinaService = {
     return data.data;
   },
 
+  /** ⟦LOTE⟧ clona los turnos activos de fecha_origen a [desde..hasta]. */
+  async crearTurnosLote(payload: {
+    campo_id: string;
+    fecha_origen: string;
+    desde: string;
+    hasta: string;
+  }): Promise<LoteResultado> {
+    const { data } = await apiClient.post<{ message: string; data: LoteResultado }>(
+      '/v1/admin/piscina/turnos/lote',
+      payload,
+    );
+    return data.data;
+  },
+
   async actualizarTurno(turnoId: string, datos: Partial<PiscinaTurnoRequest>): Promise<PiscinaTurno> {
     const { data } = await apiClient.patch<{ data: PiscinaTurno }>(`/v1/admin/piscina/turnos/${turnoId}`, datos);
     return data.data;
@@ -29,7 +49,6 @@ export const piscinaService = {
     await apiClient.delete(`/v1/admin/piscina/turnos/${turnoId}`);
   },
 
-  /** Lista reservas de piscina para el panel (con filtros, paginación y stats). */
   async listarReservas(params?: FiltrosPiscinaReserva): Promise<ListadoPiscinaResponse> {
     const { data } = await apiClient.get<ListadoPiscinaResponse>('/v1/admin/piscina/reservas', {
       params,
@@ -37,7 +56,6 @@ export const piscinaService = {
     return data;
   },
 
-  /** Detalle de una reserva de piscina (incluye turnos/perfiles). */
   async obtenerReserva(id: string): Promise<PiscinaReservaAdmin> {
     const { data } = await apiClient.get<{ data: PiscinaReservaAdmin }>(
       `/v1/admin/piscina/reservas/${id}`,
@@ -45,7 +63,6 @@ export const piscinaService = {
     return data.data;
   },
 
-  /** Turnos disponibles para ventanilla (endpoint público, sin token). */
   async turnosDisponibles(campoId: string, fecha: string): Promise<unknown> {
     const { data } = await apiClient.get(
       `/v1/public/piscina/campos/${campoId}/turnos`,
@@ -54,7 +71,6 @@ export const piscinaService = {
     return data.data ?? data;
   },
 
-  /** Creación desde ventanilla (admin). Devuelve código + QR. */
   async crearDesdeVentanilla(payload: {
     fecha: string;
     turno_id: string;
