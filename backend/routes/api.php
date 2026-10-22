@@ -43,6 +43,9 @@ Route::get('/v1/health', [HealthController::class, 'index']);
 // Webhook servidor-a-servidor del Core de Recaudaciones (HU-D4).
 // Fuera del grupo público (sin throttle: no debe bloquear reintentos
 // del Core) y fuera de auth:sanctum (se autentica por firma HMAC).
+// ⟦PENDIENTE A1⟧ el webhook real hoy fails-closed (verificarFirma=false),
+// pero la ruta sigue sin throttle → log-flooding posible. Se agrega con A1,
+// no acá, para no mezclar frentes (Bloque 2 = variantes).
 Route::post('/v1/webhooks/recaudaciones', [WebhookRecaudacionesController::class, 'handle']);
 
 // ─── Proxy público de imágenes (CORS) ───────────────────────────────────
@@ -250,6 +253,7 @@ Route::middleware('auth.oauth')->group(function () {
             // Turnos
             Route::get('/campos/{campoId}/turnos', [PiscinaTurnoController::class, 'index']);
             Route::post('/turnos', [PiscinaTurnoController::class, 'store']);
+            Route::post('/turnos/lote', [PiscinaTurnoController::class, 'storeLote']);
             Route::patch('/turnos/{turnoId}', [PiscinaTurnoController::class, 'update']);
             Route::delete('/turnos/{turnoId}', [PiscinaTurnoController::class, 'destroy']);
 
@@ -261,12 +265,26 @@ Route::middleware('auth.oauth')->group(function () {
         });
     // ─── FIN Fase P7.7 ───
 
-    // ─── Fase P8.2C / P8.3A: variantes y servicios adicionales por campo ───
+    // ─── Fase P8.2C / P8.3A / Bloque 2: variantes por campo ───
+    // Lectura (ventanilla + paramétricas): el modal de ventanilla consume
+    // variantes y servicios adicionales para armar la reserva.
     Route::middleware('role:admin_parametricas|admin_reservas')
         ->prefix('v1/admin/campos/{campoDeportivo}')
         ->group(function () {
             Route::get('/variantes', [ArancelVarianteController::class, 'index']);
             Route::get('/servicios-adicionales', [ArancelVarianteController::class, 'serviciosAdicionales']);
         });
-    // ─── FIN Fase P8.2C / P8.3A ───
+
+    // Escritura (solo paramétricas): crear/editar/desvincular una variante es
+    // un vínculo SIREB, equivalente al PATCH /vinculo-sireb de arriba que ya
+    // exige admin_parametricas puro. No se abre a admin_reservas para no dar
+    // de alta cobros sin pasar por el módulo de paramétricas.
+    Route::middleware('role:admin_parametricas')
+        ->prefix('v1/admin/campos/{campoDeportivo}')
+        ->group(function () {
+            Route::post('/variantes', [ArancelVarianteController::class, 'store']);
+            Route::put('/variantes/{variante}', [ArancelVarianteController::class, 'update']);
+            Route::delete('/variantes/{variante}', [ArancelVarianteController::class, 'destroy']);
+        });
+    // ─── FIN Fase P8.2C / P8.3A / Bloque 2 ───
 });

@@ -84,9 +84,17 @@ class CampoController extends Controller
             $termino = trim((string) $request->input('buscar'));
 
             if ($termino !== '') {
-                $query->where(function (Builder $q) use ($termino): void {
-                    $q->whereRaw('LOWER(nombre) LIKE ?', ['%' . mb_strtolower($termino) . '%'])
-                      ->orWhereRaw('LOWER(direccion) LIKE ?', ['%' . mb_strtolower($termino) . '%']);
+                $patron = '%' . mb_strtolower($termino) . '%';
+
+                $query->where(function (Builder $q) use ($patron): void {
+                    $q->whereRaw('LOWER(nombre) LIKE ?', [$patron])
+                      ->orWhereRaw('LOWER(direccion) LIKE ?', [$patron])
+                      // ⟦FIX buscador⟧ provincia/municipio: sin estas 2 líneas
+                      // "cercado"/"trinidad" no matcheaban la ubicación (solo
+                      // nombre+direccion). LOWER(NULL) LIKE = NULL → no match,
+                      // seguro para campos sin ubicación aún.
+                      ->orWhereRaw('LOWER(provincia) LIKE ?', [$patron])
+                      ->orWhereRaw('LOWER(municipio) LIKE ?', [$patron]);
                 });
             }
         }

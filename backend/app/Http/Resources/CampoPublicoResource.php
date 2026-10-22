@@ -26,6 +26,12 @@ class CampoPublicoResource extends JsonResource
             'latitud' => (float) $this->latitud,
             'longitud' => (float) $this->longitud,
             'estado' => $this->estado,
+            // ⟦FIX piscina⟧ metadato de clasificación (no sensible): permite al
+            // panel de reservas separar cancha (franja horaria) de piscina
+            // (turno_por_perfil) SIN tocar el endpoint admin (que daría 403 a
+            // admin_reservas). El público no la lee; el cast enum ->value sale
+            // como string o null.
+            'modalidad_reserva' => $this->modalidad_reserva?->value,
             'hora_inicio_noche' => $this->hora_inicio_noche,
             'tarifas' => [
                 'diurna' => $tarifaDiurna ? [

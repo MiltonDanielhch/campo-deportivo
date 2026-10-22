@@ -10,7 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-
+use App\Services\Sireb\ClasificadorServicioSireb;
 /**
  * Controller para gestión de integración SIREB en el panel administrativo.
  *
@@ -24,9 +24,9 @@ class CatalogoSirebController extends Controller
 {
     public function __construct(
         private CatalogoSirebService $catalogoSireb,
+        private ClasificadorServicioSireb $clasificador,
     ) {
     }
-
     /**
      * GET /api/v1/admin/catalogo-sireb/campos
      *
@@ -49,36 +49,63 @@ class CatalogoSirebController extends Controller
             // 2. Campos con vínculo por VARIANTE (1 a N)
             $variantes = ArancelVariante::whereNotNull('servicio_sireb_id')
                 ->with('campo:id,nombre,codigo,estado,direccion')
-                ->get(['id', 'nombre', 'servicio_sireb_id', 'campo_id'])
+                ->get([
+                    'id',
+                    'nombre',
+                    'tipo_uso',
+                    'unidad_medida',
+                    'servicio_sireb_id',
+                    'campo_id',
+                ])
                 ->keyBy('servicio_sireb_id');
 
             $data = collect($catalogo)->map(function ($servicio) use ($camposDirectos, $variantes) {
                 $sirebId = $servicio['id'] ?? null;
+
+                $clasificacion = $this->clasificador->clasificar($servicio);
+
                 $vinculacion = 'sin_vincular';
+                $tipoVinculacion = null;
+                $varianteId = null;
                 $campoLocal = null;
 
                 if ($sirebId && $camposDirectos->has($sirebId)) {
-                    // Caso A: Vínculo directo (ej. Cancha Sintética, Frontón)
+                    // Caso A: Vínculo directo (1 campo = 1 servicio SIREB)
                     $vinculacion = 'vinculado';
+                    $tipoVinculacion = 'directo';
+
                     $campo = $camposDirectos->get($sirebId);
+
                     $campoLocal = [
                         'id' => $campo->id,
                         'codigo' => $campo->codigo,
                         'nombre' => $campo->nombre,
                         'estado' => $campo->estado,
                         'direccion' => $campo->direccion,
+                        'vinculacion_tipo' => 'directo',
+                        'variante_id' => null,
                     ];
                 } elseif ($sirebId && $variantes->has($sirebId)) {
-                    // Caso B: Vínculo a través de una variante (ej. Palacio, Estadio, Cancha Vieja)
+                    // Caso B: Vínculo por variante (N servicios SIREB sobre 1 campo físico)
                     $vinculacion = 'vinculado';
+                    $tipoVinculacion = 'variante';
+
                     $variante = $variantes->get($sirebId);
-                    $campo = $variante->campo; // Relación cargada por 'with'
+                    $campo = $variante->campo;
+
+                    $varianteId = $variante->id;
+
                     $campoLocal = [
                         'id' => $campo->id,
                         'codigo' => $campo->codigo,
                         'nombre' => $campo->nombre . ' (vía ' . $variante->nombre . ')',
                         'estado' => $campo->estado,
                         'direccion' => $campo->direccion,
+                        'vinculacion_tipo' => 'variante',
+                        'variante_id' => $variante->id,
+                        'variante_nombre' => $variante->nombre,
+                        'variante_tipo_uso' => $variante->tipo_uso ?? null,
+                        'variante_unidad_medida' => $variante->unidad_medida ?? null,
                     ];
                 }
 
@@ -89,22 +116,46 @@ class CatalogoSirebController extends Controller
                         'id' => $servicio['id'] ?? null,
                         'codigo' => $servicio['codigo'] ?? null,
                         'nombre' => $servicio['nombre'] ?? null,
+                        'descripcion' => $servicio['descripcion'] ?? null,
+                        'rubro' => $servicio['rubro'] ?? null,
+                        'unidad_medida' => $servicio['unidad_medida'] ?? null,
+                        'modo_tarifa' => $servicio['modo_tarifa'] ?? null,
+                        'requiere_factura' => $servicio['requiere_factura'] ?? null,
+                        'plazo_pago_dias' => $servicio['plazo_pago_dias'] ?? null,
                         'estado' => $servicio['estado'] ?? null,
                         'tarifario' => $servicio['tarifario'] ?? null,
                         'precio_min' => $this->calcularPrecioMin($servicio),
                         'precio_max' => $this->calcularPrecioMax($servicio),
                         'tarifas' => $servicio['tarifas'] ?? [],
                     ],
+
                     'campo_local' => $campoLocal,
+
                     'vinculacion' => $vinculacion,
+                    'tipo_vinculacion' => $tipoVinculacion,
+                    'variante_id' => $varianteId,
+
+                    'clasificacion' => $clasificacion['categoria'],
+                    'clasificacion_motivo' => $clasificacion['motivo'],
+
+                    'accion_recomendada' => $this->accionRecomendada(
+                        $clasificacion['categoria'],
+                        $vinculacion,
+                        $tipoVinculacion,
+                    ),
+
                     'reservable_online' => $reservable,
                     'mensaje_no_reservable' => $reservable ? null : $this->motivoNoReservable($servicio),
                 ];
             })->values()->all();
 
-            $totalServicios = count($catalogo);
-            $vinculados = collect($data)->where('vinculacion', 'vinculado')->count();
-            $sinVincular = $totalServicios - $vinculados;
+            $coleccion = collect($data);
+
+            $totalServicios = $coleccion->count();
+            $vinculados = $coleccion->where('vinculacion', 'vinculado')->count();
+            $directos = $coleccion->where('tipo_vinculacion', 'directo')->count();
+            $porVariantes = $coleccion->where('tipo_vinculacion', 'variante')->count();
+            $sinVincular = $coleccion->where('vinculacion', 'sin_vincular')->count();
 
             return response()->json([
                 'data' => $data,
@@ -113,6 +164,8 @@ class CatalogoSirebController extends Controller
                     'sincronizado_en' => $this->catalogoSireb->ultimaActualizacion(),
                     'total_servicios' => $totalServicios,
                     'vinculados' => $vinculados,
+                    'vinculados_directos' => $directos,
+                    'vinculados_por_variante' => $porVariantes,
                     'sin_vincular' => $sinVincular,
                 ],
             ]);
@@ -388,5 +441,29 @@ class CatalogoSirebController extends Controller
         }
 
         return null;
+    }
+
+    private function accionRecomendada(
+        string $categoria,
+        string $vinculacion,
+        ?string $tipoVinculacion,
+    ): string {
+        if ($vinculacion === 'vinculado') {
+            return $tipoVinculacion === 'variante'
+                ? 'gestionar_variante'
+                : 'desvincular_directo';
+        }
+
+        return match ($categoria) {
+            ClasificadorServicioSireb::ALQUILER_BASE => 'crear_campo_simple',
+            ClasificadorServicioSireb::SERVICIO_ADICIONAL => 'agregar_como_variante',
+            ClasificadorServicioSireb::PISCINA => 'modulo_piscina',
+            ClasificadorServicioSireb::ARRIENDO_PERIODICO,
+            ClasificadorServicioSireb::HOSPEDAJE,
+            ClasificadorServicioSireb::SERVICIO_ESPECIAL,
+            ClasificadorServicioSireb::EVENTO_ESPECIAL,
+            ClasificadorServicioSireb::NO_CLASIFICADO => 'fuera_de_alcance',
+            default => 'revisar_clasificacion',
+        };
     }
 }

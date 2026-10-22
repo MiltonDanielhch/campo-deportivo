@@ -12,6 +12,11 @@ class CrearCampoDTO
         public readonly string $codigo,
         public readonly string $nombre,
         public readonly string $direccion,
+        // ⟦FIX ubicación⟧ el Request valida provincia/municipio (nullable) y el
+        // service ya los persistía CONDICIONALMENTE vía property_exists; sin
+        // declararlos acá, esa condición era siempre false → se guardaban null.
+        public readonly ?string $provincia = null,
+        public readonly ?string $municipio = null,
         public readonly float $latitud,
         public readonly float $longitud,
         public readonly array $horarios,
@@ -33,6 +38,9 @@ class CrearCampoDTO
             codigo: $data['codigo'],
             nombre: $data['nombre'],
             direccion: $data['direccion'],
+            // nullable en el Request → ?? null es correcto (campo sin ubicación aún).
+            provincia: $data['provincia'] ?? null,
+            municipio: $data['municipio'] ?? null,
             latitud: (float) $data['latitud'],
             longitud: (float) $data['longitud'],
             horarios: $horarios,

@@ -52,6 +52,12 @@ class CampoDeportivoService
                 'codigo' => $dto->codigo,
                 'nombre' => $dto->nombre,
                 'direccion' => $dto->direccion,
+                // ⟦FIX ubicación⟧ el Request valida provincia/municipio pero el
+                // service los descartaba → nunca se guardaban. property_exists
+                // evita romper si CrearCampoDTO aún no los declara; en cuanto
+                // los declare, se persisten solos.
+                'provincia' => property_exists($dto, 'provincia') ? ($dto->provincia ?: null) : null,
+                'municipio' => property_exists($dto, 'municipio') ? ($dto->municipio ?: null) : null,
                 'latitud' => $dto->latitud,
                 'longitud' => $dto->longitud,
                 'estado' => 'activo',
@@ -80,6 +86,10 @@ class CampoDeportivoService
             'codigo' => $data['codigo'] ?? $campo->codigo,
             'nombre' => $data['nombre'] ?? $campo->nombre,
             'direccion' => $data['direccion'] ?? $campo->direccion,
+            // ⟦FIX ubicación⟧ igual que crear(): persistir provincia/municipio
+            // si el payload los trae, sin borrar los ya guardados si no.
+            'provincia' => array_key_exists('provincia', $data) ? ($data['provincia'] ?: null) : $campo->provincia,
+            'municipio' => array_key_exists('municipio', $data) ? ($data['municipio'] ?: null) : $campo->municipio,
             'latitud' => $data['latitud'] ?? $campo->latitud,
             'longitud' => $data['longitud'] ?? $campo->longitud,
         ]);

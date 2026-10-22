@@ -6,19 +6,24 @@ use App\Http\Controllers\Controller;
 use App\Models\CampoDeportivo;
 use App\Models\PiscinaTurno;
 use App\Models\PiscinaTurnoPerfil;
+use App\Services\Piscina\PiscinaTurnoLoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 /**
  * Controller admin para gestión de turnos de piscina.
  */
 class PiscinaTurnoController extends Controller
 {
+    public function __construct(
+        private PiscinaTurnoLoteService $lote,
+    ) {
+    }
+
     /**
      * GET /api/v1/admin/piscina/campos/{campoId}/turnos
-     *
-     * Lista turnos de un campo piscina.
      */
     public function index(Request $request, string $campoId): JsonResponse
     {
@@ -38,22 +43,15 @@ class PiscinaTurnoController extends Controller
         if ($fechaDesde) {
             $query->where('fecha', '>=', $fechaDesde);
         }
-
         if ($fechaHasta) {
             $query->where('fecha', '<=', $fechaHasta);
         }
 
-        $turnos = $query->get();
-
-        return response()->json([
-            'data' => $turnos,
-        ]);
+        return response()->json(['data' => $query->get()]);
     }
 
     /**
      * POST /api/v1/admin/piscina/turnos
-     *
-     * Crea un nuevo turno de piscina.
      */
     public function store(Request $request): JsonResponse
     {
@@ -63,7 +61,8 @@ class PiscinaTurnoController extends Controller
             'hora_inicio' => ['required', 'date_format:H:i:s'],
             'hora_fin' => ['required', 'date_format:H:i:s', 'after:hora_inicio'],
             'cupo_total' => ['nullable', 'integer', 'min:1'],
-            'estado' => ['required', 'in:activo,activo'],
+            // ⟦FIX 1⟧ era 'in:activo,activo' (typo) → nunca se podía inactivar.
+            'estado' => ['required', 'in:activo,inactivo'],
             'observacion' => ['nullable', 'string'],
             'perfiles' => ['required', 'array', 'min:1'],
             'perfiles.*.perfil' => ['required', 'in:mayor_12,menor_12,institucion'],
@@ -72,7 +71,6 @@ class PiscinaTurnoController extends Controller
             'perfiles.*.tarifa_sireb_id' => ['nullable', 'uuid'],
         ]);
 
-        // Validar que el campo sea piscina
         $campo = CampoDeportivo::find($validated['campo_id']);
         if ($campo->modalidad_reserva?->value !== 'turno_por_perfil') {
             return response()->json([
@@ -80,9 +78,16 @@ class PiscinaTurnoController extends Controller
             ], 422);
         }
 
+        // ⟦Gate#1 alineado con cancha⟧ piscina no tiene EXCLUDE de rango en BD,
+        // así que el solape se corta acá en PHP (mismo criterio que el lote).
+        if ($this->lote->haySolapeEnFecha($validated['campo_id'], $validated['fecha'], $validated['hora_inicio'], $validated['hora_fin'])) {
+            return response()->json([
+                'message' => 'Ya existe un turno activo que se solapa con ese horario en esa fecha.',
+            ], 422);
+        }
+
         try {
             $turno = DB::transaction(function () use ($validated) {
-                // Crear turno
                 $turno = PiscinaTurno::create([
                     'campo_id' => $validated['campo_id'],
                     'fecha' => $validated['fecha'],
@@ -93,7 +98,6 @@ class PiscinaTurnoController extends Controller
                     'observacion' => $validated['observacion'],
                 ]);
 
-                // Crear perfiles del turno
                 foreach ($validated['perfiles'] as $perfilData) {
                     $turno->perfiles()->create([
                         'perfil' => $perfilData['perfil'],
@@ -108,22 +112,57 @@ class PiscinaTurnoController extends Controller
                 return $turno->load('perfiles');
             });
 
-            return response()->json([
-                'message' => 'Turno creado exitosamente',
-                'data' => $turno,
-            ], 201);
+            return response()->json(['message' => 'Turno creado exitosamente', 'data' => $turno], 201);
         } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Error al crear turno',
-                'error' => $e->getMessage(),
-            ], 500);
+            return response()->json(['message' => 'Error al crear turno', 'error' => $e->getMessage()], 500);
         }
     }
 
     /**
-     * PATCH /api/v1/admin/piscina/turnos/{turnoId}
+     * POST /api/v1/admin/piscina/turnos/lote
      *
-     * Actualiza un turno de piscina.
+     * Clona los turnos activos de un día referencia a un rango de fechas.
+     */
+    public function storeLote(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'campo_id' => ['required', 'uuid', 'exists:campos_deportivos,id'],
+            'fecha_origen' => ['required', 'date'],
+            'desde' => ['required', 'date', 'after_or_equal:today'],
+            'hasta' => [
+                'required', 'date', 'after_or_equal:desde',
+                'before_or_equal:' . now()->addDays(60)->toDateString(),
+            ],
+        ]);
+
+        $campo = CampoDeportivo::find($validated['campo_id']);
+        if ($campo->modalidad_reserva?->value !== 'turno_por_perfil') {
+            return response()->json(['message' => 'Este campo no está configurado como piscina'], 422);
+        }
+
+        try {
+            $res = $this->lote->clonarDesdeReferencia(
+                $validated['campo_id'],
+                $validated['fecha_origen'],
+                $validated['desde'],
+                $validated['hasta'],
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error al generar el lote', 'error' => $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'message' => "Lote procesado: {$res['creados']} turnos creados, " . count($res['omitidas']) . " fechas omitidas por solape.",
+            'data' => $res,
+        ], 201);
+    }
+
+    /**
+     * PATCH /api/v1/admin/piscina/turnos/{turnoId}
+     * (el intervalo fecha/hora es inmutable acá → no genera solape nuevo;
+     *  el reservado=0 al recrear perfiles sigue siendo Fix 3, gate PO)
      */
     public function update(Request $request, string $turnoId): JsonResponse
     {
@@ -133,7 +172,7 @@ class PiscinaTurnoController extends Controller
         }
 
         $validated = $request->validate([
-            'estado' => ['sometimes', 'in:activo,activo'],
+            'estado' => ['sometimes', 'in:activo,inactivo'], // ⟦FIX 1⟧
             'observacion' => ['nullable', 'string'],
             'perfiles' => ['sometimes', 'array'],
             'perfiles.*.perfil' => ['required', 'in:mayor_12,menor_12,institucion'],
@@ -144,7 +183,6 @@ class PiscinaTurnoController extends Controller
 
         try {
             DB::transaction(function () use ($turno, $validated) {
-                // Actualizar turno
                 if (isset($validated['estado'])) {
                     $turno->estado = $validated['estado'];
                 }
@@ -153,17 +191,13 @@ class PiscinaTurnoController extends Controller
                 }
                 $turno->save();
 
-                // Actualizar perfiles si se proporcionan
                 if (isset($validated['perfiles'])) {
-                    // Eliminar perfiles existentes
                     $turno->perfiles()->delete();
-
-                    // Crear nuevos perfiles
                     foreach ($validated['perfiles'] as $perfilData) {
                         $turno->perfiles()->create([
                             'perfil' => $perfilData['perfil'],
                             'cupo' => $perfilData['cupo'],
-                            'reservado' => 0, // Resetear reservado al actualizar
+                            'reservado' => 0,
                             'tarifa_sireb_id' => $perfilData['tarifa_sireb_id'] ?? null,
                             'precio_unitario' => $perfilData['precio_unitario'],
                             'estado' => 'activo',
@@ -172,22 +206,14 @@ class PiscinaTurnoController extends Controller
                 }
             });
 
-            return response()->json([
-                'message' => 'Turno actualizado exitosamente',
-                'data' => $turno->load('perfiles'),
-            ]);
+            return response()->json(['message' => 'Turno actualizado exitosamente', 'data' => $turno->load('perfiles')]);
         } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Error al actualizar turno',
-                'error' => $e->getMessage(),
-            ], 500);
+            return response()->json(['message' => 'Error al actualizar turno', 'error' => $e->getMessage()], 500);
         }
     }
 
     /**
      * DELETE /api/v1/admin/piscina/turnos/{turnoId}
-     *
-     * Elimina un turno de piscina.
      */
     public function destroy(string $turnoId): JsonResponse
     {
@@ -196,8 +222,12 @@ class PiscinaTurnoController extends Controller
             return response()->json(['message' => 'Turno no encontrado'], 404);
         }
 
-        // Verificar que no tenga reservas activas
-        if ($turno->reservas()->where('estado', 'pendiente')->exists()) {
+        // ⟦FIX 4b⟧ el detalle NO tiene columna 'estado'; se filtra por cabecera.
+        $hayPendientes = $turno->reservas()
+            ->whereHas('reserva', fn ($q) => $q->where('estado', 'pendiente'))
+            ->exists();
+
+        if ($hayPendientes) {
             return response()->json([
                 'message' => 'No se puede eliminar: el turno tiene reservas pendientes',
             ], 422);
@@ -205,15 +235,9 @@ class PiscinaTurnoController extends Controller
 
         try {
             $turno->delete();
-
-            return response()->json([
-                'message' => 'Turno eliminado exitosamente',
-            ]);
+            return response()->json(['message' => 'Turno eliminado exitosamente']);
         } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Error al eliminar turno',
-                'error' => $e->getMessage(),
-            ], 500);
+            return response()->json(['message' => 'Error al eliminar turno', 'error' => $e->getMessage()], 500);
         }
     }
 }

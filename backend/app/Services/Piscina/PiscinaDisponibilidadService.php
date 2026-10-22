@@ -106,7 +106,7 @@ class PiscinaDisponibilidadService
                     'etiqueta' => $this->etiquetaPerfil($perfilTurno->perfil),
                     'precio' => (float) $perfilTurno->precio_unitario,
                     'cupo' => $perfilTurno->cupo,
-                    'disponible' => $perfilTurno->disponible,
+                    'disponible' => max(0, (int) $perfilTurno->cupo - (int) $perfilTurno->reservado),
                     'tarifa_sireb_id' => $tarifa->tarifa_sireb_id,
                     'horario' => $horario,
                 ];
