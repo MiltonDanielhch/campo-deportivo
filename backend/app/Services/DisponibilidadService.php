@@ -53,7 +53,6 @@ class DisponibilidadService
         $fecha = $fecha->copy()->startOfDay();
 
         // ── Paso 1: buscar el horario de atención para el día consultado ──
-        // dayOfWeekIso: 1=lunes ... 7=domingo (coincide con ISO-8601 de la BD)
         $horario = $campo->horariosAtencion()
             ->where('dia_semana', $fecha->dayOfWeekIso)
             ->first();
@@ -79,7 +78,11 @@ class DisponibilidadService
         // P8.2B: si el campo tiene varias variantes/servicios espejados, la
         // grilla física no puede mostrar un único precio. El precio depende
         // de la variante seleccionada por el funcionario/ciudadano.
-        $tarifasGrilla = $campo->tarifas ?? collect();
+        //
+        // [FIX B78-2] usar el scope paraGrillaHoraria() (igual que
+        // SolicitudReservaService::verificarFranjas) para no traer tarifas
+        // vencidas / no-liquidable / con perfil (piscina) mezcladas.
+        $tarifasGrilla = $campo->tarifas()->paraGrillaHoraria()->get();
 
         $serviciosDistintos = $tarifasGrilla
             ->pluck('servicio_sireb_id')
@@ -87,24 +90,50 @@ class DisponibilidadService
             ->unique()
             ->count();
 
-        $precioPorHora = $serviciosDistintos <= 1
-            ? $tarifasGrilla->first()?->precio_por_hora
-            : null;
+        // [FIX B78-1] ANTES: $tarifasGrilla->first()?->precio_por_hora → un ÚNICO
+        // precio (el de la primera tarifa, casi siempre la diurna) asignado a TODOS
+        // los bloques. Por eso el estimado legacy mentía: trinidad 09+19 daba
+        // 50×2=100 en vez de 50+150=200; sintética 12+21 daba 50×2=100 en vez de
+        // 50+100=150. El COBRO real estaba bien (resolverTarifaParaFranja clasifica
+        // por hora); lo que fallaba era la transparencia del estimado y el precio
+        // que ve el ciudadano en la grilla pública (misma fuente).
+        //
+        // AHORA: el precio se resuelve POR BLOQUE con la MISMA regla del cobro
+        // (unica → esa; si no, diurna/nocturna según hora_inicio vs hora_inicio_noche).
+        // Así grilla y gate de cobro quedan alineados (semántica idéntica a 1043).
+        $inicioNocheSeg = self::aSegundos($campo->hora_inicio_noche ?? '18:00:00');
 
-        $precioFloat = $precioPorHora !== null ? (float) $precioPorHora : null;
+        $resolverPrecioBloque = function (array $bloque) use ($tarifasGrilla, $serviciosDistintos, $inicioNocheSeg): ?float {
+            // Campo con múltiples servicios espejados: el precio depende de la
+            // variante, no de la grilla. null → el front (camino variante) usa
+            // las tarifas de la variante, que sí traen clasificacion.
+            if ($serviciosDistintos > 1) {
+                return null;
+            }
+
+            if ($tarifasGrilla->isEmpty()) {
+                return null;
+            }
+
+            $unica = $tarifasGrilla->firstWhere('clasificacion', 'unica');
+            if ($unica) {
+                return (float) $unica->precio_por_hora;
+            }
+
+            $tipo = self::aSegundos($bloque['hora_inicio']) < $inicioNocheSeg ? 'diurna' : 'nocturna';
+            $por = $tarifasGrilla->firstWhere('clasificacion', $tipo);
+
+            return $por ? (float) $por->precio_por_hora : null;
+        };
 
         // [FIX #1 grilla] ¿La fecha pedida es HOY en hora Bolivia? Si sí,
-        // los bloques cuyo inicio ya corrió se marcan 'pasada'. Comparamos
-        // día calendario (toDateString) para que no importe cómo se parseó
-        // $fecha en el caller: el día es el día.
+        // los bloques cuyo inicio ya corrió se marcan 'pasada'.
         $ahoraBolivia = Carbon::now(self::TIMEZONE_BOLIVIA);
         $esHoyBolivia = $fecha->toDateString() === $ahoraBolivia->toDateString();
         $ahoraSeg = $esHoyBolivia ? self::aSegundos($ahoraBolivia->format('H:i:s')) : -1;
 
         // ── Paso 4: etiquetar cada bloque cruzando con las solicitudes ──
-        $bloques = $bloques->map(function ($bloque) use ($solicitudesActivas, $precioFloat, $esHoyBolivia, $ahoraSeg) {
-            // El gate temporal tiene prioridad: una franja de hoy que ya
-            // comenzó es 'pasada' aunque estuviera libre/ocupada/en cobro.
+        $bloques = $bloques->map(function ($bloque) use ($solicitudesActivas, $resolverPrecioBloque, $esHoyBolivia, $ahoraSeg) {
             $estado = ($esHoyBolivia && self::aSegundos($bloque['hora_inicio']) <= $ahoraSeg)
                 ? 'pasada'
                 : $this->calcularEstadoDelBloque($bloque, $solicitudesActivas);
@@ -113,7 +142,7 @@ class DisponibilidadService
                 'hora_inicio' => $bloque['hora_inicio'],
                 'hora_fin' => $bloque['hora_fin'],
                 'estado' => $estado,
-                'precio' => $precioFloat,
+                'precio' => $resolverPrecioBloque($bloque),
             ];
         })->all();
 

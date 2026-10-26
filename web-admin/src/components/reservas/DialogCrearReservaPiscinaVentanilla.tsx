@@ -41,9 +41,11 @@ interface Props {
 
 interface PerfilDisponible {
   perfil: string;
+  etiqueta?: string;
   disponible: number;
   reservado: number;
   aforo: number;
+  precio: number; // [FIX B69/B66] el backend (147) ya lo devuelve; el parser lo tiraba
 }
 
 interface TurnoDisponible {
@@ -52,6 +54,7 @@ interface TurnoDisponible {
   hora_inicio: string;
   hora_fin: string;
   perfiles: PerfilDisponible[];
+  perfiles_sin_tarifa: string[]; // [FIX B70]
 }
 
 interface Resultado {
@@ -61,8 +64,6 @@ interface Resultado {
   qr_string: string | null;
 }
 
-/** ⟦FIX modalidad⟧ mismo cast que el modal de cancha: filtra piscina sin
- *  depender de que types/reservas.ts declare modalidad_reserva todavía. */
 type CampoConModalidad = CampoOption & { modalidad_reserva?: string };
 
 const perfilLabel: Record<string, string> = {
@@ -72,9 +73,6 @@ const perfilLabel: Record<string, string> = {
 };
 
 const hhmm = (h: string) => (h || '').substring(0, 5);
-
-/** Ancho unificado con el modal de cancha (52rem ≈ 832px). Antes max-w-2xl
- *  (672px) → se veía más chico que el de cancha. */
 const MODAL_MAX_WIDTH = '52rem';
 
 function extraerTurnos(resp: unknown): TurnoDisponible[] {
@@ -95,12 +93,15 @@ function extraerTurnos(resp: unknown): TurnoDisponible[] {
       hora_fin: String(t.hora_fin ?? t.fin ?? ''),
       perfiles: (Array.isArray(t.perfiles) ? t.perfiles : []).map((p: any) => ({
         perfil: String(p.perfil ?? p.codigo ?? ''),
+        etiqueta: p.etiqueta ?? undefined, // [FIX B66]
         disponible: Number(p.disponible ?? p.cupo_libre ?? 0),
         reservado: Number(p.reservado ?? 0),
         aforo: Number(p.aforo ?? p.cupo ?? 0),
+        precio: Number(p.precio ?? 0),     // [FIX B69/B66] tarifa SIREB, ya no se descarta
       })),
+      perfiles_sin_tarifa: Array.isArray(t.perfiles_sin_tarifa) ? t.perfiles_sin_tarifa : [], // [FIX B70]
     }))
-    .filter((t) => t.id && t.perfiles.length > 0);
+    .filter((t) => t.id && (t.perfiles.length > 0 || t.perfiles_sin_tarifa.length > 0));
 }
 
 export default function DialogCrearReservaPiscinaVentanilla({
@@ -126,9 +127,6 @@ export default function DialogCrearReservaPiscinaVentanilla({
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
 
-  // ⟦FIX modalidad⟧ este modal es SOLO de piscina: incluye únicamente
-  // turno_por_perfil. Si el backend no manda la señal, undefined === 'turno_por_perfil'
-  // es false → queda vacío; por eso el aviso de gate de abajo (nunca misterio).
   const camposPiscina = useMemo(
     () =>
       (campos as CampoConModalidad[]).filter(
@@ -207,9 +205,20 @@ export default function DialogCrearReservaPiscinaVentanilla({
   const turnoSeleccionado = turnos.find((t) => t.id === turnoId);
   const totalPersonas = Object.values(cantidades).reduce((a, b) => a + b, 0);
 
-  // ⟦FIX submit⟧ antes el botón solo se deshabilitaba con enviando → se podía
-  // clickear con 0 turnos o 0 personas (tu captura: "Sin turnos disponibles"
-  // con botón verde activo). Ahora iguala la disciplina del modal de cancha.
+  // [FIX B69/B66] total estimado en vivo, con la tarifa SIREB que ahora sí se parsea.
+  const montoEstimado = useMemo(() => {
+    if (!turnoSeleccionado) return 0;
+    return turnoSeleccionado.perfiles.reduce((suma, p) => {
+      const cant = cantidades[p.perfil] ?? 0;
+      return suma + cant * p.precio;
+    }, 0);
+  }, [turnoSeleccionado, cantidades]);
+
+  // [FIX B75] ¿existe algún turno con cupo real?
+  const hayTurnoConCupo = turnos.some(
+    (t) => t.perfiles.reduce((a, p) => a + p.disponible, 0) > 0,
+  );
+
   const puedeEnviar =
     !!campoId &&
     !!fecha &&
@@ -227,15 +236,17 @@ export default function DialogCrearReservaPiscinaVentanilla({
         ? 'Consultando turnos…'
         : turnos.length === 0
           ? 'No hay turnos con cupo para esa fecha. Configuralos en Paramétricas → Piscina.'
-          : !turnoId
-            ? 'Elegí un turno.'
-            : totalPersonas === 0
-              ? 'Asigná al menos una persona en algún perfil.'
-              : !nombre.trim()
-                ? 'Completá el nombre del pagador.'
-                : !ciNit.trim()
-                  ? 'Completá el CI/NIT del pagador.'
-                  : null;
+          : !hayTurnoConCupo
+            ? 'Todos los turnos de esa fecha están completos. Elegí otra fecha.' // [FIX B75]
+            : !turnoId
+              ? 'Elegí un turno.'
+              : totalPersonas === 0
+                ? 'Asigná al menos una persona en algún perfil.'
+                : !nombre.trim()
+                  ? 'Completá el nombre del pagador.'
+                  : !ciNit.trim()
+                    ? 'Completá el CI/NIT del pagador.'
+                    : null;
 
   const copiar = async (texto: string, clave: string) => {
     await navigator.clipboard.writeText(texto);
@@ -303,6 +314,7 @@ export default function DialogCrearReservaPiscinaVentanilla({
             <Waves className="size-5 text-teal-600" />
             Nueva reserva de piscina (ventanilla)
           </DialogTitle>
+          {/* [PROTEGER] la frase SIREB ya estaba; no se toca. */}
           <DialogDescription>
             Elegí turno y cantidades por perfil. El precio sale del espejo SIREB.
           </DialogDescription>
@@ -416,10 +428,6 @@ export default function DialogCrearReservaPiscinaVentanilla({
                   </SelectContent>
                 </Select>
 
-                {/* ⟦GATE si el backend no expone modalidad_reserva en este
-                    listado, camposPiscina queda vacío aunque haya campos. Aviso
-                    accionable en vez de select vacío silencioso. Si ves esto,
-                    pasame el resource de listarCamposPublicos (1 línea). */}
                 {campos.length > 0 && camposPiscina.length === 0 && (
                   <p className="flex items-start gap-1.5 rounded-lg border border-amber-300/60 bg-amber-500/10 p-2 text-xs text-amber-800 dark:border-amber-700 dark:text-amber-200">
                     <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -458,19 +466,24 @@ export default function DialogCrearReservaPiscinaVentanilla({
                   {turnos.map((t) => {
                     const activo = turnoId === t.id;
                     const totalCupo = t.perfiles.reduce((a, p) => a + p.disponible, 0);
+                    const completo = totalCupo === 0; // [FIX B75]
                     return (
                       <Button
                         key={t.id}
                         type="button"
                         variant={activo ? 'default' : 'outline'}
                         className="w-full justify-start"
+                        disabled={completo}            // [FIX B75] no seleccionable si está lleno
                         onClick={() => seleccionarTurno(t.id)}
                       >
                         <div className="flex w-full items-center justify-between gap-2">
                           <span className="font-mono">
                             {hhmm(t.hora_inicio)}–{hhmm(t.hora_fin)}
                           </span>
-                          <Badge variant="secondary">{totalCupo} libres</Badge>
+                          <Badge variant={completo ? 'outline' : 'secondary'}
+                                 className={completo ? 'text-muted-foreground' : ''}>
+                            {completo ? 'Completo' : `${totalCupo} libres`}
+                          </Badge>
                         </div>
                       </Button>
                     );
@@ -483,27 +496,56 @@ export default function DialogCrearReservaPiscinaVentanilla({
               <div className="space-y-3 rounded-xl border bg-muted/50 p-4">
                 <p className="text-sm font-semibold">Cantidades por perfil</p>
                 <div className="space-y-2">
-                  {turnoSeleccionado.perfiles.map((p) => (
-                    <div key={p.perfil} className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">{perfilLabel[p.perfil] ?? p.perfil}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Disponibles: {p.disponible}
-                        </p>
+                  {turnoSeleccionado.perfiles.map((p) => {
+                    const cant = cantidades[p.perfil] ?? 0;
+                    return (
+                      <div key={p.perfil} className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{p.etiqueta ?? perfilLabel[p.perfil] ?? p.perfil}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Disponibles: {p.disponible} · {' '}
+                            {/* [FIX B66] precio por persona visible */}
+                            <span className="font-mono font-semibold text-slate-700">
+                              Bs {p.precio.toFixed(2)} c/u
+                            </span>
+                          </p>
+                          {/* [FIX B66] subtotal vivo por perfil */}
+                          {cant > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              {cant} × Bs {p.precio.toFixed(2)} ={' '}
+                              <span className="font-mono font-semibold text-slate-700">
+                                Bs {(cant * p.precio).toFixed(2)}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={p.disponible}
+                          value={cant}
+                          onChange={(e) =>
+                            setCantidad(p.perfil, Number(e.target.value || 0), p.disponible)
+                          }
+                          className="w-24"
+                        />
                       </div>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={p.disponible}
-                        value={cantidades[p.perfil] ?? 0}
-                        onChange={(e) =>
-                          setCantidad(p.perfil, Number(e.target.value || 0), p.disponible)
-                        }
-                        className="w-24"
-                      />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+
+                {/* [FIX B70] señal de perfiles que se cayeron por falta de tarifa SIREB */}
+                {turnoSeleccionado.perfiles_sin_tarifa.length > 0 && (
+                  <p className="flex items-start gap-1.5 rounded-lg border border-amber-300/60 bg-amber-500/10 p-2 text-xs text-amber-800 dark:border-amber-700 dark:text-amber-200">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                    No se ofrecen {turnoSeleccionado.perfiles_sin_tarifa.length}{' '}
+                    {turnoSeleccionado.perfiles_sin_tarifa.length === 1 ? 'perfil' : 'perfiles'}{' '}
+                    ({turnoSeleccionado.perfiles_sin_tarifa.map((x) => perfilLabel[x] ?? x).join(', ')})
+                    porque no tienen tarifa SIREB espejada. Crealos en Paramétricas → Piscina o
+                    sincronizá las tarifas.
+                  </p>
+                )}
+
                 {totalPersonas > 0 && (
                   <Badge variant="secondary">
                     {totalPersonas} {totalPersonas === 1 ? 'persona' : 'personas'}
@@ -530,8 +572,27 @@ export default function DialogCrearReservaPiscinaVentanilla({
               </div>
             </div>
 
-            {/* Motivo de bloqueo, como el modal de cancha → el operador sabe
-                por qué no puede enviar (ej. "No hay turnos con cupo…"). */}
+            {/* [FIX B69] bloque de total SIREB, espejo del modal de cancha */}
+            {totalPersonas > 0 && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/60 p-4 dark:border-teal-900 dark:bg-teal-950/30">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-300">
+                    Estimado · el monto final lo confirma SIREB
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {totalPersonas} {totalPersonas === 1 ? 'persona' : 'personas'} ·{' '}
+                    {turnoSeleccionado?.perfiles
+                      .filter((p) => (cantidades[p.perfil] ?? 0) > 0)
+                      .map((p) => `${cantidades[p.perfil]}×${perfilLabel[p.perfil] ?? p.perfil}`)
+                      .join(' + ')}
+                  </p>
+                </div>
+                <p className="text-2xl font-bold tabular-nums text-teal-900 dark:text-teal-100">
+                  Bs {montoEstimado.toFixed(2)}
+                </p>
+              </div>
+            )}
+
             {!puedeEnviar && motivoDeshabilitado && (
               <p className="text-xs text-amber-700 dark:text-amber-400">
                 {motivoDeshabilitado}

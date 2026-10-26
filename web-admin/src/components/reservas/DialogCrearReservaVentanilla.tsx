@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Check,
+  ChevronDown,
   Copy,
   Download,
   Loader2,
@@ -48,15 +49,12 @@ interface Bloque {
   hora_inicio: string;
   hora_fin: string;
   estado: string;
-  /** Espejo SIREB por bloque. Llega del backend (calcularGrilla).
-   *  null en campos con variantes (ahí el precio vive en la variante). */
   precio?: number | null;
 }
 
-/** Franja seleccionada: de la grilla (1h en punto) o a medida (inicio libre). */
 interface SlotSel {
-  inicio: string; // HH:MM:SS
-  fin: string;    // HH:MM:SS
+  inicio: string;
+  fin: string;
   origen: 'grilla' | 'amedida';
 }
 
@@ -79,15 +77,10 @@ type ApiError = {
   };
 };
 
-/** ⟦FIX modalidad⟧ CampoOption no declara modalidad_reserva en types/reservas.ts
- *  (no lo tenemos tejido). Cast local para filtrar sin romper TS. Si el resource
- *  de listarCampos no manda la señal, undefined !== 'turno_por_perfil' → pasa
- *  (no se pierden canchas). Safe para el modal de cancha. */
 type CampoConModalidad = CampoOption & { modalidad_reserva?: string };
 
 const hhmm = (h: string) => h.substring(0, 5);
 
-/** Suma 60 min a "HH:MM" (para el fin de una franja a medida de 1 hora). */
 function sumarHora(hhmmStr: string): string {
   const [h, m] = hhmmStr.split(':').map(Number);
   const total = (h || 0) * 60 + (m || 0) + 60;
@@ -96,11 +89,6 @@ function sumarHora(hhmmStr: string): string {
   return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
 }
 
-/**
- * Espejo frontend de resolverServiciosParaCrear: única > única-sola >
- * diurna/nocturna según la hora de la franja. Devuelve null si no se puede
- * resolver (el servicio no entra al checkbox ni al estimado).
- */
 function resolverTarifaServicio(
   v: VarianteArancelaria,
   clasif: string | null,
@@ -116,14 +104,9 @@ function resolverTarifaServicio(
   return null;
 }
 
-// Umbral nocturno = default del backend (hora_inicio_noche ?? 18:00).
-// Solo para el ESTIMADO orientativo; el monto autoritativo lo confirma SIREB.
 const HORA_INICIO_NOCHE_ESTIMADA = 18;
+const MODAL_MAX_WIDTH = '52rem';
 
-/** Ancho del modal en style inline para ganar al `sm:max-w-lg` del base. */
-const MODAL_MAX_WIDTH = '52rem'; // ~832px
-
-/** Hoy en hora Bolivia (UTC-4), no en UTC del navegador. */
 function hoyBoliviaISO(): string {
   try {
     return new Intl.DateTimeFormat('en-CA', {
@@ -215,14 +198,26 @@ export default function DialogCrearReservaVentanilla({
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
 
-  // ⟦FIX modalidad⟧ este modal es SOLO de franja horaria: excluye piscina
-  // (turno_por_perfil). Con undefined (señal ausente) pasa → no pierde canchas.
+  // [FIX combobox-no-deps] estado del buscador de campo, sin Popover/Command de shadcn.
+  const [campoAbierto, setCampoAbierto] = useState(false);
+  const [busquedaCampo, setBusquedaCampo] = useState('');
+  const campoWrapRef = useRef<HTMLDivElement>(null);
+  const campoInputRef = useRef<HTMLInputElement>(null);
+
   const camposCancha = useMemo(
     () =>
       (campos as CampoConModalidad[]).filter(
         (c) => c.modalidad_reserva !== 'turno_por_perfil',
       ),
     [campos],
+  );
+
+  const camposFiltrados = useMemo(
+    () =>
+      camposCancha.filter((c) =>
+        (c.nombre || c.id).toLowerCase().includes(busquedaCampo.toLowerCase().trim()),
+      ),
+    [camposCancha, busquedaCampo],
   );
 
   const variantesHorarias = useMemo(
@@ -254,8 +249,6 @@ export default function DialogCrearReservaVentanilla({
         const t = v.tarifas;
         if (t.length === 0) return false;
         if (t.length === 1) return true;
-        // P8.4B: servicios con tramo (escenario) son válidos si tienen
-        // diurna o nocturna; el precio exacto se resuelve con la franja.
         return t.some(
           (x) =>
             x.clasificacion === 'unica' ||
@@ -279,23 +272,22 @@ export default function DialogCrearReservaVentanilla({
   const subtotalFranja = useMemo(() => {
     if (slots.length === 0) return 0;
 
-    // Campo con variante: precio desde la tarifa de la variante, resuelto por tramo.
     if (varianteSeleccionada) {
       const tarifas = varianteSeleccionada.tarifas;
       const unica = tarifas.find((t) => t.clasificacion === 'unica');
-      const porClas = clasificacionAplicable
-        ? tarifas.find((t) => t.clasificacion === clasificacionAplicable)
-        : null;
-      const tarifa = unica ?? porClas;
-      if (tarifa) return Number(tarifa.monto) * slots.length;
-      return 0;
+
+      const precioDe = (inicio: string): number => {
+        if (unica) return Number(unica.monto);
+        const hora = parseInt(inicio.slice(0, 2), 10);
+        if (Number.isNaN(hora)) return 0;
+        const tipo = hora < HORA_INICIO_NOCHE_ESTIMADA ? 'diurna' : 'nocturna';
+        const t = tarifas.find((x) => x.clasificacion === tipo);
+        return t ? Number(t.monto) : 0;
+      };
+
+      return slots.reduce((acc, o) => acc + precioDe(o.inicio), 0);
     }
 
-    // Legacy (sin variantes): precio espejado que el backend ya devuelve por
-    // bloque. Antes devolvía 0 porque varianteSeleccionada era null y no había
-    // fallback → el funcionario veía "Bs 0.00" en Cancha Sintética aunque el
-    // monto final lo confirmara SIREB. Para franjas a medida (no están en
-    // bloques) se toma el precio de un bloque libre del mismo tramo.
     const precioTramo = (inicio: string): number => {
       const enGrilla = bloques.find((b) => b.hora_inicio === inicio);
       if (enGrilla?.precio != null) return Number(enGrilla.precio);
@@ -318,6 +310,8 @@ export default function DialogCrearReservaVentanilla({
     setTimeout(() => {
       setCampoId('');
       setCampoNombre('');
+      setBusquedaCampo('');
+      setCampoAbierto(false);
       setVariantes([]);
       setVarianteId('');
       setVarianteNombre('');
@@ -337,7 +331,7 @@ export default function DialogCrearReservaVentanilla({
   useEffect(() => {
     if (!open) return;
     solicitudesReservaService
-      .listarCampos({ estado: 'activo' })   // ← era listarCamposPublicos()
+      .listarCampos({ estado: 'activo' })
       .then((lista) => {
         setCampos(lista);
         const sinNombre = lista.filter((c) => !c.nombre || c.nombre === c.id);
@@ -423,10 +417,35 @@ export default function DialogCrearReservaVentanilla({
     };
   }, [open, campoId]);
 
+  // [FIX combobox-no-deps] cerrar al click afuera + Escape + autofocus al abrir.
+  useEffect(() => {
+    if (!campoAbierto) return;
+
+    campoInputRef.current?.focus();
+
+    const onPointerDown = (e: MouseEvent) => {
+      if (campoWrapRef.current && !campoWrapRef.current.contains(e.target as Node)) {
+        setCampoAbierto(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCampoAbierto(false);
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [campoAbierto]);
+
   const handleCampoChange = (nuevoId: string) => {
     setCampoId(nuevoId);
     const campo = campos.find((c) => c.id === nuevoId);
     setCampoNombre(campo?.nombre && campo.nombre !== campo.id ? campo.nombre : '');
+    setBusquedaCampo('');
+    setCampoAbierto(false);
     setVarianteId('');
     setVarianteNombre('');
     setVariantes([]);
@@ -448,7 +467,7 @@ export default function DialogCrearReservaVentanilla({
     setSlots([]);
     try {
       const disp = await solicitudesReservaService.disponibilidad(campoId, fecha);
-      setBloques(disp.abierto ? disp.bloques.filter((b: Bloque) => b.estado === 'libre') : []);
+      setBloques(disp.abierto ? disp.bloques : []);
     } catch {
       setBloques([]);
       toast.error('No se pudo consultar la disponibilidad del campo.');
@@ -711,33 +730,65 @@ export default function DialogCrearReservaVentanilla({
         ) : (
           <div className="space-y-5 py-1">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="min-w-0 space-y-2">
+              {/* [FIX combobox-no-deps] buscador dentro del trigger, sin Popover/Command. */}
+              <div className="relative min-w-0 space-y-2" ref={campoWrapRef}>
                 <Label>Campo *</Label>
-                <Select value={campoId} onValueChange={handleCampoChange}>
-                  <SelectTrigger className="w-full" aria-label="Campo deportivo">
-                    <span className="flex min-w-0 items-center gap-2 text-left">
-                      <MapPin className="size-4 shrink-0 text-muted-foreground" />
-                      <span className={`truncate ${campoNombre ? '' : 'text-muted-foreground'}`}>
-                        {campoNombre || 'Elegí el campo'}
-                      </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={campoAbierto}
+                  aria-label="Campo deportivo"
+                  className="w-full justify-between font-normal"
+                  onClick={() => setCampoAbierto((v) => !v)}
+                >
+                  <span className="flex min-w-0 items-center gap-2 text-left">
+                    <MapPin className="size-4 shrink-0 text-muted-foreground" />
+                    <span className={`truncate ${campoNombre ? '' : 'text-muted-foreground'}`}>
+                      {campoNombre || 'Elegí el campo'}
                     </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {camposCancha.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        Sin campos activos disponibles
-                      </div>
-                    ) : (
-                      camposCancha.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          <span className="block truncate" title={c.nombre || c.id}>
-                            {c.nombre || c.id}
-                          </span>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                  </span>
+                  <ChevronDown className="size-4 shrink-0 opacity-50" />
+                </Button>
+
+                {campoAbierto && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border bg-background p-1 shadow-md">
+                    <Input
+                      ref={campoInputRef}
+                      value={busquedaCampo}
+                      onChange={(e) => setBusquedaCampo(e.target.value)}
+                      placeholder="Buscar campo…"
+                      className="mb-1 h-8 text-sm"
+                      aria-label="Buscar campo"
+                    />
+                    <div className="max-h-56 overflow-y-auto">
+                      {camposFiltrados.length === 0 ? (
+                        <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                          Sin campos que coincidan.
+                        </p>
+                      ) : (
+                        camposFiltrados.map((c) => {
+                          const activo = c.id === campoId;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => handleCampoChange(c.id)}
+                              className={`flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted ${
+                                activo ? 'bg-muted font-medium' : ''
+                              }`}
+                            >
+                              <span className="block truncate" title={c.nombre || c.id}>
+                                {c.nombre || c.id}
+                              </span>
+                              {activo && <Check className="size-4 shrink-0" />}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="min-w-0 space-y-2">
@@ -849,22 +900,46 @@ export default function DialogCrearReservaVentanilla({
                     <div className="flex flex-wrap gap-2">
                       {bloques.map((b) => {
                         const activo = slots.some((s) => s.inicio === b.hora_inicio);
+                        const seleccionable = b.estado === 'libre';
+                        const etiqueta =
+                          b.estado === 'ocupada'
+                            ? 'Ocupada'
+                            : b.estado === 'bloqueada_temporal'
+                              ? 'En cobro'
+                              : b.estado === 'pasada'
+                                ? 'Pasada'
+                                : b.estado;
                         return (
                           <Button
                             key={b.hora_inicio}
                             type="button"
-                            variant={activo ? 'default' : 'outline'}
+                            variant={activo ? 'default' : seleccionable ? 'outline' : 'ghost'}
                             size="sm"
+                            disabled={!seleccionable}
+                            title={
+                              seleccionable
+                                ? undefined
+                                : `${etiqueta} — no disponible para vender`
+                            }
+                            className={
+                              seleccionable
+                                ? ''
+                                : 'pointer-events-none opacity-50 line-through decoration-muted-foreground/40'
+                            }
                             onClick={() => toggleSlot(b)}
                           >
                             {hhmm(b.hora_inicio)}–{hhmm(b.hora_fin)}
+                            {!seleccionable && (
+                              <span className="ml-1.5 text-[10px] font-normal">
+                                {etiqueta}
+                              </span>
+                            )}
                           </Button>
                         );
                       })}
                     </div>
                   )}
 
-                  {/* ── Opción B: franja a medida (inicio libre + 1 hora) ── */}
                   <div className="space-y-2 rounded-lg border border-dashed bg-muted/30 p-3">
                     <Label className="text-xs font-semibold text-muted-foreground">
                       Otra franja a medida (inicio + 1 hora)
@@ -910,7 +985,8 @@ export default function DialogCrearReservaVentanilla({
                     )}
 
                     <p className="text-[11px] leading-snug text-muted-foreground">
-                      Para horarios que no están en la grilla (ej. 08:30). Se cobra como 1 hora.
+                      Para horarios que no están en la grilla (ej. 08:30). Se cobra como 1 hora,
+                      con el tramo (diurno/nocturno) de su hora de inicio.
                       El solape con otras franjas lo valida el sistema al crear.
                     </p>
                   </div>
@@ -1022,7 +1098,6 @@ export default function DialogCrearReservaVentanilla({
               </div>
             </div>
 
-            {/* Caja de estimado: block, con truncate → nunca colapsa palabra por palabra */}
             <div className="rounded-xl border bg-card p-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="min-w-0 truncate text-xs text-muted-foreground">

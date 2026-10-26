@@ -11,6 +11,8 @@ use App\Models\TipoCampo;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use App\Models\TarifaCampo;
+use Illuminate\Support\Str;
 
 /**
  * Endpoint de disponibilidad horaria pública.
@@ -209,5 +211,160 @@ class DisponibilidadControllerTest extends TestCase
 
         $response->assertUnprocessable();
         $response->assertJsonValidationErrors('fecha');
+    }
+
+    // ─────────────────────────────────────────────
+    // Oráculo B78: el precio de la grilla se resuelve POR BLOQUE
+    // (diurna/nocturna según hora_inicio vs hora_inicio_noche), no con
+    // $tarifasGrilla->first() asignado a todos. Estos tests fallarían con el
+    // bug viejo (first() = diurna en todos los bloques).
+    // ─────────────────────────────────────────────
+
+    public function test_grilla_clasifica_precio_diurno_y_nocturno_por_bloque(): void
+    {
+        $fecha = Carbon::now()->next('Monday');
+
+        // Corte nocturno explícito a las 18:00 (mismo default que el fix).
+        $this->campo->update(['hora_inicio_noche' => '18:00:00']);
+
+        HorarioAtencion::create([
+            'campo_id' => $this->campo->id,
+            'dia_semana' => 1,
+            'hora_apertura' => '08:00',
+            'hora_cierre' => '21:00',
+        ]);
+
+        // Dos tarifas del MISMO servicio (null) → serviciosDistintos = 0 → entra al
+        // resolver por bloque. Diurna 50 / Nocturna 150 (precios de "cancha nueva trinidad").
+        $this->crearTarifaGrilla('diurna', 50.00, null);
+        $this->crearTarifaGrilla('nocturna', 150.00, null);
+
+        $response = $this->getJson(
+            "/api/v1/public/campos/{$this->campo->id}/disponibilidad?fecha={$fecha->toDateString()}"
+        );
+
+        $response->assertOk();
+        $bloques = collect($response->json('data.bloques'));
+
+        $diurno = $bloques->firstWhere('hora_inicio', '09:00:00');
+        $nocturno = $bloques->firstWhere('hora_inicio', '19:00:00');
+
+        $this->assertNotNull($diurno);
+        $this->assertNotNull($nocturno);
+
+        // El corazón de B78: 09:00 cobra diurna, 19:00 cobra nocturna. Con el bug
+        // viejo ambos darían 50 (first()).
+        $this->assertEqualsWithDelta(50.00, (float) $diurno['precio'], 0.001, 'Bloque diurno debe usar tarifa diurna.');
+        $this->assertEqualsWithDelta(150.00, (float) $nocturno['precio'], 0.001, 'Bloque nocturno debe usar tarifa nocturna (B78).');
+    }
+
+    public function test_grilla_tarifa_unica_aplica_el_mismo_precio_a_todos_los_bloques(): void
+    {
+        $fecha = Carbon::now()->next('Monday');
+        $this->campo->update(['hora_inicio_noche' => '18:00:00']);
+
+        HorarioAtencion::create([
+            'campo_id' => $this->campo->id,
+            'dia_semana' => 1,
+            'hora_apertura' => '08:00',
+            'hora_cierre' => '21:00',
+        ]);
+
+        // Clasificación 'unica' → manda sin importar la hora (rama unica del closure).
+        $this->crearTarifaGrilla('unica', 80.00, null);
+
+        $response = $this->getJson(
+            "/api/v1/public/campos/{$this->campo->id}/disponibilidad?fecha={$fecha->toDateString()}"
+        );
+
+        $response->assertOk();
+        $bloques = collect($response->json('data.bloques'));
+
+        foreach (['09:00:00', '19:00:00'] as $hora) {
+            $b = $bloques->firstWhere('hora_inicio', $hora);
+            $this->assertNotNull($b);
+            $this->assertEqualsWithDelta(80.00, (float) $b['precio'], 0.001, "Tarifa unica debe aplicar a {$hora}.");
+        }
+    }
+
+    public function test_grilla_devuelve_precio_nulo_cuando_el_campo_tiene_multiples_servicios(): void
+    {
+        $fecha = Carbon::now()->next('Monday');
+        $this->campo->update(['hora_inicio_noche' => '18:00:00']);
+
+        HorarioAtencion::create([
+            'campo_id' => $this->campo->id,
+            'dia_semana' => 1,
+            'hora_apertura' => '08:00',
+            'hora_cierre' => '21:00',
+        ]);
+
+        // Dos SERVICIOS distintos → serviciosDistintos = 2 → el precio depende de la
+        // variante, no de la grilla → null (rama P8.2B conservada en el fix).
+        $this->crearTarifaGrilla('diurna', 50.00, (string) Str::uuid());
+        $this->crearTarifaGrilla('nocturna', 150.00, (string) Str::uuid());
+
+        $response = $this->getJson(
+            "/api/v1/public/campos/{$this->campo->id}/disponibilidad?fecha={$fecha->toDateString()}"
+        );
+
+        $response->assertOk();
+        $bloques = collect($response->json('data.bloques'));
+
+        $this->assertNotEmpty($bloques);
+        foreach ($bloques as $b) {
+            $this->assertNull($b['precio'], 'Campo multi-servicio: la grilla no fija precio (depende de la variante).');
+        }
+    }
+
+    public function test_grilla_devuelve_precio_nulo_cuando_no_hay_tarifas_espejadas(): void
+    {
+        $fecha = Carbon::now()->next('Monday');
+
+        HorarioAtencion::create([
+            'campo_id' => $this->campo->id,
+            'dia_semana' => 1,
+            'hora_apertura' => '08:00',
+            'hora_cierre' => '21:00',
+        ]);
+
+        // Sin tarifas → rama isEmpty del closure → null (no 0, para que el front
+        // distinga "sin espejo" de "gratis").
+        $response = $this->getJson(
+            "/api/v1/public/campos/{$this->campo->id}/disponibilidad?fecha={$fecha->toDateString()}"
+        );
+
+        $response->assertOk();
+        $bloques = collect($response->json('data.bloques'));
+
+        $this->assertNotEmpty($bloques);
+        foreach ($bloques as $b) {
+            $this->assertNull($b['precio'], 'Sin tarifa espejada: precio null, no 0.');
+        }
+    }
+
+    /**
+     * Helper: crea una tarifa que PASA el scope paraGrillaHoraria()
+     * (liquidable + vigente + perfil null + clasificacion horaria), alineado con
+     * el fix B78 que ahora lee con ese scope en vez de la relación cruda.
+     */
+    private function crearTarifaGrilla(string $clasificacion, float $precio, ?string $servicioSirebId): TarifaCampo
+    {
+        return TarifaCampo::create([
+            'campo_id' => $this->campo->id,
+            'servicio_sireb_id' => $servicioSirebId,
+            'tarifa_sireb_id' => (string) Str::uuid(),
+            'etiqueta_sireb' => ucfirst($clasificacion),
+            'liquidable' => true,
+            'tarifario_estado' => 'vigente',
+            'estado_tarifa_sireb' => 'activo',
+            'categorias_sireb' => [],
+            'perfil' => null,
+            'clasificacion' => $clasificacion,
+            'precio_por_hora' => $precio,
+            'vigente_desde' => now()->subDay(),
+            'vigente_hasta' => null,
+            'creado_por' => null,
+        ]);
     }
 }

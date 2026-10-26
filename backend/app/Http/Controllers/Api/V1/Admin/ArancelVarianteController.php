@@ -137,7 +137,7 @@ class ArancelVarianteController extends Controller
             tabla: 'arancel_variantes',
             registroId: $variante->id,
             accion: 'crear_variante',
-            usuarioId: auth()->id(),
+            usuarioId: $this->usuarioId($request), // [FIX P1013 v2] $request->user(), no auth()
             datosAnteriores: null,
             datosNuevos: $validated + ['campo_id' => $campoDeportivo->id, 'servicio_sireb_codigo' => $servicioSirebCodigo],
         );
@@ -214,7 +214,7 @@ class ArancelVarianteController extends Controller
             tabla: 'arancel_variantes',
             registroId: $variante->id,
             accion: 'actualizar_variante',
-            usuarioId: auth()->id(),
+            usuarioId: $this->usuarioId($request), // [FIX P1013 v2] $request->user(), no auth()
             datosAnteriores: $anterior,
             datosNuevos: $variante->only([
                 'codigo', 'nombre', 'tipo_uso', 'servicio_sireb_id',
@@ -234,8 +234,12 @@ class ArancelVarianteController extends Controller
      * Desvincula la variante del servicio SIREB y la desactiva, SIN borrar
      * físico (respeta FK desde solicitud_reserva_detalle) y SIN tocar el campo
      * padre. Libera la unique de servicio_sireb_id para poder re-usar el servicio.
+     *
+     * [FIX P1013 v2] gana Request $request como primer parámetro: Laravel lo
+     * inyecta por type-hint y los modelos siguen bindeándose por segmento de
+     * ruta ({campoDeportivo}/{variante}), así que routes/api.php NO cambia.
      */
-    public function destroy(CampoDeportivo $campoDeportivo, ArancelVariante $variante): JsonResponse
+    public function destroy(Request $request, CampoDeportivo $campoDeportivo, ArancelVariante $variante): JsonResponse
     {
         abort_unless($variante->campo_id === $campoDeportivo->id, 404);
 
@@ -251,7 +255,7 @@ class ArancelVarianteController extends Controller
             tabla: 'arancel_variantes',
             registroId: $variante->id,
             accion: 'desvincular_variante',
-            usuarioId: auth()->id(),
+            usuarioId: $this->usuarioId($request), // [FIX P1013 v2] $request->user(), no auth()
             datosAnteriores: $anterior,
             datosNuevos: ['activo' => false, 'servicio_sireb_id' => null, 'servicio_sireb_codigo' => null],
         );
@@ -331,5 +335,21 @@ class ArancelVarianteController extends Controller
                 ];
             })->values()->all(),
         ], 200, [], JSON_PRESERVE_ZERO_FRACTION);
+    }
+
+    /**
+     * [FIX P1013 v2] auth() sin args devuelve Factory/AuthManager, cuyo __call
+     * mágico no se resuelve estáticamente (por eso auth()->id() Y auth()->user()
+     * dan P1013). Request::user() SÍ está declarado en Illuminate\Http\Request
+     * (Authorizable|null); el @var lo angosta a Funcionario (HasUuids → id
+     * string). Mismo patrón que OcupacionController / SolicitudReservaController,
+     * que no dan warning.
+     */
+    private function usuarioId(Request $request): ?string
+    {
+        /** @var \App\Models\Funcionario|null $usuario */
+        $usuario = $request->user();
+
+        return $usuario?->id;
     }
 }

@@ -34,40 +34,21 @@ class PiscinaDisponibilidadService
             throw new \InvalidArgumentException('Campo no encontrado');
         }
 
-        // Validar que sea piscina
         if ($campo->modalidad_reserva?->value !== 'turno_por_perfil') {
-            return [
-                'campo_id' => $campoId,
-                'fecha' => $fecha,
-                'abierto' => false,
-                'turnos' => [],
-            ];
+            return ['campo_id' => $campoId, 'fecha' => $fecha, 'abierto' => false, 'turnos' => []];
         }
 
-        // Validar fecha futura (máximo 60 días)
         $fechaCarbon = Carbon::parse($fecha);
         $hoy = Carbon::now();
         $maxAnticipacion = 60;
 
         if ($fechaCarbon->lt($hoy->startOfDay())) {
-            return [
-                'campo_id' => $campoId,
-                'fecha' => $fecha,
-                'abierto' => false,
-                'turnos' => [],
-            ];
+            return ['campo_id' => $campoId, 'fecha' => $fecha, 'abierto' => false, 'turnos' => []];
         }
-
         if ($fechaCarbon->gt($hoy->copy()->addDays($maxAnticipacion)->endOfDay())) {
-            return [
-                'campo_id' => $campoId,
-                'fecha' => $fecha,
-                'abierto' => false,
-                'turnos' => [],
-            ];
+            return ['campo_id' => $campoId, 'fecha' => $fecha, 'abierto' => false, 'turnos' => []];
         }
 
-        // Obtener turnos activos para esa fecha
         $turnos = PiscinaTurno::where('campo_id', $campoId)
             ->where('fecha', $fecha)
             ->where('estado', 'activo')
@@ -79,57 +60,52 @@ class PiscinaDisponibilidadService
 
         foreach ($turnos as $turno) {
             $perfilesData = [];
+            $sinTarifa = [];   // [FIX B70] acumulo los perfiles que se caen por falta de tarifa
 
             foreach ($turno->perfiles as $perfilTurno) {
-                // Solo perfiles activos
                 if ($perfilTurno->estado !== 'activo') {
                     continue;
                 }
 
-                // Resolver tarifa desde espejo SIREB
                 $tarifa = $this->tarifaResolver->resolver(
                     $campoId,
                     $perfilTurno->perfil,
                     $turno->hora_inicio,
                 );
 
-                // Si no hay tarifa vigente, no ofrecer este perfil
                 if (!$tarifa) {
+                    $sinTarifa[] = $perfilTurno->perfil;   // [FIX B70] ya no es silencio: lo registro
                     continue;
                 }
 
-                // Calcular horario (diurno/nocturno)
                 $horario = $this->determinarHorario($turno->hora_inicio, $campo->hora_inicio_noche);
 
                 $perfilesData[] = [
-                    'perfil'           => $perfilTurno->perfil,
-                    'etiqueta'         => $this->etiquetaPerfil($perfilTurno->perfil),
-                    'precio'           => (float) $tarifa->precio_por_hora,     // ✅ tarifa SIREB, no perfil
-                    'precio_unitario'  => (float) $perfilTurno->precio_unitario, // mantener para auditoría
-                    'cupo'             => $perfilTurno->cupo,
-                    'disponible'       => max(0, (int) $perfilTurno->cupo - (int) $perfilTurno->reservado),
-                    'tarifa_sireb_id'  => $tarifa->tarifa_sireb_id,
-                    'horario'          => $horario,
+                    'perfil' => $perfilTurno->perfil,
+                    'etiqueta' => $this->etiquetaPerfil($perfilTurno->perfil),
+                    'precio' => (float) $tarifa->precio_por_hora,
+                    'precio_unitario' => (float) $perfilTurno->precio_unitario,
+                    'cupo' => $perfilTurno->cupo,
+                    'disponible' => max(0, (int) $perfilTurno->cupo - (int) $perfilTurno->reservado),
+                    'tarifa_sireb_id' => $tarifa->tarifa_sireb_id,
+                    'horario' => $horario,
                 ];
             }
 
-            // Solo incluir turnos con al menos un perfil disponible
-            if (!empty($perfilesData)) {
+            // [FIX B70] incluyo el turno si tiene perfiles ofrecidos O si tuvo caídas,
+            // para que la señal de "faltan perfiles" llegue al front.
+            if (!empty($perfilesData) || !empty($sinTarifa)) {
                 $turnosData[] = [
                     'id' => $turno->id,
-                    'hora_inicio' => substr($turno->hora_inicio, 0, 5), // HH:MM
-                    'hora_fin' => substr($turno->hora_fin, 0, 5), // HH:MM
+                    'hora_inicio' => substr($turno->hora_inicio, 0, 5),
+                    'hora_fin' => substr($turno->hora_fin, 0, 5),
                     'perfiles' => $perfilesData,
+                    'perfiles_sin_tarifa' => $sinTarifa,   // [FIX B70]
                 ];
             }
         }
 
-        return [
-            'campo_id' => $campoId,
-            'fecha' => $fecha,
-            'abierto' => true,
-            'turnos' => $turnosData,
-        ];
+        return ['campo_id' => $campoId, 'fecha' => $fecha, 'abierto' => true, 'turnos' => $turnosData];
     }
 
     /**

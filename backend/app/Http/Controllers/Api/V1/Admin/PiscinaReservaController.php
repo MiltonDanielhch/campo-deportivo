@@ -236,7 +236,7 @@ class PiscinaReservaController extends Controller
             fwrite($handle, "\xEF\xBB\xBF");
 
             foreach ($this->reservas->exportarCsv($request) as $row) {
-                fputcsv($handle, $row);
+                fputcsv($handle, $row, ';');
             }
 
             fclose($handle);
