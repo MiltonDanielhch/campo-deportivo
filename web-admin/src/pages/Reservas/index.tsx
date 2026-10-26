@@ -55,6 +55,7 @@ import type {
 import DialogDetalleReserva from '@/components/reservas/DialogDetalleReserva';
 import PiscinaReservasTab from '@/components/reservas/PiscinaReservasTab';
 import DialogCrearReservaVentanilla from '@/components/reservas/DialogCrearReservaVentanilla';
+import RegularizarUsoDialog from '@/components/reservas/RegularizarUsoDialog';
 
 const estadoConfig: Record<
   EstadoReserva,
@@ -160,6 +161,7 @@ export default function Reservas() {
   const esAdmin = rol === 'admin_parametricas' || rol === 'admin_reservas';
 
   const [crearOpen, setCrearOpen] = useState(false);
+  const [regularizarOpen, setRegularizarOpen] = useState(false);
 
   const [solicitudes, setSolicitudes] = useState<SolicitudReservaAdmin[]>([]);
   const [meta, setMeta] = useState<MetaListado | null>(null);
@@ -535,6 +537,16 @@ export default function Reservas() {
               Nueva Reserva
             </Button>
           )}
+          {esAdmin && (
+            <Button
+              variant="outline"
+              onClick={() => setRegularizarOpen(true)}
+              title="Cobrar un uso que ya ocurrió pero no se pudo pagar (caída del sistema)"
+            >
+              <AlertTriangle className="mr-2 size-4" />
+              Regularizar uso
+            </Button>
+          )}
         </div>
       </div>
 
@@ -690,6 +702,11 @@ export default function Reservas() {
       <DialogCrearReservaVentanilla
         open={crearOpen}
         onOpenChange={setCrearOpen}
+        onCreada={cargarSolicitudes}
+      />
+      <RegularizarUsoDialog
+        open={regularizarOpen}
+        onOpenChange={setRegularizarOpen}
         onCreada={cargarSolicitudes}
       />
     </div>

@@ -77,6 +77,22 @@ export const solicitudesReservaService = {
     return data.data;
   },
 
+  // [B77-B] Regularización de uso tras caída (admin-only). Mismo shape de respuesta
+  // que crearDesdeVentanilla (codigo_seguimiento, monto_total, referencia, qr_string).
+  regularizar: async (payload: {
+    franjas: { campo_id: string; fecha: string; hora_inicio: string; hora_fin: string }[];
+    nombre_pagador: string;
+    ci_nit_pagador: string;
+    telefono_pagador?: string;
+    motivo: string;
+  }): Promise<{ data: { codigo_seguimiento: string; monto_total: number; referencia_recaudaciones: string | null; qr_string: string | null } }> => {
+    const { data } = await apiClient.post(
+      '/v1/admin/solicitudes-reserva/regularizar',
+      payload,
+    );
+    return data;
+  },
+
   /** Creación desde ventanilla (admin). Devuelve código de seguimiento + cobro. */
   async crearDesdeVentanilla(payload: {
     franjas: Array<{

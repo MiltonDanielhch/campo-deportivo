@@ -89,6 +89,14 @@ function sumarHora(hhmmStr: string): string {
   return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
 }
 
+// [FIX B79] parsea "HH:MM[:SS]" a segundos, espejo de DisponibilidadService::aSegundos.
+// Reemplaza la comparación de hora entera contra el 18 hardcodeado, que fallaba con
+// cortes en :30 (ej. 18:30) tanto en el camino legacy como en el de variante/servicios.
+function aSegundosHora(h: string): number {
+  const [hh, mm, ss] = (h || '').split(':').map(Number);
+  return (hh || 0) * 3600 + (mm || 0) * 60 + (ss || 0);
+}
+
 function resolverTarifaServicio(
   v: VarianteArancelaria,
   clasif: string | null,
@@ -104,7 +112,10 @@ function resolverTarifaServicio(
   return null;
 }
 
-const HORA_INICIO_NOCHE_ESTIMADA = 18;
+// [FIX B79] eliminada HORA_INICIO_NOCHE_ESTIMADA = 18: el corte real llega de la grilla
+// (data.hora_inicio_noche) y se deriva en corteNocheSeg abajo. Default 18:00:00 solo si
+// el backend no manda la señal (versión vieja / abierto=false).
+
 const MODAL_MAX_WIDTH = '52rem';
 
 function hoyBoliviaISO(): string {
@@ -198,9 +209,10 @@ export default function DialogCrearReservaVentanilla({
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
 
-  // [FIX combobox-no-deps] estado del buscador de campo, sin Popover/Command de shadcn.
   const [campoAbierto, setCampoAbierto] = useState(false);
   const [busquedaCampo, setBusquedaCampo] = useState('');
+  // [FIX B79] corte nocturno REAL del campo, llega de la grilla (data.hora_inicio_noche).
+  const [horaInicioNocheGrilla, setHoraInicioNocheGrilla] = useState<string | null>(null);
   const campoWrapRef = useRef<HTMLDivElement>(null);
   const campoInputRef = useRef<HTMLInputElement>(null);
 
@@ -235,12 +247,17 @@ export default function DialogCrearReservaVentanilla({
     [variantesHorarias, varianteId],
   );
 
+  // [FIX B79] segundos del corte nocturno, con default 18:00:00 si la grilla no lo manda.
+  const corteNocheSeg = useMemo(
+    () => aSegundosHora(horaInicioNocheGrilla ?? '18:00:00'),
+    [horaInicioNocheGrilla],
+  );
+
   const clasificacionAplicable = useMemo(() => {
     if (slots.length === 0) return null;
-    const hora = parseInt(slots[0].inicio.slice(0, 2), 10);
-    if (Number.isNaN(hora)) return null;
-    return hora < HORA_INICIO_NOCHE_ESTIMADA ? 'diurna' : 'nocturna';
-  }, [slots]);
+    // [FIX B79] compara en segundos contra el corte real (antes: hora entera vs 18).
+    return aSegundosHora(slots[0].inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
+  }, [slots, corteNocheSeg]);
 
   const serviciosAdicionalesValidos = useMemo(
     () =>
@@ -278,9 +295,8 @@ export default function DialogCrearReservaVentanilla({
 
       const precioDe = (inicio: string): number => {
         if (unica) return Number(unica.monto);
-        const hora = parseInt(inicio.slice(0, 2), 10);
-        if (Number.isNaN(hora)) return 0;
-        const tipo = hora < HORA_INICIO_NOCHE_ESTIMADA ? 'diurna' : 'nocturna';
+        // [FIX B79] corte real en segundos (antes hora entera vs 18).
+        const tipo = aSegundosHora(inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
         const t = tarifas.find((x) => x.clasificacion === tipo);
         return t ? Number(t.monto) : 0;
       };
@@ -291,17 +307,16 @@ export default function DialogCrearReservaVentanilla({
     const precioTramo = (inicio: string): number => {
       const enGrilla = bloques.find((b) => b.hora_inicio === inicio);
       if (enGrilla?.precio != null) return Number(enGrilla.precio);
-      const hora = parseInt(inicio.slice(0, 2), 10);
-      const tipo = hora < HORA_INICIO_NOCHE_ESTIMADA ? 'diurna' : 'nocturna';
+      // [FIX B79] a-medida: tramo según corte real, no 18 hardcodeado.
+      const tipo = aSegundosHora(inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
       const ref = bloques.find((b) => {
-        const bh = parseInt(b.hora_inicio.slice(0, 2), 10);
-        const bt = bh < HORA_INICIO_NOCHE_ESTIMADA ? 'diurna' : 'nocturna';
+        const bt = aSegundosHora(b.hora_inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
         return bt === tipo && b.precio != null;
       });
       return ref?.precio != null ? Number(ref.precio) : 0;
     };
     return slots.reduce((acc, o) => acc + precioTramo(o.inicio), 0);
-  }, [varianteSeleccionada, slots, clasificacionAplicable, bloques]);
+  }, [varianteSeleccionada, slots, clasificacionAplicable, bloques, corteNocheSeg]);
 
   const totalEstimado = subtotalFranja + totalServicios;
 
@@ -312,6 +327,7 @@ export default function DialogCrearReservaVentanilla({
       setCampoNombre('');
       setBusquedaCampo('');
       setCampoAbierto(false);
+      setHoraInicioNocheGrilla(null); // [FIX B79]
       setVariantes([]);
       setVarianteId('');
       setVarianteNombre('');
@@ -417,7 +433,6 @@ export default function DialogCrearReservaVentanilla({
     };
   }, [open, campoId]);
 
-  // [FIX combobox-no-deps] cerrar al click afuera + Escape + autofocus al abrir.
   useEffect(() => {
     if (!campoAbierto) return;
 
@@ -467,9 +482,13 @@ export default function DialogCrearReservaVentanilla({
     setSlots([]);
     try {
       const disp = await solicitudesReservaService.disponibilidad(campoId, fecha);
+      // [FIX B79] leo el corte real de la grilla. Cast local hasta que el type de
+      // disponibilidad declare hora_inicio_noche; si no llega, null → default 18:00:00.
+      setHoraInicioNocheGrilla((disp as any).hora_inicio_noche ?? null);
       setBloques(disp.abierto ? disp.bloques : []);
     } catch {
       setBloques([]);
+      setHoraInicioNocheGrilla(null); // [FIX B79]
       toast.error('No se pudo consultar la disponibilidad del campo.');
     } finally {
       setCargandoSlots(false);
@@ -730,7 +749,6 @@ export default function DialogCrearReservaVentanilla({
         ) : (
           <div className="space-y-5 py-1">
             <div className="grid gap-4 sm:grid-cols-2">
-              {/* [FIX combobox-no-deps] buscador dentro del trigger, sin Popover/Command. */}
               <div className="relative min-w-0 space-y-2" ref={campoWrapRef}>
                 <Label>Campo *</Label>
                 <Button
@@ -819,6 +837,7 @@ export default function DialogCrearReservaVentanilla({
                     Este campo tiene variantes arancelarias, pero ninguna es por hora.
                     Esta ventanilla por ahora solo reserva franjas horarias.
                   </p>
+
                 ) : (
                   <>
                     <Select
@@ -940,6 +959,7 @@ export default function DialogCrearReservaVentanilla({
                     </div>
                   )}
 
+                  {/* ── Opción B: franja a medida (inicio libre + 1 hora) ── */}
                   <div className="space-y-2 rounded-lg border border-dashed bg-muted/30 p-3">
                     <Label className="text-xs font-semibold text-muted-foreground">
                       Otra franja a medida (inicio + 1 hora)
@@ -988,6 +1008,12 @@ export default function DialogCrearReservaVentanilla({
                       Para horarios que no están en la grilla (ej. 08:30). Se cobra como 1 hora,
                       con el tramo (diurno/nocturno) de su hora de inicio.
                       El solape con otras franjas lo valida el sistema al crear.
+                    </p>
+                    {/* [D42] el funcionario no busca el botón de cobro atrasado acá. */}
+                    <p className="text-[11px] leading-snug text-amber-700 dark:text-amber-400">
+                      Las franjas ya pasadas no se venden desde acá. Si alguien usó la cancha y no
+                      pudo pagar (caída del sistema), cobralo desde <strong>Regularizar uso</strong>{' '}
+                      en el listado de Reservas.
                     </p>
                   </div>
                 </>
