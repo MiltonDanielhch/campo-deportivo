@@ -17,6 +17,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  TrendingUp,
   UserCheck,
   Waves,
   XCircle,
@@ -138,13 +139,25 @@ function primeraFecha(detalles?: DetalleSolicitudAdmin[]): string {
   return detalles?.find((detalle) => detalle.fecha_reserva)?.fecha_reserva ?? '—';
 }
 
+/**
+ * Normaliza nombre a title case (para datos viejos que vienen en mayúsculas/minúsculas).
+ * Los datos nuevos ya vienen normalizados del backend.
+ */
+function normalizarNombre(nombre?: string | null): string {
+  if (!nombre) return '—';
+  return nombre
+    .toLowerCase()
+    .split(' ')
+    .map((palabra) => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+    .join(' ');
+}
+
 export default function Reservas() {
   const { funcionario } = useAuth();
 
   const rol = (funcionario as any)?.rol?.nombre as string | undefined;
   const esAdminParametricas = rol === 'admin_parametricas';
-  const esAdmin =
-  rol === 'admin_parametricas' || rol === 'admin_reservas';
+  const esAdmin = rol === 'admin_parametricas' || rol === 'admin_reservas';
 
   const [crearOpen, setCrearOpen] = useState(false);
 
@@ -310,6 +323,12 @@ export default function Reservas() {
 
   const stats = meta?.stats;
 
+  // Calcular tasa de conversión (confirmadas / total de intentos de pago)
+  const totalIntentos = (stats?.confirmadas ?? 0) + (stats?.expiradas ?? 0);
+  const tasaConversion = totalIntentos > 0
+    ? ((stats?.confirmadas ?? 0) / totalIntentos) * 100
+    : 0;
+
   const cards = [
     {
       label: 'Total',
@@ -328,6 +347,18 @@ export default function Reservas() {
       value: stats?.confirmadas ?? 0,
       Icon: CheckCircle2,
       accent: 'text-emerald-600',
+    },
+    {
+      label: 'Expiradas',
+      value: stats?.expiradas ?? 0,
+      Icon: XCircle,
+      accent: 'text-red-600',
+    },
+    {
+      label: 'Tasa conversión',
+      value: `${tasaConversion.toFixed(1)}%`,
+      Icon: TrendingUp,
+      accent: 'text-blue-600',
     },
     {
       label: 'Monto confirmado',
@@ -364,7 +395,7 @@ export default function Reservas() {
 
         <TabsContent value="campos" className="space-y-6">
       {/* Stats cards */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         {cards.map((card) => {
           const Icon = card.Icon;
 
@@ -549,7 +580,7 @@ export default function Reservas() {
 
                   <TableCell>
                     <p className="text-sm font-medium">
-                      {solicitud.nombre_pagador || '—'}
+                      {normalizarNombre(solicitud.nombre_pagador)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {solicitud.ci_nit_pagador || 'Sin CI/NIT'}

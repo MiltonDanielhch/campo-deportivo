@@ -193,46 +193,55 @@ class PiscinaReservaController extends Controller
             return response()->json(['message' => 'Reserva no encontrada'], 404);
         }
 
-        // Solo se pueden cancelar reservas pendientes
-        if ($reserva->estado !== EstadoPiscinaReserva::Pendiente) {
-            return response()->json([
-                'message' => 'Solo se pueden cancelar reservas pendientes',
-            ], 422);
-        }
-
         $validated = $request->validate([
             'motivo' => ['required', 'string'],
         ]);
 
+        /** @var \App\Models\Funcionario $funcionario */
+        $funcionario = $request->user();
+
         try {
-            DB::transaction(function () use ($reserva, $validated) {
-                // Actualizar estado
-                $reserva->update([
-                    'estado' => EstadoPiscinaReserva::Cancelada,
-                    'motivo_rechazo' => $validated['motivo'],
-                ]);
-
-                // Liberar cupos
-                foreach ($reserva->detalles as $detalle) {
-                    $perfilTurno = $detalle->turno->perfiles()
-                        ->where('perfil', $detalle->perfil)
-                        ->first();
-
-                    if ($perfilTurno) {
-                        $perfilTurno->decrement('reservado', $detalle->cantidad);
-                    }
-                }
-            });
-
-            return response()->json([
-                'message' => 'Reserva cancelada exitosamente',
-                'data' => $reserva->load('detalles'),
-            ]);
+            $this->reservas->cancelar($reserva, $validated['motivo'], $funcionario->id);
+        } catch (\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Error al cancelar reserva',
-                'error' => $e->getMessage(),
-            ], 500);
+            Log::channel('sireb')->error('Error al cancelar reserva de piscina', [
+                'reserva_id' => $reserva->id,
+                'error'      => $e->getMessage(),
+            ]);
+            return response()->json(['message' => 'Error al cancelar reserva'], 500);
         }
+
+        return response()->json([
+            'message' => 'Reserva cancelada exitosamente',
+            'data'    => $reserva->fresh()->load('detalles'),
+        ]);
+    }
+
+    /**
+     * GET /api/v1/admin/piscina/reservas/exportar-csv
+     */
+    public function exportarCsv(Request $request)
+    {
+        $fileName = 'reservas-piscina-'.now()->format('Y-m-d-His').'.csv';
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
+        ];
+
+        $callback = function () use ($request) {
+            $handle = fopen('php://output', 'w');
+            // BOM UTF-8 para Excel
+            fwrite($handle, "\xEF\xBB\xBF");
+
+            foreach ($this->reservas->exportarCsv($request) as $row) {
+                fputcsv($handle, $row);
+            }
+
+            fclose($handle);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 }

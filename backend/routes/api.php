@@ -261,6 +261,7 @@ Route::middleware('auth.oauth')->group(function () {
             Route::get('/reservas', [AdminPiscinaReservaController::class, 'index']);
             Route::post('/reservas', [AdminPiscinaReservaController::class, 'store']); // ← NUEVO
             Route::get('/reservas/{id}', [AdminPiscinaReservaController::class, 'show']);
+            Route::get('piscina/reservas/exportar-csv', [AdminPiscinaReservaController::class, 'exportarCsv']);
             Route::post('/reservas/{id}/cancelar', [AdminPiscinaReservaController::class, 'cancelar']);
         });
     // ─── FIN Fase P7.7 ───

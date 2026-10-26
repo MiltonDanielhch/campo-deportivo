@@ -164,7 +164,7 @@ class ReservasExportTest extends TestCase
         $lineas = preg_split('/\r\n|\r|\n/', $sinBom);
 
         $this->assertSame(
-            'codigo_seguimiento,estado,nombre_pagador,telefono_pagador,ci_nit_pagador,codigo_reserva,campo_nombre,fecha_reserva,hora_inicio,hora_fin,monto_pagado,asistencia_marcada_en,tipo_item,variante_nombre,servicio_sireb_codigo,etiqueta_sireb,cantidad,precio_unitario,subtotal',
+            'codigo_seguimiento;estado;nombre_pagador;telefono_pagador;ci_nit_pagador;codigo_reserva;campo_nombre;fecha_reserva;hora_inicio;hora_fin;monto_pagado;asistencia_marcada_en;tipo_item;variante_nombre;servicio_sireb_codigo;etiqueta_sireb;cantidad;precio_unitario;subtotal',
             $lineas[0]
         );
     }

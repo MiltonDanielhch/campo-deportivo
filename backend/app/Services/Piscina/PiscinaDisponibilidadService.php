@@ -102,13 +102,14 @@ class PiscinaDisponibilidadService
                 $horario = $this->determinarHorario($turno->hora_inicio, $campo->hora_inicio_noche);
 
                 $perfilesData[] = [
-                    'perfil' => $perfilTurno->perfil,
-                    'etiqueta' => $this->etiquetaPerfil($perfilTurno->perfil),
-                    'precio' => (float) $perfilTurno->precio_unitario,
-                    'cupo' => $perfilTurno->cupo,
-                    'disponible' => max(0, (int) $perfilTurno->cupo - (int) $perfilTurno->reservado),
-                    'tarifa_sireb_id' => $tarifa->tarifa_sireb_id,
-                    'horario' => $horario,
+                    'perfil'           => $perfilTurno->perfil,
+                    'etiqueta'         => $this->etiquetaPerfil($perfilTurno->perfil),
+                    'precio'           => (float) $tarifa->precio_por_hora,     // ✅ tarifa SIREB, no perfil
+                    'precio_unitario'  => (float) $perfilTurno->precio_unitario, // mantener para auditoría
+                    'cupo'             => $perfilTurno->cupo,
+                    'disponible'       => max(0, (int) $perfilTurno->cupo - (int) $perfilTurno->reservado),
+                    'tarifa_sireb_id'  => $tarifa->tarifa_sireb_id,
+                    'horario'          => $horario,
                 ];
             }
 

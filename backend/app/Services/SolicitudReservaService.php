@@ -31,6 +31,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use App\DTOs\ServicioAdicionalDTO;
+use Illuminate\Support\Str;
 
 /**
  * Creación de solicitudes de reserva multi-franja (HU-D1, HU-D2, HU-D3, HU-D8).
@@ -132,7 +133,7 @@ class SolicitudReservaService
                 $solicitudNueva = SolicitudReserva::create([
                     'codigo_seguimiento' => $this->generarCodigoSeguimiento(),
                     'monto_total' => $montoTotal,
-                    'nombre_pagador' => $datos->nombrePagador,
+                    'nombre_pagador' => $this->normalizarPagador($datos->nombrePagador),
                     'telefono_pagador' => $datos->telefonoPagador,
                     'ci_nit_pagador' => $datos->ciNitPagador,
                     'ip_cobrador' => $datos->ipCobrador,
@@ -881,13 +882,31 @@ class SolicitudReservaService
         return Carbon::now(self::TIMEZONE_BOLIVIA);
     }
 
+    /**
+     * [FIX B65 cancha] Normaliza nombre del pagador: trim + title case, igual que
+     * piscina. Sin esto el listado muestra "MILTON DANIEL" (cancha) vs "daniel
+     * hipamo" (piscina) con casing divergente.
+     */
+    private function normalizarPagador(?string $nombre): ?string
+    {
+        if ($nombre === null) {
+            return null;
+        }
+        $trim = trim($nombre);
+        if ($trim === '') {
+            return null;
+        }
+        return Str::title(Str::lower($trim));
+    }
+
     public function esAdministrador(Funcionario $funcionario): bool
     {
         return $funcionario->tienePermiso('*')
             || in_array($funcionario->rol?->nombre, ['admin_parametricas', 'admin_reservas'], true);
     }
 
-    public function listarAdmin(SolicitudFiltrosDTO $filtros, Funcionario $funcionario): LengthAwarePaginator
+    // En SolicitudReservaService.php (1043), buscar el método:
+    public function listarAdmin(SolicitudFiltrosDTO $filtros, Funcionario $funcionario): \Illuminate\Pagination\LengthAwarePaginator
     {
         $this->forzarFiltrosParaFuncionarioControl($filtros, $funcionario);
 

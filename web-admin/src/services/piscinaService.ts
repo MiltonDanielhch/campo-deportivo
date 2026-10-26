@@ -92,4 +92,27 @@ export const piscinaService = {
     }>('/v1/admin/piscina/reservas', payload);
     return data;
   },
+
+  exportarCsv: async (filtros: FiltrosPiscinaReserva): Promise<void> => {
+    const params = new URLSearchParams();
+    if (filtros.estado && filtros.estado !== 'todos') params.append('estado', filtros.estado);
+    if (filtros.buscar) params.append('buscar', filtros.buscar);
+    if (filtros.fecha_desde) params.append('fecha_desde', filtros.fecha_desde);
+    if (filtros.fecha_hasta) params.append('fecha_hasta', filtros.fecha_hasta);
+    if (filtros.campo_id && filtros.campo_id !== 'todos') params.append('campo_id', filtros.campo_id);
+
+    const { data } = await apiClient.get<Blob>(
+      `/v1/admin/piscina/reservas/exportar-csv?${params}`,
+      { responseType: 'blob' },
+    );
+
+    const url = window.URL.createObjectURL(data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reservas-piscina-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
 };

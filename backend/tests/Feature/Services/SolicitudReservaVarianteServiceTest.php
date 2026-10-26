@@ -19,7 +19,6 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Mockery;
 use Tests\TestCase;
-
 class SolicitudReservaVarianteServiceTest extends TestCase
 {
     use RefreshDatabase;
@@ -68,11 +67,8 @@ class SolicitudReservaVarianteServiceTest extends TestCase
             ipCobrador: '127.0.0.1',
         );
 
-        app(SolicitudReservaService::class)->crear($dto, true);
-
-        $solicitud = SolicitudReserva::query()
-            ->where('nombre_pagador', $nombre)
-            ->firstOrFail();
+        $resultado = app(SolicitudReservaService::class)->crear($dto, true);
+        $solicitud = SolicitudReserva::findOrFail($resultado->solicitud->id);
 
         $detalle = $solicitud->detalles()->firstOrFail();
 

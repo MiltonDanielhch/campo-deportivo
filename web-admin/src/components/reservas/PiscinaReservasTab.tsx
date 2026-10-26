@@ -8,11 +8,15 @@ import {
   CheckCircle2,
   CircleDot,
   Clock3,
+  Download,
   Eye,
   Filter,
   Loader2,
+  MapPin,
+  Plus,
   RotateCcw,
   Search,
+  TrendingUp,
   Waves,
   XCircle,
 } from 'lucide-react';
@@ -44,13 +48,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { piscinaService } from '@/services/piscinaService';
+import { solicitudesReservaService } from '@/services/solicitudesReservaService';
 import type {
+  CampoOption,
   EstadoReserva,
   FiltrosPiscinaReserva,
   MetaListado,
   PiscinaReservaAdmin,
 } from '@/types/reservas';
-import { Plus } from 'lucide-react';
 import DialogCrearReservaPiscinaVentanilla from '@/components/reservas/DialogCrearReservaPiscinaVentanilla';
 
 const estadoConfig: Record<
@@ -156,23 +161,50 @@ function primeraFechaDetalle(reserva: PiscinaReservaAdmin): string {
   return detalle?.fecha ? fechaCorta(detalle.fecha) : '—';
 }
 
+/**
+ * Normaliza nombre a title case (para datos viejos que vienen en mayúsculas/minúsculas).
+ * Los datos nuevos ya vienen normalizados del backend.
+ */
+function normalizarNombre(nombre?: string | null): string {
+  if (!nombre) return '—';
+  return nombre
+    .toLowerCase()
+    .split(' ')
+    .map((palabra) => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+    .join(' ');
+}
+
 export default function PiscinaReservasTab() {
   const [reservas, setReservas] = useState<PiscinaReservaAdmin[]>([]);
   const [meta, setMeta] = useState<MetaListado | null>(null);
+  const [campos, setCampos] = useState<CampoOption[]>([]);
   const [cargando, setCargando] = useState(true);
 
   const [crearOpen, setCrearOpen] = useState(false);
-  
+  const [exportando, setExportando] = useState(false);
+
   const [filtroEstado, setFiltroEstado] = useState<string>('todos');
   const [filtroBuscar, setFiltroBuscar] = useState('');
   const [buscarDebounce, setBuscarDebounce] = useState('');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
+  const [campoId, setCampoId] = useState('todos');
   const [paginaActual, setPaginaActual] = useState(1);
 
   const [detalle, setDetalle] = useState<PiscinaReservaAdmin | null>(null);
   const [detalleOpen, setDetalleOpen] = useState(false);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+
+  const cargarCampos = useCallback(async () => {
+    try {
+      const data = await solicitudesReservaService.listarCamposPublicos();
+      // Filtrar solo campos de piscina (modalidad turno_por_perfil)
+      const camposPiscina = data.filter((c: any) => c.modalidad_reserva === 'turno_por_perfil');
+      setCampos(camposPiscina);
+    } catch {
+      setCampos([]);
+    }
+  }, []);
 
   const cargarReservas = useCallback(async () => {
     setCargando(true);
@@ -187,6 +219,7 @@ export default function PiscinaReservasTab() {
       if (buscarDebounce) params.buscar = buscarDebounce;
       if (desde) params.fecha_desde = desde;
       if (hasta) params.fecha_hasta = hasta;
+      if (campoId !== 'todos' && campoId) params.campo_id = campoId;
 
       const response = await piscinaService.listarReservas(params);
 
@@ -210,7 +243,11 @@ export default function PiscinaReservasTab() {
     } finally {
       setCargando(false);
     }
-  }, [paginaActual, filtroEstado, buscarDebounce, desde, hasta]);
+  }, [paginaActual, filtroEstado, buscarDebounce, desde, hasta, campoId]);
+
+  useEffect(() => {
+    cargarCampos();
+  }, [cargarCampos]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -243,16 +280,43 @@ export default function PiscinaReservasTab() {
     }
   };
 
+  const handleExportarCsv = async () => {
+    setExportando(true);
+    try {
+      const filtros: FiltrosPiscinaReserva = {};
+
+      if (filtroEstado !== 'todos') filtros.estado = filtroEstado;
+      if (buscarDebounce) filtros.buscar = buscarDebounce;
+      if (desde) filtros.fecha_desde = desde;
+      if (hasta) filtros.fecha_hasta = hasta;
+      if (campoId !== 'todos' && campoId) filtros.campo_id = campoId;
+
+      await piscinaService.exportarCsv(filtros);
+      toast.success('Exportación CSV iniciada.');
+    } catch (error: any) {
+      toast.error(error.message || 'Error al exportar el CSV.');
+    } finally {
+      setExportando(false);
+    }
+  };
+
   const limpiarFiltros = () => {
     setFiltroBuscar('');
     setBuscarDebounce('');
     setFiltroEstado('todos');
     setDesde('');
     setHasta('');
+    setCampoId('todos');
     setPaginaActual(1);
   };
 
   const stats = meta?.stats;
+
+  // Calcular tasa de conversión (confirmadas / total de intentos de pago)
+  const totalIntentos = (stats?.confirmadas ?? 0) + (stats?.expiradas ?? 0);
+  const tasaConversion = totalIntentos > 0
+    ? ((stats?.confirmadas ?? 0) / totalIntentos) * 100
+    : 0;
 
   const cards = [
     {
@@ -274,6 +338,18 @@ export default function PiscinaReservasTab() {
       accent: 'text-emerald-600',
     },
     {
+      label: 'Expiradas',
+      value: stats?.expiradas ?? 0,
+      Icon: XCircle,
+      accent: 'text-red-600',
+    },
+    {
+      label: 'Tasa conversión',
+      value: `${tasaConversion.toFixed(1)}%`,
+      Icon: TrendingUp,
+      accent: 'text-blue-600',
+    },
+    {
       label: 'Monto confirmado',
       value: formatoMonto(stats?.monto_confirmado ?? 0),
       Icon: Banknote,
@@ -284,7 +360,7 @@ export default function PiscinaReservasTab() {
   return (
     <div className="space-y-6">
       {/* Stats cards */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         {cards.map((card) => {
           const Icon = card.Icon;
 
@@ -364,6 +440,33 @@ export default function PiscinaReservasTab() {
             title="Hasta"
           />
 
+          {campos.length > 0 && (
+            <Select
+              value={campoId}
+              onValueChange={(value) => {
+                setCampoId(value);
+                setPaginaActual(1);
+              }}
+            >
+              <SelectTrigger className="w-full lg:w-56">
+                <span className="flex min-w-0 items-center gap-2 text-left">
+                  <MapPin className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">
+                    {campos.find((c) => c.id === campoId)?.nombre || 'Piscina'}
+                  </span>
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas las piscinas</SelectItem>
+                {campos.map((campo) => (
+                  <SelectItem key={campo.id} value={campo.id}>
+                    {campo.nombre || campo.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           <Button variant="outline" onClick={limpiarFiltros}>
             Limpiar
           </Button>
@@ -373,9 +476,23 @@ export default function PiscinaReservasTab() {
             Actualizar
           </Button>
 
-          <Button onClick={() => setCrearOpen(true)}>
+          <Button
+            variant="outline"
+            onClick={handleExportarCsv}
+            disabled={exportando || cargando}
+            // title="Exportar reservas con los filtros actuales (próximamente)"
+          >
+            {exportando ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 size-4" />
+            )}
+            Exportar CSV
+          </Button>
+
+          <Button onClick={() => setCrearOpen(true)} className="bg-teal-600 hover:bg-teal-700">
             <Plus className="mr-2 size-4" />
-            Nueva reserva
+            Nueva Reserva
           </Button>
         </div>
       </div>
@@ -422,7 +539,7 @@ export default function PiscinaReservasTab() {
 
                   <TableCell>
                     <p className="text-sm font-medium">
-                      {reserva.nombre_pagador || '—'}
+                      {normalizarNombre(reserva.nombre_pagador)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {reserva.ci_nit_pagador || 'Sin CI/NIT'}
@@ -533,7 +650,7 @@ export default function PiscinaReservasTab() {
 
                 <div>
                   <p className="text-xs text-muted-foreground">Pagador</p>
-                  <p className="text-sm font-medium">{detalle.nombre_pagador || '—'}</p>
+                  <p className="text-sm font-medium">{normalizarNombre(detalle.nombre_pagador)}</p>
                   <p className="text-xs text-muted-foreground">
                     CI/NIT: {detalle.ci_nit_pagador || '—'}
                   </p>

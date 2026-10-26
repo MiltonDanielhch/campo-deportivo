@@ -52,7 +52,7 @@ class ReservasExportController extends Controller
                 fwrite($handle, "\xEF\xBB\xBF");
 
                 foreach ($filas as $fila) {
-                    fputcsv($handle, $fila);
+                    fputcsv($handle, $fila, ';');
                 }
 
                 fclose($handle);
