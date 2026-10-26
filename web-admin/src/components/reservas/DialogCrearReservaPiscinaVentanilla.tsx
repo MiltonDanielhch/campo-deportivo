@@ -75,6 +75,22 @@ const perfilLabel: Record<string, string> = {
 const hhmm = (h: string) => (h || '').substring(0, 5);
 const MODAL_MAX_WIDTH = '52rem';
 
+// [FIX tz piscina] espejo de hoyBoliviaISO() del diálogo de cancha/regularizar.
+// new Date().toISOString() es UTC: entre 20:00 y 23:59 hora Bolivia ya daba el
+// día siguiente y el date input bloqueaba reservar HOY. Comparamos en America/La_Paz.
+function hoyBoliviaISO(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/La_Paz',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().substring(0, 10);
+  }
+}
+
 function extraerTurnos(resp: unknown): TurnoDisponible[] {
   const body = resp as any;
   const arr = Array.isArray(body)
@@ -443,7 +459,7 @@ export default function DialogCrearReservaPiscinaVentanilla({
                 <Input
                   type="date"
                   value={fecha}
-                  min={new Date().toISOString().substring(0, 10)}
+                  min={hoyBoliviaISO()}
                   onChange={(e) => setFecha(e.target.value)}
                 />
               </div>

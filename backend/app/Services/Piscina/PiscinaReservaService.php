@@ -77,7 +77,13 @@ class PiscinaReservaService
             throw new \InvalidArgumentException('El turno no está activo');
         }
 
-        $fechaTurno = Carbon::parse($turno->fecha);
+                // [FIX piscina-tz-creacion] Carbon::parse($turno->fecha) SIN tz caía en
+        // APP_TIMEZONE (UTC en Docker): medianoche-UTC del turno vs medianoche-La_Paz
+        // de $hoy → lt($hoy) = true → rechazaba un turno legítimo de HOY como
+        // "pasado". Es el FIX #2 tz de cancha aplicado a medias acá (now() sí tenía
+        // tz, parse() no). Parseo en America/La_Paz + startOfDay explícito para que
+        // ambas partes de la comparación estén en la misma tz y al mismo instante.
+        $fechaTurno = Carbon::parse($turno->fecha, self::TIMEZONE_BOLIVIA)->startOfDay();
         $hoy = Carbon::now(self::TIMEZONE_BOLIVIA)->startOfDay();
 
         if ($fechaTurno->lt($hoy)) {
@@ -87,6 +93,25 @@ class PiscinaReservaService
         if ($fechaTurno->gt($hoy->copy()->addDays(self::VENTANA_DIAS))) {
             throw new \InvalidArgumentException(
                 'La fecha excede el máximo de anticipación de '.self::VENTANA_DIAS.' días'
+            );
+        }
+
+        // [FIX piscina-pasada-hora] gate de HORA espejo de validarFranjaFutura (cancha).
+        // El gate de fecha de arriba solo rechaza AYER; un turno de HOY 10:00-12:00
+        // confirmado a las 15:00 pasaba (fecha = hoy → lt($hoy) = false). Comparo el
+        // datetime (fecha + hora_inicio) en America/La_Paz contra ahoraBolivia().
+        // Cierra el bypass por API y la carrera abrir(11:59)-confirmar(12:01) que el
+        // fix de disponibilidad (que solo cerró la GRILLA) no cubre. Regla idéntica a
+        // cancha: no se reserva un turno que ya comenzó (incluso este segundo).
+        $inicioTurno = Carbon::parse(
+            "{$turno->fecha} {$turno->hora_inicio}",
+            self::TIMEZONE_BOLIVIA,
+        );
+        $ahoraBolivia = Carbon::now(self::TIMEZONE_BOLIVIA);
+
+        if ($inicioTurno->lessThanOrEqualTo($ahoraBolivia)) {
+            throw new \InvalidArgumentException(
+                "El turno {$turno->hora_inicio}-{$turno->hora_fin} ya comenzó. Elegí un turno futuro."
             );
         }
 

@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Log;
  */
 class PiscinaDisponibilidadService
 {
+    // [FIX piscina-tz] Mantener en sync con DisponibilidadService::TIMEZONE_BOLIVIA y
+    // SolicitudReservaService::TIMEZONE_BOLIVIA. TODO: extraer a App\Support\FechaBolivia
+    // para no duplicar el tz en tres services (misma deuda anotada en cancha).
+    private const TIMEZONE_BOLIVIA = 'America/La_Paz';
+
     public function __construct(
         private PiscinaTarifaResolver $tarifaResolver,
     ) {
@@ -38,16 +43,31 @@ class PiscinaDisponibilidadService
             return ['campo_id' => $campoId, 'fecha' => $fecha, 'abierto' => false, 'turnos' => []];
         }
 
-        $fechaCarbon = Carbon::parse($fecha);
-        $hoy = Carbon::now();
+        // [FIX piscina-tz] parsear la fecha pedida y el "ahora" en America/La_Paz, igual
+        // que cancha. Antes Carbon::now() sin tz → en Docker UTC las 23:30 Bolivia ya era
+        // mañana y el gate de "fecha pasada" rechazaba una fecha legítima de hoy.
+        $fechaCarbon = Carbon::parse($fecha, self::TIMEZONE_BOLIVIA);
+        $ahoraBolivia = self::ahoraBolivia();
+        $hoyBolivia = $ahoraBolivia->copy()->startOfDay();
         $maxAnticipacion = 60;
 
-        if ($fechaCarbon->lt($hoy->startOfDay())) {
+        if ($fechaCarbon->lt($hoyBolivia)) {
             return ['campo_id' => $campoId, 'fecha' => $fecha, 'abierto' => false, 'turnos' => []];
         }
-        if ($fechaCarbon->gt($hoy->copy()->addDays($maxAnticipacion)->endOfDay())) {
+        if ($fechaCarbon->gt($hoyBolivia->copy()->addDays($maxAnticipacion)->endOfDay())) {
             return ['campo_id' => $campoId, 'fecha' => $fecha, 'abierto' => false, 'turnos' => []];
         }
+
+        // [FIX piscina-pasada] espejo del gate 'pasada' de cancha: si la fecha pedida es
+        // HOY en Bolivia, los turnos cuya hora de inicio ya corrió NO se ofrecen.
+        // Acá EXCLUYO en vez de marcar 'pasada' porque el front de piscina no tiene la
+        // rama que pinta el bloque apagado (a diferencia del de cancha, que la agregó en
+        // B74). Marcar sin tocar el front dejaría la pasada seleccionable igual; excluir
+        // cierra el hueco con menor superficie. Si el PO quiere pintar 'pasada' apagada
+        // en piscina (como cancha), se agrega el campo al backend + la rama al front en
+        // un frente aparte — no acá.
+        $esHoyBolivia = $fechaCarbon->toDateString() === $ahoraBolivia->toDateString();
+        $ahoraSeg = $esHoyBolivia ? $this->aSegundos($ahoraBolivia->format('H:i:s')) : -1;
 
         $turnos = PiscinaTurno::where('campo_id', $campoId)
             ->where('fecha', $fecha)
@@ -59,6 +79,11 @@ class PiscinaDisponibilidadService
         $turnosData = [];
 
         foreach ($turnos as $turno) {
+            // [FIX piscina-pasada] turno de HOY ya corrido → no se ofrece.
+            if ($esHoyBolivia && $this->aSegundos($turno->hora_inicio) <= $ahoraSeg) {
+                continue;
+            }
+
             $perfilesData = [];
             $sinTarifa = [];   // [FIX B70] acumulo los perfiles que se caen por falta de tarifa
 
@@ -121,6 +146,15 @@ class PiscinaDisponibilidadService
         $segundosNoche = $this->aSegundos($horaInicioNoche);
 
         return $segundosInicio < $segundosNoche ? 'diurno' : 'nocturno';
+    }
+
+    /**
+     * [FIX piscina-tz] Reloj oficial de Bolivia, independiente de APP_TIMEZONE.
+     * Espejo de SolicitudReservaService::ahoraBolivia() / DisponibilidadService.
+     */
+    private static function ahoraBolivia(): Carbon
+    {
+        return Carbon::now(self::TIMEZONE_BOLIVIA);
     }
 
     /**
