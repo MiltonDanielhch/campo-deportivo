@@ -7,6 +7,7 @@ use App\Models\AsignacionFuncionario;
 use App\Models\CampoDeportivo;
 use App\Models\Funcionario;
 use App\Models\HorarioAtencion;
+use App\Models\PiscinaTurno;
 use App\Models\Reserva;
 use App\Models\Rol;
 use App\Models\SolicitudReserva;
@@ -490,6 +491,50 @@ class OcupacionTest extends TestCase
         $this->getJson('/api/v1/ocupacion/verificar/RES-20261003-NOAS')
             ->assertNotFound()
             ->assertJsonPath('message', 'Código de reserva no encontrado.');
+    }
+
+
+    /**
+     * [FIX B50] misCampos() EXCLUYE campos de modalidad `turno_por_perfil`
+     * (pileta), y turnosPiscina() los devuelve SOLO. Los dos endpoints
+     * devuelven conjuntos disjuntos → el front no puede pintar pileta dos veces.
+     */
+    public function test_mis_campos_excluye_campo_de_piscina(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $admin = $this->crearFuncionarioAdminParametricas();
+
+        $cancha = $this->crearCampo('CAMPO-CANCHA', 'Cancha Sintética');
+        $cancha->update(['modalidad_reserva' => 'franja_horaria']);
+        $this->crearHorarioAtencion($cancha);
+
+        $piscina = $this->crearCampo('CAMPO-PISCINA', 'Piscina Olímpica');
+        $piscina->update(['modalidad_reserva' => 'turno_por_perfil']);
+        $this->crearHorarioAtencion($piscina);
+        PiscinaTurno::create([
+            'campo_id'    => $piscina->id,
+            'fecha'       => '2026-10-03',
+            'hora_inicio' => '10:00:00',
+            'hora_fin'    => '12:00:00',
+            'cupo_total'  => 10,
+            'estado'      => 'activo',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        // misCampos() → solo cancha, SIN pileta
+        $this->getJson('/api/v1/ocupacion/mis-campos?fecha=2026-10-03')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.campo_nombre', 'Cancha Sintética');
+
+        // turnosPiscina() → solo pileta, SIN cancha
+        $this->getJson('/api/v1/ocupacion/piscina-turnos?fecha=2026-10-03')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.campo_nombre', 'Piscina Olímpica')
+            ->assertJsonCount(1, 'data.0.turnos');
     }
 
     // ─────────────────────────────────────────────

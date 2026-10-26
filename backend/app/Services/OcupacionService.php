@@ -9,66 +9,65 @@ use App\Models\Funcionario;
 use App\Models\PiscinaReserva;
 use App\Models\PiscinaTurno;
 use App\Models\Reserva;
+use App\Models\SolicitudReserva;
 use App\Models\SolicitudReservaDetalle;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use App\Models\SolicitudReserva;
-/**
- * Servicio de ocupación para control en sitio (HU-F1).
- *
- * Diferencia con DisponibilidadService:
- * - DisponibilidadService: vista pública, ciudadano ve qué está libre.
- * - OcupacionService: vista interna, funcionario ve qué está ocupado en sus campos.
- *
- * Regla de seguridad: funcionario_control solo ve campos asignados (server-side).
- * No expone datos personales del pagador (nombre_pagador, telefono_pagador).
- */
+
 class OcupacionService
 {
     public const TAMANO_BLOQUE_MINUTOS = 60;
 
-    /**
-     * Estados de solicitud que ocupan una franja.
-     * Mismo criterio que DisponibilidadService (columna denormalizada estado_solicitud).
-     */
+    public const FRANJA_OCUPADA   = 'ocupada';
+    public const FRANJA_PENDIENTE = 'pendiente';
+    public const FRANJA_LIBRE     = 'libre';
+
     private const ESTADOS_ACTIVOS = [
         EstadoSolicitudReserva::Pendiente->value,
         EstadoSolicitudReserva::Confirmada->value,
     ];
 
-    /**
-     * Obtiene los campos asignados al funcionario con su ocupación del día.
-     *
-     * @return array<int, array<string, mixed>>
-     */
+    private const ROLES_ADMIN = ['admin_parametricas', 'admin_reservas', 'admin_gerencia'];
+
+    public function misCamposYTurnos(Funcionario $funcionario, Carbon $fecha): array
+    {
+        $fecha = $fecha->copy()->startOfDay();
+        $campos = $this->obtenerCamposAsignados($funcionario, incluirPiscina: true);
+
+        return $campos->map(function (CampoDeportivo $campo) use ($fecha) {
+            $base = [
+                'campo_id'          => $campo->id,
+                'campo_nombre'      => $campo->nombre,
+                'modalidad_reserva' => $campo->modalidad_reserva,
+                'fecha'             => $fecha->toDateString(),
+            ];
+
+            if ($this->esModalidadPiscina($campo->modalidad_reserva)) {
+                $turnos = $this->turnosDelCampoPiscina($campo, $fecha);
+                return array_merge($base, [
+                    'abierto' => ! empty($turnos),
+                    'turnos'  => $turnos,
+                ]);
+            }
+
+            $ocupacion = $this->ocupacionDelCampo($campo, $fecha);
+            return array_merge($base, [
+                'abierto' => $ocupacion['abierto'],
+                'franjas' => $ocupacion['franjas'],
+            ]);
+        })->values()->all();
+    }
+
     public function misCampos(Funcionario $funcionario, Carbon $fecha): array
     {
         $fecha = $fecha->copy()->startOfDay();
-
-        $campos = $this->obtenerCamposAsignados($funcionario);
+        $campos = $this->obtenerCamposAsignados($funcionario, incluirPiscina: false);
 
         return $campos->map(function (CampoDeportivo $campo) use ($fecha) {
             return $this->ocupacionDelCampo($campo, $fecha);
         })->values()->all();
     }
 
-    /**
-     * Verifica un código de reserva. Acepta AMBOS formatos:
-     *   - RSV-… (codigo_reserva, 1 franja)  → lo que muestra la grilla del panel
-     *   - RES-… (codigo_seguimiento, N franjas) → lo que trae el QR del comprobante
-     *
-     * Regla de seguridad: si el funcionario es funcionario_control y el campo
-     * no está entre sus asignados, responde null (→ 404 uniforme) igual que si
-     * el código no existiera. Para RES- multi-franja, filtra SOLO las franjas
-     * de sus campos: no expone existencia ni datos de franjas ajenas.
-     *
-     * [FIX #2a] Expone el titular (nombre + CI/NIT + teléfono) al funcionario
-     * autenticado con acceso, porque la verificación de identidad en sitio
-     * exige cruzar el carnet. El endpoint PÚBLICO (SolicitudEstadoResource)
-     * sigue SIN exponerlos; este es el canal interno protegido.
-     *
-     * @return array<string, mixed>|null null si no existe o no tiene acceso.
-     */
     public function verificarCodigo(string $codigo, Funcionario $funcionario): ?array
     {
         $codigo = strtoupper(trim($codigo));
@@ -77,8 +76,10 @@ class OcupacionService
         }
 
         $esAdmin = $this->esAdministrador($funcionario);
+        $idsAsignados = $esAdmin
+            ? null
+            : $funcionario->camposAsignados()->pluck('campos_deportivos.id')->all();
 
-        // ── Camino A: código de franja (RSV-…) ──
         $reserva = Reserva::with(['solicitud', 'campo', 'detalle'])
             ->where('codigo_reserva', $codigo)
             ->first();
@@ -87,59 +88,53 @@ class OcupacionService
             if ($reserva->solicitud->estado !== EstadoSolicitudReserva::Confirmada) {
                 return null;
             }
-            if (! $esAdmin && ! $this->campoAsignado($funcionario, $reserva->campo_id)) {
+            if (! $esAdmin && ! in_array($reserva->campo_id, $idsAsignados, true)) {
                 return null;
             }
-
             return $this->armarResultadoVerificacion($reserva->solicitud, $reserva->campo, [$reserva]);
         }
 
-        // ── Camino B: código de seguimiento (RES-…) → solicitud con N franjas ──
         $solicitud = SolicitudReserva::with(['detalles.reserva.campo'])
             ->where('codigo_seguimiento', $codigo)
             ->where('estado', EstadoSolicitudReserva::Confirmada)
             ->first();
 
-        if (! $solicitud) {
-            // ── Camino C: reserva de piscina (PIS-… o código de ventanilla) ──
-            return $this->verificarCodigoPiscina($codigo, $funcionario, $esAdmin);
-        }
-
-        /** @var Collection<int, Reserva> $reservas */
-        $reservas = $solicitud->detalles
-            ->pluck('reserva')
-            ->filter()
-            ->values();
-
-        if ($reservas->isEmpty()) {
-            return null;
-        }
-
-        // Filtro por asignación para funcionario_control: solo sus franjas.
-        if (! $esAdmin) {
-            $reservas = $reservas
-                ->filter(fn (Reserva $r) => $this->campoAsignado($funcionario, $r->campo_id))
+        if ($solicitud) {
+            $reservas = $solicitud->detalles
+                ->pluck('reserva')
+                ->filter()
                 ->values();
 
             if ($reservas->isEmpty()) {
-                return null; // sin acceso a NINGUNA franja → 404 uniforme
+                return null;
             }
+
+            if (! $esAdmin) {
+                $reservas = $reservas
+                    ->filter(fn (Reserva $r) => in_array($r->campo_id, $idsAsignados, true))
+                    ->values();
+
+                if ($reservas->isEmpty()) {
+                    return null;
+                }
+            }
+
+            return $this->armarResultadoVerificacion(
+                $solicitud,
+                $reservas->first()?->campo,
+                $reservas->all()
+            );
         }
 
-        $primerCampo = $reservas->first()?->campo;
-
-        return $this->armarResultadoVerificacion($solicitud, $primerCampo, $reservas->all());
+        return $this->verificarCodigoPiscina($codigo, $funcionario, $esAdmin, $idsAsignados);
     }
 
-    /**
-     * ── Camino C: reserva de piscina ──
-     * Acepta el código de seguimiento (PIS-…) o el código de ventanilla
-     * (referencia_recaudaciones, p.ej. K699-88PZ-J7G). Solo reservas confirmadas.
-     *
-     * Misma regla de seguridad: funcionario_control solo ve sus campos asignados.
-     */
-    private function verificarCodigoPiscina(string $codigo, Funcionario $funcionario, bool $esAdmin): ?array
-    {
+    private function verificarCodigoPiscina(
+        string $codigo,
+        Funcionario $funcionario,
+        bool $esAdmin,
+        ?array $idsAsignados,
+    ): ?array {
         $reserva = PiscinaReserva::with(['detalles', 'campo'])
             ->where('estado', EstadoPiscinaReserva::Confirmada->value)
             ->where(function ($q) use ($codigo) {
@@ -152,19 +147,13 @@ class OcupacionService
             return null;
         }
 
-        if (! $esAdmin && ! $this->campoAsignado($funcionario, $reserva->campo_id)) {
+        if (! $esAdmin && ! in_array($reserva->campo_id, $idsAsignados ?? [], true)) {
             return null;
         }
 
         return $this->armarResultadoVerificacionPiscina($reserva);
     }
 
-    /**
-     * Arma la respuesta del verificador para una reserva de piscina.
-     * Reutiliza el mismo contrato (`franjas`) que los campos; cada franja
-     * representa un detalle (turno) con su perfil y cantidad. No hay
-     * marcado de asistencia para piscina.
-     */
     private function armarResultadoVerificacionPiscina(PiscinaReserva $reserva): array
     {
         $campoNombre = $reserva->campo?->nombre;
@@ -195,79 +184,6 @@ class OcupacionService
         ];
     }
 
-    /**
-     * Grilla de turnos de piscina para una fecha (control en sitio).
-     *
-     * Devuelve los campos con modalidad `turno_por_perfil` y, por cada uno,
-     * sus turnos activos con el cupo por perfil (total, reservado, disponible).
-     * funcionario_control solo ve sus campos asignados.
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    public function turnosPiscina(Funcionario $funcionario, Carbon $fecha): array
-    {
-        $fecha = $fecha->copy()->startOfDay();
-
-        $query = CampoDeportivo::query()
-            ->where('modalidad_reserva', 'turno_por_perfil')
-            ->where('estado', 'activo')
-            ->orderBy('nombre');
-
-        if (! $this->esAdministrador($funcionario)) {
-            $ids = $funcionario->camposAsignados()->pluck('campos_deportivos.id');
-            $query->whereIn('id', $ids);
-        }
-
-        return $query->get()->map(function (CampoDeportivo $campo) use ($fecha) {
-            $turnos = PiscinaTurno::where('campo_id', $campo->id)
-                ->where('fecha', $fecha->toDateString())
-                ->where('estado', 'activo')
-                ->with('perfiles')
-                ->orderBy('hora_inicio')
-                ->get()
-                ->map(fn (PiscinaTurno $t) => [
-                    'turno_id'   => $t->id,
-                    'hora_inicio' => substr((string) $t->hora_inicio, 0, 5),
-                    'hora_fin'    => substr((string) $t->hora_fin, 0, 5),
-                    'cupo_total'  => $t->cupo_total,
-                    'perfiles' => $t->perfiles->map(fn ($p) => [
-                        'perfil'     => $p->perfil,
-                        'etiqueta'   => $this->etiquetaPerfilPiscina($p->perfil),
-                        'cupo'       => $p->cupo,
-                        'reservado'  => $p->reservado,
-                        'disponible' => $p->disponible,
-                    ])->values()->all(),
-                ])->values()->all();
-
-            return [
-                'campo_id'     => $campo->id,
-                'campo_nombre' => $campo->nombre,
-                'fecha'        => $fecha->toDateString(),
-                'turnos'       => $turnos,
-            ];
-        })->values()->all();
-    }
-
-    /**
-     * Etiqueta legible para el perfil de piscina.
-     */
-    private function etiquetaPerfilPiscina(string $perfil): string
-    {
-        return match ($perfil) {
-            'mayor_12' => 'Mayores de 12',
-            'menor_12' => 'Menores de 12',
-            'institucion' => 'Institución',
-            default => $perfil,
-        };
-    }
-
-    /**
-     * Arma la respuesta unificada del verificador (1 o N franjas).
-     * Cada franja incluye `id` (PK de reservas) porque el POST de asistencia
-     * (/admin/reservas/{id}/asistencia) la requiere, no el codigo_reserva.
-     *
-     * @param  array<int, Reserva>  $reservas
-     */
     private function armarResultadoVerificacion(
         SolicitudReserva $solicitud,
         ?CampoDeportivo $campoReferencia,
@@ -286,7 +202,7 @@ class OcupacionService
             'campo_nombre'  => $campoReferencia?->nombre,
             'fecha_reserva' => $reservas[0]->fecha_reserva?->toDateString(),
             'franjas' => array_map(fn (Reserva $r) => [
-                'id' => $r->id,
+                'id'                    => $r->id,
                 'codigo_reserva'        => $r->codigo_reserva,
                 'campo_nombre'          => $r->campo?->nombre,
                 'fecha'                 => $r->fecha_reserva?->toDateString(),
@@ -297,12 +213,67 @@ class OcupacionService
         ];
     }
 
-        /**
-     * Obtiene todos los campos activos o en mantenimiento con su ocupación del día.
-     * Sin filtro por asignación — solo para admin_parametricas y gerencia.
-     *
-     * @return array<int, array<string, mixed>>
-     */
+    public function turnosPiscina(Funcionario $funcionario, Carbon $fecha): array
+    {
+        $fecha = $fecha->copy()->startOfDay();
+
+        $query = $this->esAdministrador($funcionario)
+            ? CampoDeportivo::query()
+            : $funcionario->camposAsignados();
+
+        // Filtro en SQL (no en PHP): el modelo castea modalidad_reserva a enum
+        // ModalidadReservaCampo, y `->filter` con === string falla. SQL lo castea
+        // automáticamente. Replica el comportamiento del service original.
+        $campos = $query
+            ->where('estado', 'activo')
+            ->where('modalidad_reserva', 'turno_por_perfil')
+            ->with(['horariosAtencion', 'tarifas' => fn ($q) => $q->whereNull('vigente_hasta')])
+            ->orderBy('nombre')
+            ->get();
+
+        return $campos->map(function (CampoDeportivo $campo) use ($fecha) {
+            return [
+                'campo_id'     => $campo->id,
+                'campo_nombre' => $campo->nombre,
+                'fecha'        => $fecha->toDateString(),
+                'turnos'       => $this->turnosDelCampoPiscina($campo, $fecha),
+            ];
+        })->values()->all();
+    }
+
+    private function turnosDelCampoPiscina(CampoDeportivo $campo, Carbon $fecha): array
+    {
+        return PiscinaTurno::where('campo_id', $campo->id)
+            ->where('fecha', $fecha->toDateString())
+            ->where('estado', 'activo')
+            ->with('perfiles')
+            ->orderBy('hora_inicio')
+            ->get()
+            ->map(fn (PiscinaTurno $t) => [
+                'turno_id'    => $t->id,
+                'hora_inicio' => substr((string) $t->hora_inicio, 0, 5),
+                'hora_fin'    => substr((string) $t->hora_fin, 0, 5),
+                'cupo_total'  => $t->cupo_total,
+                'perfiles' => $t->perfiles->map(fn ($p) => [
+                    'perfil'     => $p->perfil,
+                    'etiqueta'   => $this->etiquetaPerfilPiscina($p->perfil),
+                    'cupo'       => $p->cupo,
+                    'reservado'  => $p->reservado,
+                    'disponible' => $p->disponible,
+                ])->values()->all(),
+            ])->values()->all();
+    }
+
+    private function etiquetaPerfilPiscina(string $perfil): string
+    {
+        return match ($perfil) {
+            'mayor_12'    => 'Mayores de 12',
+            'menor_12'    => 'Menores de 12',
+            'institucion' => 'Institución',
+            default       => $perfil,
+        };
+    }
+
     public function mapaGlobal(Carbon $fecha): array
     {
         $fecha = $fecha->copy()->startOfDay();
@@ -315,78 +286,80 @@ class OcupacionService
 
         return $campos->map(function (CampoDeportivo $campo) use ($fecha) {
             $ocupacion = $this->ocupacionDelCampo($campo, $fecha);
-
-            // Agregar coordenadas y metadatos administrativos
             $franjas = $ocupacion['franjas'];
 
-            $franjasTotales = count($franjas);
-            $franjasOcupadas = count(array_filter($franjas, fn ($f) => $f['estado'] === 'ocupada'));
-            $franjasPendientes = count(array_filter($franjas, fn ($f) => $f['estado'] === 'pendiente'));
-            $franjasLibres = count(array_filter($franjas, fn ($f) => $f['estado'] === 'libre'));
+            $totales    = count($franjas);
+            $ocupadas   = count(array_filter($franjas, fn ($f) => $f['estado'] === self::FRANJA_OCUPADA));
+            $pendientes = count(array_filter($franjas, fn ($f) => $f['estado'] === self::FRANJA_PENDIENTE));
+            $libres     = count(array_filter($franjas, fn ($f) => $f['estado'] === self::FRANJA_LIBRE));
 
-            $porcentajeOcupacion = $franjasTotales > 0
-                ? round(($franjasOcupadas / $franjasTotales) * 100, 1)
-                : 0;
+            $porcentajeOcupacion = $totales > 0
+                ? round(($ocupadas / $totales) * 100, 1)
+                : 0.0;
 
             $ocupadoAhora = $this->estaOcupadoAhora($franjas, $fecha);
 
             return array_merge($ocupacion, [
-                'latitud' => (float) $campo->latitud,
+                'latitud'  => (float) $campo->latitud,
                 'longitud' => (float) $campo->longitud,
                 'direccion' => $campo->direccion,
-                'estado_operativo' => $campo->estado,
+                'estado_operativo'   => $campo->estado,
+                'es_campo_operativo' => $this->esCampoOperativo($campo),
                 'vinculacion_sireb' => [
-                    'vinculado' => $campo->servicio_sireb_id !== null,
-                    'servicio_sireb_id' => $campo->servicio_sireb_id,
+                    'vinculado'             => $campo->servicio_sireb_id !== null,
+                    'servicio_sireb_id'     => $campo->servicio_sireb_id,
                     'servicio_sireb_codigo' => $campo->servicio_sireb_codigo,
                 ],
                 'resumen_ocupacion' => [
-                    'franjas_totales' => $franjasTotales,
-                    'franjas_ocupadas' => $franjasOcupadas,
-                    'franjas_pendientes' => $franjasPendientes,
-                    'franjas_libres' => $franjasLibres,
-                    'porcentaje_ocupacion' => $porcentajeOcupacion,
-                    'ocupado_ahora' => $ocupadoAhora,
+                    'franjas_totales'       => $totales,
+                    'franjas_ocupadas'      => $ocupadas,
+                    'franjas_pendientes'    => $pendientes,
+                    'franjas_libres'        => $libres,
+                    'porcentaje_ocupacion'  => $porcentajeOcupacion,
+                    'ocupado_ahora'         => $ocupadoAhora,
                 ],
             ]);
         })->values()->all();
     }
 
-    /**
-     * Determina si el campo está ocupado en este momento.
-     *
-     * @param array<int, array<string, mixed>> $franjas
-     */
+    private function esCampoOperativo(CampoDeportivo $campo): bool
+    {
+        if ($campo->estado !== 'activo') {
+            return false;
+        }
+        if ($campo->tarifas->isEmpty()) {
+            return false;
+        }
+        if ($this->esModalidadPiscina($campo->modalidad_reserva)) {
+            return PiscinaTurno::where('campo_id', $campo->id)
+                ->where('estado', 'activo')
+                ->exists();
+        }
+        return $campo->horariosAtencion->isNotEmpty();
+    }
+
     private function estaOcupadoAhora(array $franjas, Carbon $fecha): bool
     {
-        $hoy = now();
-
-        // Solo aplica si la fecha consultada es hoy
-        if (! $hoy->isSameDay($fecha)) {
+        if (! now()->isSameDay($fecha)) {
             return false;
         }
 
-        $ahoraSegundos = (int) $hoy->format('H') * 3600
-            + (int) $hoy->format('i') * 60
-            + (int) $hoy->format('s');
+        $ahoraSeg = (int) now()->format('H') * 3600
+            + (int) now()->format('i') * 60
+            + (int) now()->format('s');
 
         foreach ($franjas as $franja) {
-            if ($franja['estado'] !== 'ocupada') {
+            if ($franja['estado'] !== self::FRANJA_OCUPADA) {
                 continue;
             }
 
             $inicio = Carbon::createFromFormat('H:i:s', $franja['hora_inicio']);
-            $fin = Carbon::createFromFormat('H:i:s', $franja['hora_fin']);
+            $fin    = Carbon::createFromFormat('H:i:s', $franja['hora_fin']);
 
-            $inicioSegundos = (int) $inicio->format('H') * 3600
-                + (int) $inicio->format('i') * 60
-                + (int) $inicio->format('s');
+            $iniSeg = (int) $inicio->format('H') * 3600 + (int) $inicio->format('i') * 60 + (int) $inicio->format('s');
+            $finSeg = (int) $fin->format('H') * 3600    + (int) $fin->format('i') * 60    + (int) $fin->format('s');
 
-            $finSegundos = (int) $fin->format('H') * 3600
-                + (int) $fin->format('i') * 60
-                + (int) $fin->format('s');
-
-            if ($ahoraSegundos >= $inicioSegundos && $ahoraSegundos < $finSegundos) {
+            if ($ahoraSeg >= $iniSeg && $ahoraSeg < $finSeg) {
                 return true;
             }
         }
@@ -394,31 +367,25 @@ class OcupacionService
         return false;
     }
 
-    /**
-     * Obtiene campos asignados al funcionario.
-     * Si es admin, devuelve todos los campos activos.
-     */
-    private function obtenerCamposAsignados(Funcionario $funcionario): Collection
+    private function obtenerCamposAsignados(Funcionario $funcionario, bool $incluirPiscina = true): Collection
     {
-        if ($this->esAdministrador($funcionario)) {
-            return CampoDeportivo::query()
-                ->where('estado', 'activo')
-                ->with(['horariosAtencion', 'tarifas' => fn ($q) => $q->whereNull('vigente_hasta')])
-                ->get();
+        $query = $this->esAdministrador($funcionario)
+            ? CampoDeportivo::query()
+            : $funcionario->camposAsignados();
+
+        $query->where('estado', 'activo')
+            ->with(['horariosAtencion', 'tarifas' => fn ($q) => $q->whereNull('vigente_hasta')]);
+
+        if (! $incluirPiscina) {
+            $query->where(function ($q) {
+                $q->whereNull('modalidad_reserva')
+                    ->orWhere('modalidad_reserva', '!=', 'turno_por_perfil');
+            });
         }
 
-        // funcionario_control: solo campos asignados
-        return $funcionario->camposAsignados()
-            ->where('estado', 'activo')
-            ->with(['horariosAtencion', 'tarifas' => fn ($q) => $q->whereNull('vigente_hasta')])
-            ->get();
+        return $query->get();
     }
 
-    /**
-     * Calcula la ocupación de un campo para una fecha.
-     *
-     * @return array<string, mixed>
-     */
     private function ocupacionDelCampo(CampoDeportivo $campo, Carbon $fecha): array
     {
         $horario = $campo->horariosAtencion()
@@ -427,11 +394,11 @@ class OcupacionService
 
         if (! $horario) {
             return [
-                'campo_id' => $campo->id,
+                'campo_id'     => $campo->id,
                 'campo_nombre' => $campo->nombre,
-                'abierto' => false,
-                'fecha' => $fecha->toDateString(),
-                'franjas' => [],
+                'abierto'      => false,
+                'fecha'        => $fecha->toDateString(),
+                'franjas'      => [],
             ];
         }
 
@@ -446,75 +413,61 @@ class OcupacionService
 
         $franjas = $franjas->map(function ($franja) use ($solicitudesActivas) {
             $estado = $this->calcularEstadoFranja($franja, $solicitudesActivas);
-
             return [
-                'hora_inicio' => $franja['hora_inicio'],
-                'hora_fin' => $franja['hora_fin'],
-                'estado' => $estado['estado'],
-                'codigo_reserva' => $estado['codigo_reserva'],
+                'hora_inicio'           => $franja['hora_inicio'],
+                'hora_fin'              => $franja['hora_fin'],
+                'estado'                => $estado['estado'],
+                'codigo_reserva'        => $estado['codigo_reserva'],
                 'asistencia_marcada_en' => $estado['asistencia_marcada_en'],
             ];
         })->all();
 
         return [
-            'campo_id' => $campo->id,
+            'campo_id'     => $campo->id,
             'campo_nombre' => $campo->nombre,
-            'abierto' => true,
-            'fecha' => $fecha->toDateString(),
-            'franjas' => $franjas,
+            'abierto'      => true,
+            'fecha'        => $fecha->toDateString(),
+            'franjas'      => $franjas,
         ];
     }
 
-    /**
-     * Genera franjas de 1 hora entre hora_apertura y hora_cierre.
-     */
     private function generarFranjas(string $horaApertura, string $horaCierre): Collection
     {
         $franjas = collect();
-        $inicio = Carbon::createFromFormat('H:i:s', $horaApertura);
-        $fin = Carbon::createFromFormat('H:i:s', $horaCierre);
+        $inicio  = Carbon::createFromFormat('H:i:s', $horaApertura);
+        $fin     = Carbon::createFromFormat('H:i:s', $horaCierre);
 
         while ($inicio->copy()->addMinutes(self::TAMANO_BLOQUE_MINUTOS)->lte($fin)) {
             $finFranja = $inicio->copy()->addMinutes(self::TAMANO_BLOQUE_MINUTOS);
-
             $franjas->push([
                 'hora_inicio' => $inicio->format('H:i:s'),
-                'hora_fin' => $finFranja->format('H:i:s'),
+                'hora_fin'    => $finFranja->format('H:i:s'),
             ]);
-
             $inicio = $finFranja;
         }
 
         return $franjas;
     }
 
-    /**
-     * Determina el estado de una franja cruzándola con solicitudes activas.
-     *
-     * @return array{estado: string, codigo_reserva: string|null, asistencia_marcada_en: string|null}
-     */
     private function calcularEstadoFranja(array $franja, Collection $solicitudes): array
     {
         $franjaInicio = Carbon::createFromFormat('H:i:s', $franja['hora_inicio']);
-        $franjaFin = Carbon::createFromFormat('H:i:s', $franja['hora_fin']);
+        $franjaFin    = Carbon::createFromFormat('H:i:s', $franja['hora_fin']);
 
-        $confirmada = false;
-        $pendiente = false;
-        $codigoReserva = null;
+        $confirmada          = false;
+        $pendiente           = false;
+        $codigoReserva       = null;
         $asistenciaMarcadaEn = null;
 
         foreach ($solicitudes as $s) {
             $sInicio = Carbon::createFromFormat('H:i:s', $s->hora_inicio);
-            $sFin = Carbon::createFromFormat('H:i:s', $s->hora_fin);
+            $sFin    = Carbon::createFromFormat('H:i:s', $s->hora_fin);
 
-            // Dos intervalos se superponen si: inicio_A < fin_B AND fin_A > inicio_B
             if ($franjaInicio->lt($sFin) && $franjaFin->gt($sInicio)) {
                 if ($s->estado_solicitud === EstadoSolicitudReserva::Confirmada->value) {
                     $confirmada = true;
-
-                    // Si hay reserva confirmada, capturar código y asistencia
                     if ($s->reserva) {
-                        $codigoReserva = $s->reserva->codigo_reserva;
+                        $codigoReserva       = $s->reserva->codigo_reserva;
                         $asistenciaMarcadaEn = $s->reserva->asistencia_marcada_en?->toIso8601String();
                     }
                 } elseif ($s->estado_solicitud === EstadoSolicitudReserva::Pendiente->value) {
@@ -525,35 +478,36 @@ class OcupacionService
 
         if ($confirmada) {
             return [
-                'estado' => 'ocupada',
-                'codigo_reserva' => $codigoReserva,
+                'estado'                => self::FRANJA_OCUPADA,
+                'codigo_reserva'        => $codigoReserva,
                 'asistencia_marcada_en' => $asistenciaMarcadaEn,
             ];
         }
 
         if ($pendiente) {
             return [
-                'estado' => 'pendiente',
-                'codigo_reserva' => null,
+                'estado'                => self::FRANJA_PENDIENTE,
+                'codigo_reserva'        => null,
                 'asistencia_marcada_en' => null,
             ];
         }
 
         return [
-            'estado' => 'libre',
-            'codigo_reserva' => null,
+            'estado'                => self::FRANJA_LIBRE,
+            'codigo_reserva'        => null,
             'asistencia_marcada_en' => null,
         ];
     }
 
     private function esAdministrador(Funcionario $funcionario): bool
     {
-        return $funcionario->tienePermiso('*')
-            || in_array(
-                $funcionario->rol?->nombre,
-                ['admin_parametricas', 'admin_reservas'],
-                true
-            );
+        if ($funcionario->tienePermiso('*')) {
+            return true;
+        }
+        $nombre = $funcionario->rol?->nombre;
+        $slug   = $funcionario->rol?->slug;
+        return in_array($nombre, self::ROLES_ADMIN, true)
+            || in_array($slug, self::ROLES_ADMIN, true);
     }
 
     private function campoAsignado(Funcionario $funcionario, string $campoId): bool
@@ -561,5 +515,16 @@ class OcupacionService
         return $funcionario->camposAsignados()
             ->where('campos_deportivos.id', $campoId)
             ->exists();
+    }
+
+    /**
+     * Tolerante a enum backed (ModalidadReservaCampo) o string.
+     */
+    private function esModalidadPiscina(mixed $modalidad): bool
+    {
+        if ($modalidad instanceof \BackedEnum) {
+            return $modalidad->value === 'turno_por_perfil';
+        }
+        return $modalidad === 'turno_por_perfil';
     }
 }

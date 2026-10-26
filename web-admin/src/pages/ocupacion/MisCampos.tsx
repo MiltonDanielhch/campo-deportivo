@@ -25,29 +25,35 @@ export default function MisCampos() {
   const [marcandoId, setMarcandoId] = useState<string | null>(null);
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(null);
 
+  // [FIX B188] misCampos y piscinaTurnos en paralelo con allSettled:
+  // un fallo de piscina no rompe los campos (misma semántica que antes,
+  // pero sin encadenar los dos awaits dentro del interval de 30s).
   const cargarOcupacion = useCallback(async () => {
-    try {
-      setCargando(true);
-      setError(null);
-      const response = await ocupacionService.misCampos(fecha);
-      setCampos(response.data);
+    setCargando(true);
+    setError(null);
+
+    const [resCampos, resPiscina] = await Promise.allSettled([
+      ocupacionService.misCampos(fecha),
+      ocupacionService.piscinaTurnos(fecha),
+    ]);
+
+    if (resCampos.status === 'fulfilled') {
+      setCampos(resCampos.value.data);
       setUltimaActualizacion(new Date());
-    } catch (err: any) {
-      const mensaje =
-        err.response?.data?.message || 'Error al cargar la ocupación';
+    } else {
+      const err = resCampos.reason as any;
+      const mensaje = err?.response?.data?.message || 'Error al cargar la ocupación';
       setError(mensaje);
       toast.error(mensaje);
-    } finally {
-      setCargando(false);
     }
 
-    // Piscina: carga independiente para que un fallo no rompa los campos.
-    try {
-      const piscina = await ocupacionService.piscinaTurnos(fecha);
-      setPiscinaCampos(piscina.data ?? []);
-    } catch {
+    if (resPiscina.status === 'fulfilled') {
+      setPiscinaCampos(resPiscina.value.data ?? []);
+    } else {
       setPiscinaCampos([]);
     }
+
+    setCargando(false);
   }, [fecha]);
 
   useEffect(() => {
@@ -101,8 +107,6 @@ export default function MisCampos() {
       setMarcandoId(f.id);
       await asistenciaService.marcar(f.id, marcar);
       toast.success(marcar ? 'Asistencia marcada' : 'Asistencia revocada');
-      // Refrescamos desde el backend para reflejar lo persistido (incluye la
-      // validación de ventana temporal que hace MarcarAsistenciaService).
       await recargarResultado();
     } catch (err: any) {
       const msg =
@@ -112,12 +116,6 @@ export default function MisCampos() {
       toast.error(msg);
     } finally {
       setMarcandoId(null);
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleVerificarCodigo();
     }
   };
 
@@ -131,8 +129,12 @@ export default function MisCampos() {
     return `hace ${Math.floor(diff / 3600)} horas`;
   };
 
+  // [FIX B187] el pulso de "franja actual" solo aplica si la fecha seleccionada
+  // es HOY; antes pulsaba la franja del reloj actual aunque miraras otro día.
   const esFranjaActual = (franja: Franja): boolean => {
     const ahora = new Date();
+    if (fecha !== format(ahora, 'yyyy-MM-dd')) return false;
+
     const [hInicio, mInicio] = franja.hora_inicio.split(':').map(Number);
     const [hFin, mFin] = franja.hora_fin.split(':').map(Number);
 
@@ -210,8 +212,10 @@ export default function MisCampos() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Ocupación</h1>
+          {/* [FIX B189] texto neutro y verdadero para admin y para control:
+              el backend ya filtra por rol/asignación, el label no debe mentir. */}
           <p className="text-sm text-muted-foreground">
-            Control en sitio de campos asignados
+            Control en sitio de la ocupación del día (campos según tu acceso)
           </p>
         </div>
         {ultimaActualizacion && (
@@ -236,7 +240,7 @@ export default function MisCampos() {
               placeholder="Ej: RES-… / RSV-… / PIS-… / código de ventanilla"
               value={codigoBusqueda}
               onChange={(e) => setCodigoBusqueda(e.target.value.toUpperCase())}
-              onKeyPress={handleKeyPress}
+              onKeyDown={(e) => e.key === 'Enter' && handleVerificarCodigo()}
               className="flex-1"
             />
             <Button onClick={handleVerificarCodigo} disabled={verificando}>
@@ -252,7 +256,6 @@ export default function MisCampos() {
           {resultadoVerificacion && (
             <Alert className="border-green-200 bg-green-50">
               <AlertDescription className="space-y-3">
-                {/* Cabecera del resultado */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-semibold text-green-900 flex items-center gap-2 min-w-0">
                     <CheckCircle2 className="size-4 flex-shrink-0" />
@@ -278,7 +281,6 @@ export default function MisCampos() {
                   </Badge>
                 </div>
 
-                {/* Titular — para cruzar con el carnet */}
                 <div className="rounded-lg border border-green-200 bg-white/70 p-3 space-y-1">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-green-700 flex items-center gap-1.5">
                     <User className="size-3" />
@@ -302,7 +304,6 @@ export default function MisCampos() {
                   </div>
                 </div>
 
-                {/* Franjas/turnos de la reserva + acción de asistencia */}
                 <div className="space-y-2">
                   {resultadoVerificacion.franjas.map((f) => (
                     <div
@@ -415,7 +416,8 @@ export default function MisCampos() {
       ) : campos.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No hay campos asignados para mostrar.
+            {/* [FIX B189] neutro: válido para admin (ve todos) y control (ve asignados) */}
+            No hay campos para mostrar con tu acceso actual.
           </CardContent>
         </Card>
       ) : (
@@ -550,7 +552,7 @@ export default function MisCampos() {
                               <div
                                 key={p.perfil}
                                 className="flex items-center gap-2 rounded-md border px-2 py-1"
-                                title={`Disponible: ${p.disponible}`}
+                                title={`Reservados: ${p.reservado} · Disponibles: ${p.disponible} · Cupo: ${p.cupo}`}
                               >
                                 <Users className="size-3.5 text-slate-400" />
                                 <span className="text-xs font-medium">{p.etiqueta}</span>
@@ -563,6 +565,7 @@ export default function MisCampos() {
                                 >
                                   {p.reservado}/{p.cupo}
                                 </Badge>
+                                <span className="text-[10px] text-muted-foreground">reservados</span>
                               </div>
                             ))}
                           </div>
