@@ -16,6 +16,7 @@ use App\Http\Resources\SolicitudReservaAdminResource;
 use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Models\Funcionario;
 use App\DTOs\ServicioAdicionalDTO;
+use App\Http\Requests\StoreRegularizacionRequest;
 use App\Models\SolicitudReserva;
 use App\Services\AuditoriaService;
 use App\Services\SolicitudReservaService;
@@ -149,6 +150,79 @@ class SolicitudReservaController extends Controller
 
         return response()->json([
             'message' => 'Reserva creada. Entregá el código de pago al ciudadano.',
+            'data' => [
+                'codigo_seguimiento' => $solicitud->codigo_seguimiento,
+                'monto_total' => (float) $solicitud->monto_total,
+                'referencia_recaudaciones' => $cobro['codigo_publico'] ?? null,
+                'qr_string' => $cobro['qr_string'] ?? null,
+            ],
+        ], 201);
+    }
+
+    /**
+     * POST /v1/admin/solicitudes-reserva/regularizar
+     *
+     * [B77-B] Regulariza un uso que ocurrió pero no se pudo cobrar en el momento
+     * (caída del sistema / SIREB down). Admin-only. Genera el código de pago
+     * reusando el motor de venta, saltando solo los gates de tiempo de VENTA.
+     */
+    public function regularizar(StoreRegularizacionRequest $request): JsonResponse
+    {
+        /** @var Funcionario $funcionario */
+        $funcionario = $request->user();
+
+        if (! $this->solicitudes->esAdministrador($funcionario)) {
+            return response()->json([
+                'message' => 'Solo administradores pueden regularizar usos.',
+            ], 403);
+        }
+
+        $v = $request->validated();
+
+        $franjas = array_map(
+            fn (array $f) => new FranjaSolicitadaDTO(
+                campoId: $f['campo_id'],
+                fecha: $f['fecha'],
+                horaInicio: $f['hora_inicio'],
+                horaFin: $f['hora_fin'],
+                varianteId: $f['variante_id'] ?? null,
+            ),
+            $v['franjas'],
+        );
+
+        $servicios = array_map(
+            fn (array $s) => new ServicioAdicionalDTO(
+                campoId: $s['campo_id'],
+                varianteId: $s['variante_id'],
+                cantidad: (int) ($s['cantidad'] ?? 1),
+            ),
+            $v['servicios'] ?? [],
+        );
+
+        $datos = new SolicitudReservaDTO(
+            franjas: $franjas,
+            servicios: $servicios,
+            nombrePagador: $v['nombre_pagador'],
+            telefonoPagador: $v['telefono_pagador'] ?? '', // [FIX B77-B] DTO exige string, no null
+            ciNitPagador: $v['ci_nit_pagador'],
+            ipCobrador: $request->ip(),
+        );
+
+        try {
+            $resultado = $this->solicitudes->regularizar($datos, $v['motivo'], $funcionario);
+        } catch (FranjaNoDisponibleException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+        // [FIX B77-B] alineado con store(): solo se atrapa FranjaNoDisponible (409).
+        // ValidationException → 422 automático de Laravel. Cualquier otra excepción
+        // (SIREB down, etc.) NO se atrapa: en test muestra el stack real, en prod
+        // Laravel loggea 500. El catch(\Throwable) anterior tapaba el error de verdad.
+
+        $solicitud = SolicitudReserva::findOrFail($resultado->solicitud->id);
+        $cobro = $solicitud->datos_cobro_pendiente;
+
+        return response()->json([
+            'message' => 'Uso regularizado. Entregá el código de pago al ciudadano.',
             'data' => [
                 'codigo_seguimiento' => $solicitud->codigo_seguimiento,
                 'monto_total' => (float) $solicitud->monto_total,

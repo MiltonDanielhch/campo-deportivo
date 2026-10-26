@@ -62,6 +62,7 @@ class DisponibilidadService
                 'abierto' => false,
                 'fecha' => $fecha->toDateString(),
                 'bloques' => [],
+                'hora_inicio_noche' => $campo->hora_inicio_noche ?? '18:00:00', // [FIX B79]
             ];
         }
 
@@ -150,6 +151,7 @@ class DisponibilidadService
             'abierto' => true,
             'fecha' => $fecha->toDateString(),
             'bloques' => $bloques,
+            'hora_inicio_noche' => $campo->hora_inicio_noche ?? '18:00:00', // [FIX B79]
         ];
     }
 

@@ -223,6 +223,9 @@ Route::middleware('auth.oauth')->group(function () {
         // Acciones sensibles: solo admins.
         Route::middleware('role:admin_parametricas|admin_reservas')
             ->group(function () {
+                // [B77-B] regularización admin-only. Estática al inicio del grupo
+                // sensible, con el alias ADMIN (no el público).
+                Route::post('/regularizar', [AdminSolicitudReservaController::class, 'regularizar']);
                 Route::post('/{id}/anular-liquidacion', [AdminSolicitudReservaController::class, 'anularLiquidacion']);
                 Route::get('/{id}/refrescar-sireb', [AdminSolicitudReservaController::class, 'refrescarSireb']);
             });
@@ -259,9 +262,15 @@ Route::middleware('auth.oauth')->group(function () {
 
             // Reservas
             Route::get('/reservas', [AdminPiscinaReservaController::class, 'index']);
-            Route::post('/reservas', [AdminPiscinaReservaController::class, 'store']); // ← NUEVO
+            Route::post('/reservas', [AdminPiscinaReservaController::class, 'store']);
+            // [FIX piscina-export] estática ANTES de {id} y sin el 'piscina/' duplicado.
+            // El prefijo del grupo ya es v1/admin/piscina; 'piscina/reservas/...' producía
+            // /v1/admin/piscina/piscina/reservas/exportar-csv (ruta muerta) y, al estar
+            // después de {id}, el path real del front (/v1/admin/piscina/reservas/
+            // exportar-csv) lo capturaba la GET /reservas/{id} con id='exportar-csv'
+            // → find() sobre uuid → 22P02 → 500. Mismo patrón que regularizar.
+            Route::get('/reservas/exportar-csv', [AdminPiscinaReservaController::class, 'exportarCsv']);
             Route::get('/reservas/{id}', [AdminPiscinaReservaController::class, 'show']);
-            Route::get('piscina/reservas/exportar-csv', [AdminPiscinaReservaController::class, 'exportarCsv']);
             Route::post('/reservas/{id}/cancelar', [AdminPiscinaReservaController::class, 'cancelar']);
         });
     // ─── FIN Fase P7.7 ───

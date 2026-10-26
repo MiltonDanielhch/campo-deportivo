@@ -244,6 +244,7 @@ class DisponibilidadControllerTest extends TestCase
         );
 
         $response->assertOk();
+        $response->assertJsonPath('data.hora_inicio_noche', '18:00:00');
         $bloques = collect($response->json('data.bloques'));
 
         $diurno = $bloques->firstWhere('hora_inicio', '09:00:00');

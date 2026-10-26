@@ -29,6 +29,7 @@ class DisponibilidadResource extends JsonResource
             'fecha' => $this->grilla['fecha'],
             'abierto' => $this->grilla['abierto'],
             'bloques' => $this->grilla['bloques'],
+            'hora_inicio_noche' => $this->grilla['hora_inicio_noche'] ?? '18:00:00', // [FIX B79]
         ];
     }
 }

@@ -241,6 +241,170 @@ class SolicitudReservaService
     }
 
     /**
+     * [B77-B] Regularización de uso tras caída del sistema (admin-only).
+     *
+     * Caso: el ciudadano usó la cancha pero no pudo pagar (SIREB down / sin saldo
+     * en el momento). El admin registra el uso y genera el código de pago AHORA.
+     *
+     * Diferencia con crear(): salta validarVentana + validarFranjaFutura y tolera
+     * bloques 'pasada' en la grilla. TODO lo demás (disponibilidad, EXCLUDE,
+     * precio espejo por franja, liquidación SIREB con política admin, jobs) es
+     * IDÉNTICO a la venta: la integridad NO se relaja, solo el gate de tiempo de
+     * VENTA (que no aplica a un uso ya ocurrido).
+     *
+     * El motivo queda en auditoría (regularizacion_uso_post_caida). NO se agrega
+     * columna 'regularizada' (sin migration); el detalle puede inferirlo de la
+     * auditoría. Ver deuda anotada en la respuesta.
+     *
+     * @throws FranjaNoDisponibleException|ValidationException|\Throwable
+     */
+    public function regularizar(SolicitudReservaDTO $datos, string $motivo, Funcionario $funcionario): SolicitudCreadaDTO
+    {
+        // Capa 1 con gates de tiempo saltados (regularización).
+        $campos = $this->verificarFranjas($datos->franjas, saltarGatesTiempo: true);
+
+        $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, esAdmin: true);
+
+        $horasPorCampo = [];
+        foreach ($franjasResueltas as $r) {
+            $cid = $r['franja']->campoId;
+            $seg = self::aSegundos($r['franja']->horaInicio);
+            if (! isset($horasPorCampo[$cid]) || $seg < $horasPorCampo[$cid]) {
+                $horasPorCampo[$cid] = $seg;
+            }
+        }
+
+        $serviciosResueltos = $this->resolverServiciosParaCrear(
+            $datos->servicios,
+            $campos,
+            true,
+            $horasPorCampo,
+        );
+
+        $montoTotal = round(
+            collect($franjasResueltas)->sum('subtotal')
+            + collect($serviciosResueltos)->sum('subtotal'),
+            2
+        );
+
+        $expiracionMinutos = $this->minutosExpiracion();
+
+        try {
+            $solicitud = DB::transaction(function () use ($datos, $franjasResueltas, $serviciosResueltos, $montoTotal, $expiracionMinutos) {
+                $solicitudNueva = SolicitudReserva::create([
+                    'codigo_seguimiento' => $this->generarCodigoSeguimiento(),
+                    'monto_total' => $montoTotal,
+                    'nombre_pagador' => $this->normalizarPagador($datos->nombrePagador),
+                    'telefono_pagador' => $datos->telefonoPagador,
+                    'ci_nit_pagador' => $datos->ciNitPagador,
+                    'ip_cobrador' => $datos->ipCobrador,
+                    'estado' => EstadoSolicitudReserva::Pendiente,
+                    'expira_en' => now()->addMinutes($expiracionMinutos),
+                ]);
+
+                foreach ($franjasResueltas as $resuelta) {
+                    /** @var \App\DTOs\FranjaSolicitadaDTO $franja */
+                    $franja = $resuelta['franja'];
+
+                    $solicitudNueva->detalles()->create([
+                        'campo_id' => $franja->campoId,
+                        'variante_id' => $resuelta['variante_id'],
+                        'servicio_sireb_id' => $resuelta['servicio_sireb_id'],
+                        'tarifa_sireb_id' => $resuelta['tarifa_sireb_id'],
+                        'etiqueta_sireb' => $resuelta['etiqueta_sireb'],
+                        'cantidad' => $resuelta['cantidad'],
+                        'fecha_reserva' => $franja->fecha,
+                        'hora_inicio' => $franja->horaInicio,
+                        'hora_fin' => $franja->horaFin,
+                        'tarifa_aplicada' => $resuelta['precio_unitario'],
+                    ]);
+                }
+
+                foreach ($serviciosResueltos as $resuelto) {
+                    /** @var \App\DTOs\ServicioAdicionalDTO $servicio */
+                    $servicio = $resuelto['servicio'];
+
+                    $solicitudNueva->servicios()->create([
+                        'campo_id' => $resuelto['campo_id'],
+                        'variante_id' => $resuelto['variante_id'],
+                        'servicio_sireb_id' => $resuelto['servicio_sireb_id'],
+                        'tarifa_sireb_id' => $resuelto['tarifa_sireb_id'],
+                        'etiqueta_sireb' => $resuelto['etiqueta_sireb'],
+                        'cantidad' => $resuelto['cantidad'],
+                        'precio_unitario' => $resuelto['precio_unitario'],
+                        'subtotal' => $resuelto['subtotal'],
+                    ]);
+                }
+
+                return $solicitudNueva;
+            });
+        } catch (QueryException $e) {
+            if ($e->getCode() === '23P01') {
+                try {
+                    $this->verificarFranjas($datos->franjas, saltarGatesTiempo: true);
+                } catch (FranjaNoDisponibleException $especifica) {
+                    throw $especifica;
+                }
+
+                throw new FranjaNoDisponibleException(
+                    'Una de las franjas seleccionadas ya no está disponible.',
+                );
+            }
+            throw $e;
+        }
+
+        // [B77-B] el motivo queda trazable SIEMPRE que la regularización se
+        // materializó como solicitud (antes de intentar el cobro, para que un
+        // fallo de SIREB no borre el registro del acto administrativo).
+        $this->auditoria->registrar(
+            'solicitudes_reserva',
+            $solicitud->id,
+            'regularizacion_uso_post_caida',
+            $funcionario->id,
+            null,
+            [
+                'motivo' => $motivo,
+                'canal' => 'panel_admin_regularizacion',
+                'franjas' => count($datos->franjas),
+                'monto_total' => $montoTotal,
+            ],
+        );
+
+        try {
+            $this->crearLiquidacionEnSireb($solicitud);
+        } catch (\Throwable $e) {
+            // Política admin (ventanilla): sin reintento silencioso. Rechazamos
+            // inline y propagamos para que el controller devuelva 422 con el
+            // error real. La franja se libera sola al salir de estado activo.
+            $solicitud->update([
+                'estado' => EstadoSolicitudReserva::Rechazada,
+                'motivo_rechazo' => 'cobro_regularizacion_fallo',
+            ]);
+
+            Log::channel('sireb')->warning(
+                'Liquidación de regularización falló, solicitud rechazada',
+                [
+                    'solicitud_id' => $solicitud->id,
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            throw $e;
+        }
+
+        ExpirarSolicitudJob::dispatch($solicitud->id)->delay($solicitud->expira_en);
+
+        $intervaloPolling = (int) ParametroSistema::where(
+            'clave',
+            'polling_intervalo_segundos'
+        )->value('valor');
+        PollingSolicitudJob::dispatch($solicitud->id)
+            ->delay(now()->addSeconds($intervaloPolling ?: 20));
+
+        return $this->construirRespuesta($solicitud);
+    }
+
+    /**
      * Construye los items de canchas y delega la liquidación al helper central.
      *
      * La resolución de tarifa por campo/hora (CatalogoSirebService) sigue
@@ -321,10 +485,15 @@ class SolicitudReservaService
      * horario de atención, disponibilidad de cada franja contra la grilla
      * y que la franja no haya comenzado aún.
      *
+     * [FIX B77-B] $saltarGatesTiempo=true (regularización) omite validarVentana
+     * y validarFranjaFutura, y hace que verificarFranjaEnGrilla tolere bloques
+     * 'pasada'. La integridad de disponibilidad (campo activo, tarifas, unicidad,
+     * solape interno, horario, EXCLUDE) NO se relaja.
+     *
      * @param  FranjaSolicitadaDTO[]  $franjas
      * @return array<string, array{tarifas: Collection<string, TarifaCampo>, inicio_noche: int}>
      */
-    private function verificarFranjas(array $franjas): array
+    private function verificarFranjas(array $franjas, bool $saltarGatesTiempo = false): array
     {
         $campos = [];
 
@@ -387,7 +556,11 @@ class SolicitudReservaService
             // dayOfWeek/toDateString (usados por la grilla) y la ventana
             // comparen siempre en el mismo tz.
             $fecha = Carbon::parse($primera->fecha, self::TIMEZONE_BOLIVIA)->startOfDay();
-            $this->validarVentana($fecha);
+
+            // [FIX B77-B] en regularización se salta el gate de ventana (ayer/hoy válido).
+            if (! $saltarGatesTiempo) {
+                $this->validarVentana($fecha);
+            }
 
             $this->validarSolapeInterno($grupo->all());
 
@@ -405,16 +578,19 @@ class SolicitudReservaService
                 // [FIX #1 franja pasada] Gate temporal ANTES de cruzar con la
                 // grilla: si la franja ya comenzó (hora Bolivia), no se puede
                 // reservar ni crear hold.
-                $this->validarFranjaFutura($franja);
+                // [FIX B77-B] en regularización se salta el gate de franja futura.
+                if (! $saltarGatesTiempo) {
+                    $this->validarFranjaFutura($franja);
+                }
 
-                $this->verificarFranjaEnGrilla($franja, $grilla);
+                $this->verificarFranjaEnGrilla($franja, $grilla, $saltarGatesTiempo);
             }
         }
 
         return $campos;
     }
 
-    private function verificarFranjaEnGrilla(FranjaSolicitadaDTO $franja, array $grilla): void
+    private function verificarFranjaEnGrilla(FranjaSolicitadaDTO $franja, array $grilla, bool $saltarGatesTiempo = false): void
     {
         $fInicio = self::aSegundos($franja->horaInicio);
         $fFin = self::aSegundos($franja->horaFin);
@@ -436,7 +612,13 @@ class SolicitudReservaService
             ]);
         }
 
-        if ($solapados->contains(fn (array $b) => $b['estado'] !== 'libre')) {
+        // [FIX B77-B] 'pasada' se tolera SOLO en regularización: una franja de hoy ya
+        // corrida que nadie tomó está físicamente libre; el EXCLUDE (capa 2) sigue
+        // bloqueando si hubiera solicitud activa detrás. 'ocupada'/'bloqueada_temporal'
+        // NUNCA se toleran (no regularizo sobre un slot tomado).
+        $tolerados = $saltarGatesTiempo ? ['libre', 'pasada'] : ['libre'];
+
+        if ($solapados->contains(fn (array $b) => ! in_array($b['estado'], $tolerados, true))) {
             throw new FranjaNoDisponibleException(
                 "La franja {$franja->horaInicio}-{$franja->horaFin} del {$franja->fecha} ya no está disponible.",
                 [
@@ -905,7 +1087,6 @@ class SolicitudReservaService
             || in_array($funcionario->rol?->nombre, ['admin_parametricas', 'admin_reservas'], true);
     }
 
-    // En SolicitudReservaService.php (1043), buscar el método:
     public function listarAdmin(SolicitudFiltrosDTO $filtros, Funcionario $funcionario): \Illuminate\Pagination\LengthAwarePaginator
     {
         $this->forzarFiltrosParaFuncionarioControl($filtros, $funcionario);
