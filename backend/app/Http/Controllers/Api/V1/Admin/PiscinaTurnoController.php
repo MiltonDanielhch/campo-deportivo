@@ -7,6 +7,7 @@ use App\Models\CampoDeportivo;
 use App\Models\PiscinaTurno;
 use App\Models\PiscinaTurnoPerfil;
 use App\Services\Piscina\PiscinaTurnoLoteService;
+use App\Services\Piscina\PiscinaTarifaResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +20,7 @@ class PiscinaTurnoController extends Controller
 {
     public function __construct(
         private PiscinaTurnoLoteService $lote,
+        private PiscinaTarifaResolver $tarifaResolver,
     ) {
     }
 
@@ -85,6 +87,30 @@ class PiscinaTurnoController extends Controller
                 'message' => 'Ya existe un turno activo que se solapa con ese horario en esa fecha.',
             ], 422);
         }
+
+        // [B70-store] el invariante del sistema es "reservable ⟺ tarifa SIREB
+        // liquidable vigente" (comentario 862, B87). Cancha ya lo fuerza en la
+        // reserva (test 422 sin-tarifa); acá lo forzamos en la CREACIÓN del turno,
+        // porque un turno cuyos perfiles no tienen tarifa espejada nace silente
+        // (PiscinaDisponibilidadService lo descarta vía el mismo resolver). Consulto
+        // la MISMA fuente que leerá disponibilidad: no adivino estado.
+        $sinTarifa = [];
+        foreach ($validated['perfiles'] as $perfilData) {
+            if (! $this->tarifaResolver->resolver(
+                $validated['campo_id'],
+                $perfilData['perfil'],
+                $validated['hora_inicio'],
+            )) {
+                $sinTarifa[] = $perfilData['perfil'];
+            }
+        }
+        if ($sinTarifa !== []) {
+            return response()->json([
+                'message' => 'Uno o más perfiles no tienen tarifa SIREB vigente. Sincronizá tarifas (sireb:sincronizar-tarifas) o verificá el vínculo del campo antes de crear el turno.',
+                'perfiles_sin_tarifa' => $sinTarifa,
+            ], 422);
+        }
+
 
         try {
             $turno = DB::transaction(function () use ($validated) {
@@ -183,6 +209,17 @@ class PiscinaTurnoController extends Controller
 
         try {
             DB::transaction(function () use ($turno, $validated) {
+                // [B105] el update de perfiles hace delete+recreate con reservado=0, lo que
+                // pierde el conteo de cupo tomado (sobreventa). La UI ya bloquea la edición
+                // (botón disabled, Fix 3 gate PO); este gate lleva esa decisión al back pa'
+                // que un request manipulado a PATCH no destruya el cupo. Estado/observación
+                // siguen editables (no tocan reservado).
+                if (isset($validated['perfiles'])) {
+                    return response()->json([
+                        'message' => 'La edición de perfiles no está habilitada (Fix 3). Modificá estado u observación.',
+                    ], 422);
+                }
+
                 if (isset($validated['estado'])) {
                     $turno->estado = $validated['estado'];
                 }
