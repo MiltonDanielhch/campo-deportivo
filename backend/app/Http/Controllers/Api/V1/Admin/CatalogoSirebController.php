@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ArancelVariante;
 use App\Models\CampoDeportivo;
+use App\Services\AuditoriaService;
 use App\Services\CatalogoSirebService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -284,13 +285,20 @@ class CatalogoSirebController extends Controller
                 'servicio_sireb_codigo' => null,
             ]);
 
-            Log::channel('auditoria')->info('Campo desvinculado de servicio SIREB', [
-                'campo_id' => $campoDeportivo->id,
-                'campo_codigo' => $campoDeportivo->codigo,
-                'servicio_sireb_id' => $servicioSirebId,
-                'servicio_sireb_codigo' => $servicioSirebCodigo,
-                'usuario' => auth()->id(),
-            ]);
+            AuditoriaService::registrar(
+                tabla: 'campos_deportivos',
+                registroId: $campoDeportivo->id,
+                accion: 'desvincular_sireb',
+                usuarioId: auth()->id(),
+                datosAnteriores: [
+                    'servicio_sireb_id' => $servicioSirebId,
+                    'servicio_sireb_codigo' => $servicioSirebCodigo,
+                ],
+                datosNuevos: [
+                    'servicio_sireb_id' => null,
+                    'servicio_sireb_codigo' => null,
+                ],
+            );
 
             DB::commit();
 

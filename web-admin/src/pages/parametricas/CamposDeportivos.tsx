@@ -150,6 +150,34 @@ const ESTADO_CONFIG: Record<
   },
 };
 
+// [B87/B104] Modalidad de reserva (fuente: enum ModalidadReservaCampo, campo.modalidad_reserva).
+// Eje ORTOGONAL a la vinculación SIREB (directo/variante = cómo se cobra). La columna debe
+// mostrar AMBOS: antes solo pintaba color de vinculación e infería la máquina mal (piscina
+// turno_por_perfil + directo salía verde igual que cancha-franja).
+const MODALIDAD_CONFIG: Record<
+  string,
+  { label: string; className: string; icon: typeof Clock }
+> = {
+  franja_horaria: {
+    label: 'Reserva por franja',
+    className:
+      'border-emerald-200 bg-emerald-500/10 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400',
+    icon: LayoutGrid,
+  },
+  turno_por_perfil: {
+    label: 'Reserva por turno',
+    className:
+      'border-cyan-200 bg-cyan-500/10 text-cyan-700 dark:border-cyan-500/30 dark:text-cyan-400',
+    icon: Clock,
+  },
+  sin_reserva_online: {
+    label: 'Solo ventanilla',
+    className:
+      'border-slate-200 bg-slate-500/10 text-slate-700 dark:border-slate-500/30 dark:text-slate-400',
+    icon: AlertTriangle,
+  },
+};
+
 export default function CamposDeportivos() {
   const navigate = useNavigate();
 
@@ -189,6 +217,10 @@ export default function CamposDeportivos() {
   const [campoEstado, setCampoEstado] = useState<CampoDeportivo | null>(null);
   const [nuevoEstado, setNuevoEstado] = useState<EstadoCampo>('activo');
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
+
+  // [B93] desvincular es destructivo: confirma antes de ejecutar.
+  const [campoDesvinculando, setCampoDesvinculando] = useState<CampoDeportivo | null>(null);
+  const [desvinculando, setDesvinculando] = useState(false);
 
   // ─── Sincronización SIREB ───
   const [sincronizando, setSincronizando] = useState(false);
@@ -347,18 +379,29 @@ export default function CamposDeportivos() {
     setCampoVinculando(campo);
   };
 
-  const desvincular = async (campo: CampoDeportivo) => {
+  // [B93] el click ya no ejecuta: abre confirmación. Ambos call-points (catálogo y
+  // tabla local) llaman a desvincular(), así que los dos pasan por el diálogo sin
+  // tocar sus onClick.
+  const desvincular = (campo: CampoDeportivo) => {
     if (!campo.servicio_sireb_id) {
       toast.error('Este campo no está vinculado a SIREB');
       return;
     }
+    setCampoDesvinculando(campo);
+  };
 
+  const confirmarDesvincular = async () => {
+    if (!campoDesvinculando) return;
+    setDesvinculando(true);
     try {
-      await camposService.desvincularSireb(campo.id);
+      await camposService.desvincularSireb(campoDesvinculando.id);
       toast.success('Campo desvinculado de SIREB');
+      setCampoDesvinculando(null);
       cargar();
     } catch {
       toast.error('No se pudo desvincular el campo');
+    } finally {
+      setDesvinculando(false);
     }
   };
 
@@ -401,7 +444,14 @@ export default function CamposDeportivos() {
       directos: catalogoSireb.filter((i) => i.tipo_vinculacion === 'directo').length,
       porVariantes: catalogoSireb.filter((i) => i.tipo_vinculacion === 'variante').length,
       sinCampoLocal: catalogoSireb.filter((i) => i.vinculacion === 'sin_vincular').length,
-    };
+      // [B90b] fueraDeAlcance = legítimos no-gestionables (kiosco/hospedaje/espectáculo/
+      // curso/gimnasio). Los accionables (crear simple + agregar variante + revisar +
+      // módulo piscina) = sinCampoLocal - fueraDeAlcance, se calcula en el card pa' no
+      // enumerar buckets y no volver a sub-contar (B90 contaba solo crear_campo_simple).
+    fueraDeAlcance: catalogoSireb.filter(
+          (i) => i.vinculacion === 'sin_vincular' && i.accion_recomendada === 'fuera_de_alcance',
+        ).length,
+      };
 
     const categoriasDisponibles = useMemo(
     () => Array.from(new Set(catalogoSireb.map((i) => i.clasificacion))).sort(),
@@ -426,7 +476,7 @@ export default function CamposDeportivos() {
 
   return (
     <div className="space-y-6 p-6 max-w-[1600px] mx-auto">
-      {/* ─── Header ── */}
+      {/* ─── Header  */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
@@ -514,11 +564,18 @@ export default function CamposDeportivos() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">
-              {vistaSireb ? 'Sin campo local' : 'En mantenimiento'}
+              {vistaSireb ? 'Huecos accionables (sin campo)' : 'En mantenimiento'}
             </p>
             <p className="text-xl font-bold">
-              {vistaSireb ? statsSireb.sinCampoLocal : stats.mantenimiento}
+              {vistaSireb
+                ? statsSireb.sinCampoLocal - statsSireb.fueraDeAlcance
+                : stats.mantenimiento}
             </p>
+            {vistaSireb && (
+              <p className="text-xs text-muted-foreground">
+                + {statsSireb.fueraDeAlcance} fuera de alcance
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -799,7 +856,7 @@ export default function CamposDeportivos() {
               <TableHead>Nombre</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead className="hidden lg:table-cell">Dirección</TableHead>
-              <TableHead className="w-40">Servicio SIREB</TableHead>
+              <TableHead className="w-40">Modalidad / Servicio SIREB</TableHead>
               <TableHead className="w-36">Estado</TableHead>
               <TableHead className="w-14 text-right">Acciones</TableHead>
             </TableRow>
@@ -857,28 +914,44 @@ export default function CamposDeportivos() {
                       {(() => {
                         const info = vinculacionPorCampo.get(campo.id);
                         const tieneCatalogo = catalogoSireb.length > 0;
+                        const modalKey = campo.modalidad_reserva;
+                        const modal =
+                          (modalKey ? MODALIDAD_CONFIG[modalKey] : undefined) ??
+                          MODALIDAD_CONFIG.sin_reserva_online;
+                        const ModalIcono = modal.icon;
 
-                        // Fallback si el catálogo SIREB no cargó: comportamiento viejo.
+                        const badgeModalidad = (
+                          <Badge variant="outline" className={`gap-1.5 px-2.5 py-1 ${modal.className}`}>
+                            <ModalIcono className="size-3" />
+                            <span className="text-xs">{modal.label}</span>
+                          </Badge>
+                        );
+
+                        // Fallback si el catálogo SIREB no cargó: comportamiento viejo + modalidad
+                        // (la modalidad no depende del catálogo, viene del campo, se pinta siempre).
                         if (!tieneCatalogo) {
-                          return campo.servicio_sireb_id ? (
+                          return (
                             <div className="space-y-1">
-                              <Badge
-                                variant="default"
-                                className="gap-1.5 border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400"
-                              >
-                                <BadgeCheck className="size-3" />
-                                <span className="text-xs">
-                                  {campo.servicio_sireb_codigo ?? 'Vinculado'}
-                                </span>
-                              </Badge>
+                              {badgeModalidad}
+                              {campo.servicio_sireb_id ? (
+                                <Badge
+                                  variant="default"
+                                  className="gap-1.5 border-emerald-200 bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400"
+                                >
+                                  <BadgeCheck className="size-3" />
+                                  <span className="text-xs">
+                                    {campo.servicio_sireb_codigo ?? 'Vinculado'}
+                                  </span>
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="secondary"
+                                  className="gap-1.5 border-slate-200 bg-slate-500/10 px-2.5 py-1 text-slate-700 dark:border-slate-500/30 dark:text-slate-400"
+                                >
+                                  <span className="text-xs">Sin vincular</span>
+                                </Badge>
+                              )}
                             </div>
-                          ) : (
-                            <Badge
-                              variant="secondary"
-                              className="gap-1.5 border-slate-200 bg-slate-500/10 px-2.5 py-1 text-slate-700 dark:border-slate-500/30 dark:text-slate-400"
-                            >
-                              <span className="text-xs">Sin vincular</span>
-                            </Badge>
                           );
                         }
 
@@ -887,17 +960,21 @@ export default function CamposDeportivos() {
 
                         if (!directo && variantes.length === 0) {
                           return (
-                            <Badge
-                              variant="secondary"
-                              className="gap-1.5 border-slate-200 bg-slate-500/10 px-2.5 py-1 text-slate-700 dark:border-slate-500/30 dark:text-slate-400"
-                            >
-                              <span className="text-xs">Sin vincular</span>
-                            </Badge>
+                            <div className="space-y-1">
+                              {badgeModalidad}
+                              <Badge
+                                variant="secondary"
+                                className="gap-1.5 border-slate-200 bg-slate-500/10 px-2.5 py-1 text-slate-700 dark:border-slate-500/30 dark:text-slate-400"
+                              >
+                                <span className="text-xs">Sin vincular</span>
+                              </Badge>
+                            </div>
                           );
                         }
 
                         return (
                           <div className="space-y-1">
+                            {badgeModalidad}
                             {directo && (
                               <Badge
                                 variant="default"
@@ -905,7 +982,7 @@ export default function CamposDeportivos() {
                               >
                                 <BadgeCheck className="size-3" />
                                 <span className="text-xs">
-                                  {directo.sireb.codigo}
+                                  Directo · {directo.sireb.codigo}
                                 </span>
                               </Badge>
                             )}
@@ -1125,6 +1202,33 @@ export default function CamposDeportivos() {
               disabled={cambiandoEstado || nuevoEstado === campoEstado?.estado}
             >
               {cambiandoEstado ? 'Aplicando…' : 'Confirmar cambio'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* [B93] confirmación destructiva. Texto neutro-verdadero: NO afirma el efecto
+          sobre reservas porque eso depende de si sincronizar-tarifas (305) purga las
+          tarifas huérfanas (ver nota del frente). */}
+      <AlertDialog open={campoDesvinculando !== null} onOpenChange={() => setCampoDesvinculando(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Desvincular "{campoDesvinculando?.nombre}" de SIREB
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Se quitará el vínculo de este campo con su servicio de recaudaciones.
+              Podés volver a vincularlo desde esta misma pantalla.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={desvinculando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmarDesvincular}
+              disabled={desvinculando}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {desvinculando ? 'Desvinculando…' : 'Desvincular'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
