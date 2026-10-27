@@ -180,6 +180,15 @@ protected function setUp(): void
             ['descripcion' => 'Tipo piscina', 'estado' => 'activo'],
         );
 
+        // [fix B111-setup] el campo debe estar VINCULADO a SIREB pa' que la reserva
+        // pase el gate B111 de PiscinaReservaService::crear(). Este fixture decía
+        // "copiado exactamente de PiscinaReservaTest::crearSetupPiscina()" pero perdió
+        // el servicio_sireb_id del campo al copiar → modelaba el hueco B111 (piscina
+        // desvinculada con huérfanas de perfil) y esperaba que reservara. Un solo uuid
+        // reusado en campo+tarifa pa' que apunten al mismo servicio (como haría 305 en
+        // producción). RefreshDatabase aísla los uuids entre archivos, no hay colisión.
+        $servicioSirebId = (string) Str::uuid();
+
         $campo = CampoDeportivo::create([
             'tipo_campo_id'     => $tipo->id,
             'codigo'            => 'PISCINA-TEST-'.Str::upper(Str::random(4)),
@@ -190,6 +199,7 @@ protected function setUp(): void
             'modalidad_reserva' => ModalidadReservaCampo::TurnoPorPerfil,
             'estado'            => 'activo',
             'hora_inicio_noche' => '18:00:00',
+            'servicio_sireb_id' => $servicioSirebId,
         ]);
 
         // ✅ Igual que tu test verde: clasificacion='unica', sin tipo_tarifa,
@@ -202,7 +212,7 @@ protected function setUp(): void
         $tarifa->tarifario_estado   = 'vigente';
         $tarifa->clasificacion      = 'unica';
         $tarifa->tarifa_sireb_id    = (string) Str::uuid();
-        $tarifa->servicio_sireb_id  = (string) Str::uuid();
+        $tarifa->servicio_sireb_id  = $servicioSirebId;
         $tarifa->etiqueta_sireb     = 'Mayores 12';
         $tarifa->vigente_desde      = now()->subDay();
         $tarifa->vigente_hasta      = null;

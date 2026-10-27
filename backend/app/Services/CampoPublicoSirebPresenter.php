@@ -117,9 +117,13 @@ class CampoPublicoSirebPresenter
         // [2b] Fuente única de tarifas: el espejo ya cargado por index()/show().
         $tarifasEspejo = $this->tarifasEspejoParaGrilla($campo);
 
-        // Si es piscina (modalidad_reserva = 'turno_por_perfil'), marcar como reservable
-        // independientemente de las tarifas horarias (que no tiene por diseño)
-        if ($campo->modalidad_reserva?->value === 'turno_por_perfil') {
+        // Si es piscina VINCULADA (modalidad_reserva = 'turno_por_perfil' + servicio_sireb_id),
+        // marcar como reservable independientemente de las tarifas horarias (que no tiene por
+        // diseño: sus tarifas son de perfil). [B111-display] la excepción exige vínculo pa' no
+        // violar el invariante 862 "reservable ⟺ servicio_sireb_id con tarifa": una piscina
+        // desvinculada cae al flujo normal → noVinculado() → reservable=false, coherente con el
+        // gate B111-gate que ya no la deja cobrar la tarifa vieja.
+        if ($campo->modalidad_reserva?->value === 'turno_por_perfil' && filled($campo->servicio_sireb_id)) {
             return array_merge($base, [
                 'tarifas' => [
                     'diurna' => null,

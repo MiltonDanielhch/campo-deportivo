@@ -14,6 +14,7 @@ use App\Models\PiscinaReserva;
 use App\Models\PiscinaReservaDetalle;
 use App\Models\PiscinaTurno;
 use App\Models\PiscinaTurnoPerfil;
+use App\Models\TarifaCampo;
 use App\Services\AuditoriaService;
 use App\Services\Sireb\SirebLiquidacionService;
 use Carbon\Carbon;
@@ -119,6 +120,30 @@ class PiscinaReservaService
             throw new \InvalidArgumentException(
                 "El turno {$turno->hora_inicio}-{$turno->hora_fin} ya comenzó. Elegí un turno futuro."
             );
+        }
+
+        // [B111-gate] espejo del gate B92-a de cancha: una piscina cuyo campo está
+        // desvinculado (sin servicio_sireb_id) pero conserva tarifas de perfil espejadas
+        // de un vínculo roto (305 no las purga al desvincular) NO es reservable — el
+        // invariante 862 "reservable ⟺ servicio_sireb_id con tarifa" no se cumple.
+        // Bloqueo pa' que no reserve/cobre la tarifa vieja. Las tarifas legacy de perfil
+        // (servicio_sireb_id null, nunca tuvieron servicio) NO se bloquean: caen al
+        // comportamiento actual (el resolvedor 77 no filtra por vínculo, las sirve igual).
+        if (blank($campo->servicio_sireb_id)) {
+            $hayHuerfana = TarifaCampo::query()
+                ->where('campo_id', $campo->id)
+                ->whereNotNull('servicio_sireb_id')
+                ->whereNull('vigente_hasta')
+                ->where('liquidable', true)
+                ->where('tarifario_estado', 'vigente')
+                ->whereNotNull('perfil')
+                ->exists();
+
+            if ($hayHuerfana) {
+                throw new \InvalidArgumentException(
+                    "El campo {$campo->nombre} no está vinculado a SIREB pero tiene tarifas de perfil espejadas de un servicio. Vinculalo o ejecutá la sincronización."
+                );
+            }
         }
 
         $itemsValidados = $this->validarItemsYCalcularMonto($turno, $datos->items);
