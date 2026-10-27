@@ -801,6 +801,17 @@ class SolicitudReservaService
                 if ($filtradas->isNotEmpty()) {
                     $tarifas = $filtradas;
                 }
+            } elseif ($tarifas->whereNotNull('servicio_sireb_id')->isNotEmpty()) {
+                // [B92-a] campo desvinculado (sin servicio_sireb_id) y sin variantes,
+                // pero con tarifas espejadas que apuntan a un servicio (huérfanas de un
+                // vínculo roto: 305 no las purga al desvincular). El invariante 862
+                // "reservable ⟺ servicio_sireb_id con tarifa" no se cumple → bloqueo pa'
+                // que no reserve/cobre la tarifa vieja. Las tarifas legacy (servicio_sireb_id
+                // null en la fila, :796-797) NO se bloquean: son datos viejos sin servicio,
+                // no huérfanas de un vínculo roto; caen al comportamiento actual.
+                throw ValidationException::withMessages([
+                    'franjas' => "El campo {$campoInfo['campo']->nombre} no está vinculado a SIREB pero tiene tarifas espejadas de un servicio. Vinculalo o ejecutá la sincronización.",
+                ]);
             }
         }
 
