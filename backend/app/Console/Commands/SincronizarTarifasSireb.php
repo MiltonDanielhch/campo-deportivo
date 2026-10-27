@@ -110,12 +110,14 @@ class SincronizarTarifasSireb extends Command
 
     /**
      * Para cada servicio SIREB activo con tarifario=liquidable que aún no
-     * tiene campo_deportivo local, crea uno en estado "pendiente" para que
-     * el siguiente paso (espejado de tarifas) ya tenga dónde escribir.
+     * tiene campo_deportivo local, crea uno para que el siguiente paso
+     * (espejado de tarifas) ya tenga dónde escribir.
      *
-     * El campo se crea con modalidad_reserva='sin_reserva_online' para que
-     * NUNCA aparezca como reservable al público hasta que el operador
-     * complete dirección/coordenadas/tipo desde la UI de Campos locales.
+     * El campo nace con estado 'activo' (operativo: aparece en Campos locales
+     * y puede espejarse) y modalidad_reserva='sin_reserva_online', que es la
+     * barrera real de no-reserva-al-público (no el estado). La dirección queda
+     * 'Pendiente de completar por el operador' hasta que el operador la revise
+     * desde la UI de Campos locales.
      */
     private function asegurarCamposLocales(\Illuminate\Support\Collection $serviciosPorId, array &$autoCreados): \Illuminate\Database\Eloquent\Collection
     {

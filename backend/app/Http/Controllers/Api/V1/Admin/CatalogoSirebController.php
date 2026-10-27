@@ -306,7 +306,7 @@ class CatalogoSirebController extends Controller
                 'message' => 'Campo desvinculado exitosamente del servicio SIREB',
                 'data' => [
                     'campo_id' => $campoDeportivo->id,
-                    'aviso' => 'El campo dejará de ser reservable online hasta que se vuelva a vincular.',
+                                        'aviso' => 'El campo dejará de aparecer en el listado público y no podrá reservarse online con las tarifas de ese servicio. Para volver a habilitarlo, vinculalo de nuevo.',
                 ],
             ]);
         } catch (\Throwable $e) {
