@@ -50,6 +50,7 @@ import type {
   SolicitudReservaAdmin,
 } from '@/types/reservas';
 import AnularLiquidacionDialog from './AnularLiquidacionDialog';
+import { SnapshotEtiquetado } from '@/components/reservas/SnapshotAuditoria';
 
 interface DialogDetalleReservaProps {
   solicitudId: string | null;
@@ -531,16 +532,10 @@ export default function DialogDetalleReserva({
                               <summary className="cursor-pointer hover:text-foreground">
                                 Ver datos registrados
                               </summary>
-                              <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-50 p-2">
-                                {JSON.stringify(
-                                  {
-                                    antes: entrada.antes,
-                                    despues: entrada.despues,
-                                  },
-                                  null,
-                                  2,
-                                )}
-                              </pre>
+                              <div className="mt-1 rounded bg-slate-50 p-2">
+                                <SnapshotEtiquetado titulo="Antes" datos={entrada.antes} />
+                                <SnapshotEtiquetado titulo="Después" datos={entrada.despues} />
+                              </div>
                             </details>
                           )}
                         </li>
