@@ -1217,8 +1217,10 @@ export default function CamposDeportivos() {
               Desvincular "{campoDesvinculando?.nombre}" de SIREB
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Se quitará el vínculo de este campo con su servicio de recaudaciones.
-              Podés volver a vincularlo desde esta misma pantalla.
+              Se quitará el vínculo de este campo con su servicio de recaudaciones de SIREB.
+              Las tarifas ya espejadas quedan en el sistema, por lo que el campo podría seguir
+              apareciendo disponible, pero no podrá generarse una liquidación hasta que lo
+              vuelvas a vincular desde esta misma pantalla.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
