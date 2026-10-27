@@ -1,9 +1,10 @@
 import apiClient from '@/services/apiClient';
 import type { PiscinaTurno, PiscinaTurnoRequest } from '@/types/piscina';
 import type {
+  DetallePiscinaResponse,
+  EstadoSireb,
   FiltrosPiscinaReserva,
   ListadoPiscinaResponse,
-  PiscinaReservaAdmin,
 } from '@/types/reservas';
 
 export interface LoteResultado {
@@ -56,10 +57,24 @@ export const piscinaService = {
     return data;
   },
 
-  async obtenerReserva(id: string): Promise<PiscinaReservaAdmin> {
-    const { data } = await apiClient.get<{ data: PiscinaReservaAdmin }>(
+  async obtenerReserva(id: string): Promise<DetallePiscinaResponse> {
+    const { data } = await apiClient.get<{ data: DetallePiscinaResponse }>(
       `/v1/admin/piscina/reservas/${id}`,
     );
+    return data.data;
+  },
+
+  async refrescarSireb(id: string): Promise<{
+    estado_sireb: EstadoSireb | null;
+    puede_anularse: boolean;
+  }> {
+    const { data } = await apiClient.get<{
+      data: {
+        estado_sireb: EstadoSireb | null;
+        puede_anularse: boolean;
+      };
+    }>(`/v1/admin/piscina/reservas/${id}/refrescar-sireb`);
+
     return data.data;
   },
 

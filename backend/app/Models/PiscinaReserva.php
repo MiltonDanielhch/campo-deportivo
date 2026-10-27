@@ -32,6 +32,7 @@ class PiscinaReserva extends Model
         'datos_cobro_pendiente',
         'motivo_rechazo',
         'monto_confirmado',
+        'confirmado_en',
     ];
 
     protected function casts(): array
@@ -40,6 +41,7 @@ class PiscinaReserva extends Model
             'estado' => EstadoPiscinaReserva::class,
             'monto_total' => 'decimal:2',
             'monto_confirmado' => 'decimal:2',
+            'confirmado_en' => 'datetime',
             'datos_cobro_pendiente' => 'array',
             'expira_en' => 'datetime',
         ];

@@ -14,6 +14,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Http\Resources\AuditoriaResource;
+use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
+use App\Models\Auditoria;
 
 /**
  * Controller admin para gestión de reservas de piscina.
@@ -22,6 +25,7 @@ class PiscinaReservaController extends Controller
 {
     public function __construct(
         private PiscinaReservaService $reservas,
+        private RecaudacionesApiClientInterface $sirebClient,
     ) {}
 
     /**
@@ -165,9 +169,9 @@ class PiscinaReservaController extends Controller
     /**
      * GET /api/v1/admin/piscina/reservas/{id}
      *
-     * Obtiene detalle de una reserva de piscina.
+     * Detalle admin con historial de auditoría y estado SIREB.
      */
-    public function show(string $id): JsonResponse
+    public function show(Request $request, string $id): JsonResponse
     {
         $reserva = PiscinaReserva::with(['detalles.turno.perfiles', 'campo'])
             ->find($id);
@@ -176,9 +180,74 @@ class PiscinaReservaController extends Controller
             return response()->json(['message' => 'Reserva no encontrada'], 404);
         }
 
+        $auditoria = Auditoria::with('usuario')
+            ->where('tabla', 'piscina_reservas')
+            ->where('registro_id', $reserva->id)
+            ->orderBy('fecha')
+            ->get();
+
+        $estadoSireb = null;
+
+        if ($reserva->referencia_recaudaciones) {
+            try {
+                $estadoSireb = $this->sirebClient->consultarLiquidacionPorCodigo(
+                    $reserva->referencia_recaudaciones
+                );
+            } catch (\Exception $e) {
+                Log::channel('sireb')->warning('No se pudo consultar estado SIREB en piscina', [
+                    'reserva_id' => $reserva->id,
+                    'error'      => $e->getMessage(),
+                ]);
+            }
+        }
+
         return response()->json([
-            'data' => $reserva,
+            'data' => [
+                'reserva' => $reserva,
+                'auditoria' => $auditoria
+                    ->map(fn ($entrada) => (new AuditoriaResource($entrada))->resolve($request))
+                    ->all(),
+                'estado_sireb' => $estadoSireb,
+                'puede_anularse' => false,
+            ],
         ]);
+    }
+
+    /**
+     * GET /api/v1/admin/piscina/reservas/{id}/refrescar-sireb
+     *
+     * Consulta el estado actual desde SIREB.
+     */
+    public function refrescarSireb(string $id): JsonResponse
+    {
+        $reserva = PiscinaReserva::find($id);
+
+        if (! $reserva) {
+            return response()->json(['message' => 'Reserva no encontrada'], 404);
+        }
+
+        if (! $reserva->referencia_recaudaciones) {
+            return response()->json([
+                'message' => 'Esta reserva no tiene referencia de SIREB.',
+            ], 422);
+        }
+
+        try {
+            $estadoSireb = $this->sirebClient->consultarLiquidacionPorCodigo(
+                $reserva->referencia_recaudaciones
+            );
+
+            return response()->json([
+                'data' => [
+                    'estado_sireb' => $estadoSireb,
+                    'puede_anularse' => false,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al consultar SIREB: ' . $e->getMessage(),
+            ], 503);
+        }
     }
 
     /**

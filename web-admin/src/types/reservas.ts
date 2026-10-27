@@ -172,6 +172,7 @@ export interface PiscinaReservaAdmin {
   estado: EstadoReserva;
   monto_total: number | string;
   monto_confirmado: number | string | null;
+  confirmado_en?: string | null;
   nombre_pagador: string | null;
   telefono_pagador: string | null;
   ci_nit_pagador: string | null;
@@ -181,6 +182,13 @@ export interface PiscinaReservaAdmin {
   expira_en: string | null;
   campo?: CampoPiscinaRef | null;
   detalles?: DetallePiscinaAdmin[];
+}
+
+export interface DetallePiscinaResponse {
+  reserva: PiscinaReservaAdmin;
+  auditoria: EntradaAuditoria[];
+  estado_sireb: EstadoSireb | null;
+  puede_anularse: boolean;
 }
 
 export interface ListadoPiscinaResponse {

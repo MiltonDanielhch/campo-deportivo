@@ -5,15 +5,23 @@ import {
   AlertTriangle,
   Ban,
   Banknote,
+  Check,
   CheckCircle2,
   CircleDot,
   Clock3,
+  Copy,
   Download,
+  ExternalLink,
   Eye,
+  FilePlus2,
   Filter,
+  History,
   Loader2,
   MapPin,
+  Phone,
   Plus,
+  QrCode,
+  RefreshCw,
   RotateCcw,
   Search,
   TrendingUp,
@@ -47,16 +55,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useAuth } from '@/context/AuthContext';
 import { piscinaService } from '@/services/piscinaService';
 import { solicitudesReservaService } from '@/services/solicitudesReservaService';
 import type {
   CampoOption,
+  DetallePiscinaResponse,
+  EntradaAuditoria,
   EstadoReserva,
   FiltrosPiscinaReserva,
   MetaListado,
   PiscinaReservaAdmin,
 } from '@/types/reservas';
 import DialogCrearReservaPiscinaVentanilla from '@/components/reservas/DialogCrearReservaPiscinaVentanilla';
+import { SnapshotEtiquetado } from '@/components/reservas/SnapshotAuditoria';
 
 const estadoConfig: Record<
   EstadoReserva,
@@ -94,6 +106,10 @@ const perfilLabel: Record<string, string> = {
   menor_12: 'Menores de 12',
   institucion: 'Institución',
 };
+
+const SIREB_PANEL_URL =
+  import.meta.env.VITE_SIREB_PANEL_URL ||
+  'https://test.sireb.beni.gob.bo/panel/liquidaciones';
 
 function BadgeEstado({ estado }: { estado: EstadoReserva }) {
   const config =
@@ -174,6 +190,69 @@ function normalizarNombre(nombre?: string | null): string {
     .join(' ');
 }
 
+/**
+ * [B95a] Mapper de acciones de auditoría de piscina. Espeja `auditoriaVisual` de cancha
+ * pero con las acciones reales que registra PiscinaReservaService:
+ *   crear_reserva / cancelar_reserva / rechazada_liquidacion_ventanilla,
+ *   más las que aporta el helper SIREB (liquidacion_creada_sireb / confirmar_cobro)
+ *   y el job de expiración (expirar_automaticamente).
+ */
+function auditoriaVisualPiscina(
+  accion: string,
+): { label: string; Icon: ElementType; className: string } {
+  switch (accion) {
+    case 'crear_reserva':
+      return {
+        label: 'Reserva creada',
+        Icon: FilePlus2,
+        className: 'border-slate-200 bg-slate-100 text-slate-700',
+      };
+
+    case 'liquidacion_creada_sireb':
+      return {
+        label: 'Liquidación creada en SIREB',
+        Icon: QrCode,
+        className: 'border-teal-200 bg-teal-50 text-teal-700',
+      };
+
+    case 'confirmar_pago':
+      return {
+        label: 'Cobro confirmado',
+        Icon: CheckCircle2,
+        className: 'border-green-200 bg-green-50 text-green-700',
+      };
+
+    case 'expirar_automaticamente':
+      return {
+        label: 'Reserva expirada automáticamente',
+        Icon: Clock3,
+        className: 'border-slate-200 bg-slate-100 text-slate-700',
+      };
+
+    case 'cancelar_reserva':
+      return {
+        label: 'Reserva cancelada',
+        Icon: Ban,
+        className: 'border-zinc-200 bg-zinc-50 text-zinc-700',
+      };
+
+    case 'rechazada_liquidacion_ventanilla':
+      return {
+        label: 'Liquidación rechazada en ventanilla',
+        Icon: AlertTriangle,
+        className: 'border-orange-200 bg-orange-50 text-orange-700',
+      };
+
+    default:
+      return {
+        label: accion.replace(/_/g, ' '),
+        Icon: CircleDot,
+        className: 'border-slate-200 bg-slate-100 text-slate-700',
+      };
+  }
+}
+
+
 export default function PiscinaReservasTab() {
   const [reservas, setReservas] = useState<PiscinaReservaAdmin[]>([]);
   const [meta, setMeta] = useState<MetaListado | null>(null);
@@ -191,9 +270,22 @@ export default function PiscinaReservasTab() {
   const [campoId, setCampoId] = useState('todos');
   const [paginaActual, setPaginaActual] = useState(1);
 
-  const [detalle, setDetalle] = useState<PiscinaReservaAdmin | null>(null);
+  // [B95a] el detalle ahora trae envelope { reserva, auditoria, estado_sireb, puede_anularse }
+  const [detalle, setDetalle] = useState<DetallePiscinaResponse | null>(null);
   const [detalleOpen, setDetalleOpen] = useState(false);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [refrescando, setRefrescando] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+
+  const { funcionario } = useAuth();
+  const rol = (funcionario as any)?.rol?.nombre as string | undefined;
+  const esAdmin = rol === 'admin_parametricas' || rol === 'admin_reservas';
+
+  // Derivados del envelope (se usan en el JSX y en los handlers de abajo).
+  const reservaDetalle = detalle?.reserva ?? null;
+  const auditoriaDetalle: EntradaAuditoria[] = detalle?.auditoria ?? [];
+  const estadoSirebDetalle = detalle?.estado_sireb ?? null;
+  const codigoPublicoDetalle = reservaDetalle?.referencia_recaudaciones ?? null;
 
   const cargarCampos = useCallback(async () => {
     try {
@@ -278,6 +370,46 @@ export default function PiscinaReservasTab() {
     } finally {
       setCargandoDetalle(false);
     }
+  };
+
+  // [B95a] Refresca el estado de la liquidación desde SIREB (solo admin, como cancha).
+  const handleRefrescar = async () => {
+    if (!reservaDetalle?.id || !esAdmin) return;
+
+    setRefrescando(true);
+
+    try {
+      const resultado = await piscinaService.refrescarSireb(reservaDetalle.id);
+
+      setDetalle((prev) =>
+        prev
+          ? {
+              ...prev,
+              estado_sireb: resultado.estado_sireb,
+              puede_anularse: resultado.puede_anularse,
+            }
+          : null,
+      );
+
+      toast.success('Estado actualizado desde SIREB');
+    } catch (error: any) {
+      toast.error(
+        'Error al refrescar: ' +
+          (error.response?.data?.message || error.message),
+      );
+    } finally {
+      setRefrescando(false);
+    }
+  };
+
+  const handleCopiar = async () => {
+    if (!codigoPublicoDetalle) return;
+
+    await navigator.clipboard.writeText(codigoPublicoDetalle);
+    setCopiado(true);
+    toast.success('Código copiado al portapapeles');
+
+    setTimeout(() => setCopiado(false), 2000);
   };
 
   const handleExportarCsv = async () => {
@@ -480,7 +612,6 @@ export default function PiscinaReservasTab() {
             variant="outline"
             onClick={handleExportarCsv}
             disabled={exportando || cargando}
-            // title="Exportar reservas con los filtros actuales (próximamente)"
           >
             {exportando ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
@@ -620,14 +751,17 @@ export default function PiscinaReservasTab() {
       </div>
 
       <Dialog open={detalleOpen} onOpenChange={setDetalleOpen}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogContent
+            className="max-h-[90vh] w-full overflow-y-auto"
+            style={{ maxWidth: '56rem' }}
+          >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Detalle de reserva de piscina
-              {detalle && <BadgeEstado estado={detalle.estado} />}
+              {reservaDetalle && <BadgeEstado estado={reservaDetalle.estado} />}
             </DialogTitle>
             <DialogDescription>
-              Información del pagador, turnos reservados y liquidación SIREB
+              Información del pagador, turnos reservados, historial de auditoría y estado SIREB
             </DialogDescription>
           </DialogHeader>
 
@@ -635,91 +769,254 @@ export default function PiscinaReservasTab() {
             <div className="flex items-center justify-center py-16">
               <Loader2 className="size-8 animate-spin text-teal-600" />
             </div>
-          ) : detalle ? (
+          ) : reservaDetalle ? (
             <div className="space-y-6">
+              {/* Pagador y montos */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <p className="text-xs text-muted-foreground">Código de seguimiento</p>
-                  <p className="font-mono font-semibold">{detalle.codigo_seguimiento}</p>
+                  <p className="font-mono font-semibold">{reservaDetalle.codigo_seguimiento}</p>
                 </div>
 
                 <div>
                   <p className="text-xs text-muted-foreground">Campo</p>
-                  <p className="text-sm font-medium">{resumirCampo(detalle)}</p>
+                  <p className="text-sm font-medium">{resumirCampo(reservaDetalle)}</p>
                 </div>
 
                 <div>
                   <p className="text-xs text-muted-foreground">Pagador</p>
-                  <p className="text-sm font-medium">{normalizarNombre(detalle.nombre_pagador)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    CI/NIT: {detalle.ci_nit_pagador || '—'}
+                  <p className="text-sm font-medium">
+                    {normalizarNombre(reservaDetalle.nombre_pagador)}
                   </p>
-                  {detalle.telefono_pagador && (
-                    <p className="text-xs text-muted-foreground">
-                      Tel: {detalle.telefono_pagador}
-                    </p>
+                  <p className="text-xs text-muted-foreground">
+                    CI/NIT: {reservaDetalle.ci_nit_pagador || '—'}
+                  </p>
+
+                  {reservaDetalle.telefono_pagador && (
+                    <a
+                      href={`tel:${reservaDetalle.telefono_pagador}`}
+                      className="mt-1 inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-700"
+                    >
+                      <Phone className="size-3.5" />
+                      {reservaDetalle.telefono_pagador}
+                    </a>
                   )}
                 </div>
 
                 <div>
                   <p className="text-xs text-muted-foreground">Monto total</p>
                   <p className="text-lg font-bold tabular-nums">
-                    {formatoMonto(detalle.monto_total)}
+                    {formatoMonto(reservaDetalle.monto_total)}
                   </p>
-                  {detalle.monto_confirmado !== null && (
+
+                  {reservaDetalle.monto_confirmado !== null && (
                     <p className="text-xs text-green-600">
-                      Confirmado: {formatoMonto(detalle.monto_confirmado)}
+                      Confirmado: {formatoMonto(reservaDetalle.monto_confirmado)}
                     </p>
                   )}
                 </div>
 
                 <div>
                   <p className="text-xs text-muted-foreground">Creado</p>
-                  <p className="text-sm">{formatoFecha(detalle.created_at)}</p>
+                  <p className="text-sm">{formatoFecha(reservaDetalle.created_at)}</p>
                 </div>
 
                 <div>
                   <p className="text-xs text-muted-foreground">Expira</p>
-                  <p className="text-sm">{formatoFecha(detalle.expira_en)}</p>
+                  <p className="text-sm">{formatoFecha(reservaDetalle.expira_en)}</p>
                 </div>
               </div>
 
-              {detalle.referencia_recaudaciones && (
-                <>
-                  <Separator />
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Código de pago en ventanilla (SIREB)
-                    </p>
-                    <code className="font-mono text-lg font-bold tracking-widest">
-                      {detalle.referencia_recaudaciones}
-                    </code>
-                  </div>
-                </>
-              )}
-
-              {detalle.motivo_rechazo && (
-                <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
-                  <p className="mb-1 text-xs font-semibold text-orange-900">
-                    Motivo de rechazo
-                  </p>
-                  <p className="text-sm text-orange-800">{detalle.motivo_rechazo}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-xs text-muted-foreground">Confirmado</p>
+                <p className="text-sm">{formatoFecha(reservaDetalle.confirmado_en)}</p>
+              </div>
 
               <Separator />
 
+              {/* [B95a] Auditoría */}
+              <div>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <History className="size-4 text-teal-600" />
+                  Historial de auditoría
+                </h3>
+
+                {auditoriaDetalle.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Sin historial registrado para esta reserva.
+                  </p>
+                ) : (
+                  <ol className="relative ml-3 space-y-5 border-l border-slate-200 pl-6">
+                    {auditoriaDetalle.map((entrada) => {
+                      const visual = auditoriaVisualPiscina(entrada.accion);
+                      const Icon = visual.Icon;
+
+                      return (
+                        <li key={entrada.id} className="relative">
+                          <span
+                            className={`absolute -left-[34px] flex size-6 items-center justify-center rounded-full border ${visual.className}`}
+                          >
+                            <Icon className="size-3.5" />
+                          </span>
+
+                          <p className="text-sm font-medium">{visual.label}</p>
+
+                          <p className="text-xs text-muted-foreground">
+                            {formatoFecha(entrada.fecha)}
+                            {entrada.usuario_nombre ? ` · ${entrada.usuario_nombre}` : ''}
+                          </p>
+
+                          {Boolean(entrada.antes || entrada.despues) && (
+                            <details className="mt-1 text-xs text-muted-foreground">
+                              <summary className="cursor-pointer hover:text-foreground">
+                                Ver datos registrados
+                              </summary>
+                              <div className="mt-1 rounded bg-slate-50 p-2">
+                                <SnapshotEtiquetado titulo="Antes" datos={entrada.antes} />
+                                <SnapshotEtiquetado titulo="Después" datos={entrada.despues} />
+                              </div>
+                            </details>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* [B95a] SIREB */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold">
+                    <QrCode className="size-4 text-teal-600" />
+                    Integración con SIREB
+                  </h3>
+
+                  {esAdmin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefrescar}
+                      disabled={refrescando || !codigoPublicoDetalle}
+                    >
+                      {refrescando ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 size-4" />
+                      )}
+                      Refrescar desde SIREB
+                    </Button>
+                  )}
+                </div>
+
+                {!codigoPublicoDetalle ? (
+                  <div className="rounded-lg bg-slate-50 p-4 text-sm text-muted-foreground">
+                    Esta reserva no tiene liquidación creada en SIREB.
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-lg bg-slate-50 p-4">
+                      <p className="mb-2 text-xs text-muted-foreground">Código público</p>
+
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono text-lg font-bold tracking-widest">
+                          {codigoPublicoDetalle}
+                        </code>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleCopiar}
+                          className="size-8"
+                        >
+                          {copiado ? (
+                            <Check className="size-4 text-green-600" />
+                          ) : (
+                            <Copy className="size-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-slate-50 p-4">
+                      <p className="mb-2 text-xs text-muted-foreground">
+                        Estado actual en SIREB
+                      </p>
+
+                      {estadoSirebDetalle ? (
+                        <div className="space-y-1 text-sm">
+                          <p>
+                            Estado:{' '}
+                            <strong>{String(estadoSirebDetalle.estado ?? '—')}</strong>
+                          </p>
+                          <p>
+                            Pagado:{' '}
+                            <strong>{estadoSirebDetalle.pagado ? 'Sí' : 'No'}</strong>
+                          </p>
+
+                          {estadoSirebDetalle.monto != null && (
+                            <p>
+                              Monto:{' '}
+                              <strong>
+                                {formatoMonto(Number(estadoSirebDetalle.monto))}
+                              </strong>
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          No se pudo obtener estado de SIREB.
+                        </p>
+                      )}
+                    </div>
+
+                    <a
+                      href={`${SIREB_PANEL_URL}/${codigoPublicoDetalle}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm text-teal-600 hover:text-teal-700"
+                    >
+                      Ver liquidación en panel oficial de SIREB
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  </>
+                )}
+
+                {/* Motivo fuera del branch de código público: una reserva RECHAZADA por
+                    ventanilla (rechazada_liquidacion_ventanilla) puede no tener referencia
+                    SIREB, y aun así el funcionario debe ver por qué se rechazó. Cancha lo
+                    pone dentro; acá lo sacamos a propósito para cubrir ese caso de piscina. */}
+                {reservaDetalle.motivo_rechazo && (
+                  <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+                    <p className="mb-1 text-xs font-semibold text-orange-900">
+                      Motivo de rechazo
+                    </p>
+                    <p className="text-sm text-orange-800">
+                      {reservaDetalle.motivo_rechazo}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Turnos reservados */}
               <div>
                 <h3 className="mb-3 text-sm font-semibold">Turnos reservados</h3>
 
-                {!detalle.detalles || detalle.detalles.length === 0 ? (
+                {!reservaDetalle.detalles || reservaDetalle.detalles.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     Esta reserva no tiene turnos registrados.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {detalle.detalles.map((d) => (
-                      <div key={d.id} className="rounded-lg border bg-slate-50 p-3">
+                    {reservaDetalle.detalles.map((d) => (
+                      <div
+                        key={d.id}
+                        className="rounded-lg border bg-slate-50 p-3"
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-medium">

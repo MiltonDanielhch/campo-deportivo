@@ -185,6 +185,56 @@ class PiscinaReservaTest extends TestCase
     }
 
     /**
+     * [B99] Al confirmar una reserva de piscina, confirmado_en se setea.
+     * Idempotencia: confirmar dos veces no pisa confirmado_en (early return
+     * por estado === Confirmada, espejo de ConfirmacionCobroService de cancha).
+     *
+     * Nota: no creamos detalle porque PiscinaConfirmacionCobroService confirma
+     * en cabecera (línea 52 del service: "no creamos tabla de reservas confirmadas"),
+     * a diferencia de cancha que itera detalles para crear Reserva:: por franja.
+     */
+    public function test_confirmar_setea_confirmado_en_y_es_idempotente(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-25 10:00:00'));
+
+        [$campo] = $this->crearSetupPiscina();
+
+        $reserva = PiscinaReserva::create([
+            'codigo_seguimiento' => 'PIS-20261025-B99',
+            'campo_id'           => $campo->id,
+            'estado'             => EstadoPiscinaReserva::Pendiente,
+            'monto_total'        => 10.00,
+            'nombre_pagador'     => 'Test B99',
+            'telefono_pagador'   => '70000000',
+            'ci_nit_pagador'     => '1234567',
+            'expira_en'          => now()->addMinutes(20),
+        ]);
+
+        $this->assertNull($reserva->confirmado_en, 'pendiente nace sin confirmado_en');
+
+        $confirmacion = app(\App\Services\Piscina\PiscinaConfirmacionCobroService::class);
+        $confirmacion->confirmar($reserva, 10.00);
+        $reserva->refresh();
+
+        $this->assertEquals(EstadoPiscinaReserva::Confirmada->value, $reserva->estado->value);
+        $this->assertNotNull($reserva->confirmado_en, 'confirmar debe setear confirmado_en');
+        $this->assertEquals(10.00, (float) $reserva->monto_confirmado);
+
+        $fechaOriginal = $reserva->confirmado_en->toIso8601String();
+
+        // Idempotencia: 1 hora después, segunda confirmación no pisa la fecha.
+        $this->travelTo(Carbon::parse('2026-10-25 11:00:00'));
+        $confirmacion->confirmar($reserva, 10.00);
+        $reserva->refresh();
+
+        $this->assertEquals(
+            $fechaOriginal,
+            $reserva->confirmado_en->toIso8601String(),
+            'confirmar dos veces no debe pisar confirmado_en (early return por estado)'
+        );
+    }
+
+    /**
      * [Contrato resolver] PiscinaTarifaResolver requiere 4 columnas del espejo
      * SIREB: perfil, liquidable, tarifario_estado='vigente', clasificacion.
      * Si falta alguna, devuelve null y el perfil se filtra en disponibilidad.

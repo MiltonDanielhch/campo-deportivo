@@ -47,6 +47,7 @@ class PiscinaConfirmacionCobroService
                 $reserva->update([
                     'estado' => EstadoPiscinaReserva::Confirmada,
                     'monto_confirmado' => $montoConfirmado,
+                    'confirmado_en' => now(),
                 ]);
 
                 // NOTA: Para piscina no creamos tabla de reservas confirmadas

@@ -272,6 +272,7 @@ Route::middleware('auth.oauth')->group(function () {
             Route::get('/reservas/exportar-csv', [AdminPiscinaReservaController::class, 'exportarCsv']);
             Route::get('/reservas/{id}', [AdminPiscinaReservaController::class, 'show']);
             Route::post('/reservas/{id}/cancelar', [AdminPiscinaReservaController::class, 'cancelar']);
+            Route::get('/reservas/{id}/refrescar-sireb', [AdminPiscinaReservaController::class, 'refrescarSireb']);
         });
     // ─── FIN Fase P7.7 ───
 
