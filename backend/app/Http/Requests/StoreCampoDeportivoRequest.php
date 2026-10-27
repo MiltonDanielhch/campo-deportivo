@@ -50,6 +50,12 @@ class StoreCampoDeportivoRequest extends FormRequest
             // Foto del campo (multipart): archivo opcional
             'imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             // Flag para eliminar la foto actual sin subir otra
+            // [B94] nullable pa' no romper tests/sync que no la mandan (el DTO cae a
+            // franja_horaria); Rule::in pa' que un request manipulado no invente modalidad.
+            'modalidad_reserva' => [
+                'nullable',
+                Rule::in(['franja_horaria', 'turno_por_perfil', 'sin_reserva_online']),
+            ],
             'quitar_imagen' => ['nullable', 'boolean'],
         ];
     }

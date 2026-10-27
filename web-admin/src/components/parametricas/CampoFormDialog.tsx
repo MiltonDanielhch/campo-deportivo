@@ -148,6 +148,8 @@ export default function CampoFormDialog({
   >({});
   const [latitud, setLatitud] = useState(LAT_TRINIDAD);
   const [longitud, setLongitud] = useState(LNG_TRINIDAD);
+  // [B94] modalidad elegible en el alta; default franja (= default DB).
+  const [modalidad, setModalidad] = useState('franja_horaria');
   const [horarios, setHorarios] = useState<FilaHorario[]>(horariosIniciales());
   // FIX (Estrategia B): uuid del servicio SIREB a vincular tras crear.
   const [servicioSirebId, setServicioSirebId] = useState('');
@@ -182,6 +184,7 @@ export default function CampoFormDialog({
       setMunicipio(campo.municipio ?? '');
       setLatitud(String(campo.latitud));
       setLongitud(String(campo.longitud));
+      setModalidad(campo.modalidad_reserva ?? 'franja_horaria');
       setImagenPersistida(campo.imagen_url ?? null);
       setServicioSirebId(campo.servicio_sireb_id ?? '');
 
@@ -212,6 +215,7 @@ export default function CampoFormDialog({
       setMunicipio('');
       setLatitud(LAT_TRINIDAD);
       setLongitud(LNG_TRINIDAD);
+      setModalidad('franja_horaria');
       setImagenPersistida(null);
       setHorarios(horariosIniciales());
       setServicioSirebId(valoresIniciales?.servicioSirebId ?? '');
@@ -382,6 +386,7 @@ export default function CampoFormDialog({
         municipio,
         latitud: parseFloat(latitud),
         longitud: parseFloat(longitud),
+        modalidad_reserva: modalidad,
         horarios: habilitados.map((h) => ({
           dia_semana: h.dia,
           hora_apertura: h.apertura, // ← h.apertura, NO h.hora_apertura
@@ -605,6 +610,30 @@ export default function CampoFormDialog({
                   {errores.tipo_campo_id && (
                     <p className="text-xs text-destructive">{errores.tipo_campo_id[0]}</p>
                   )}
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">
+                    Modalidad de reserva <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={modalidad} onValueChange={setModalidad}>
+                    <SelectTrigger>
+                      <span className={modalidad ? '' : 'text-muted-foreground'}>
+                        {modalidad === 'turno_por_perfil'
+                          ? 'Reserva por turno (piscina)'
+                          : modalidad === 'sin_reserva_online'
+                            ? 'Solo ventanilla'
+                            : 'Reserva por franja (cancha)'}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="franja_horaria">Reserva por franja (cancha)</SelectItem>
+                      <SelectItem value="turno_por_perfil">Reserva por turno (piscina)</SelectItem>
+                      <SelectItem value="sin_reserva_online">Solo ventanilla</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Define cómo se reserva: por franja horaria, por turno+perfil (piscina) o solo en ventanilla.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1.5 text-xs font-semibold">

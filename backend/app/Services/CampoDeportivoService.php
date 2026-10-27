@@ -60,6 +60,8 @@ class CampoDeportivoService
                 'municipio' => property_exists($dto, 'municipio') ? ($dto->municipio ?: null) : null,
                 'latitud' => $dto->latitud,
                 'longitud' => $dto->longitud,
+                // [B94] instancia enum del DTO; el cast del model la serializa. Nunca null.
+                'modalidad_reserva' => $dto->modalidad_reserva,
                 'estado' => 'activo',
             ]);
 
@@ -92,6 +94,10 @@ class CampoDeportivoService
             'municipio' => array_key_exists('municipio', $data) ? ($data['municipio'] ?: null) : $campo->municipio,
             'latitud' => $data['latitud'] ?? $campo->latitud,
             'longitud' => $data['longitud'] ?? $campo->longitud,
+            // [B94] actualizar recibe array crudo (no DTO); si el 862 manda modalidad
+            // (string válido, Rule::in lo garantiza) entra y el cast la convierte; si no
+            // la manda, conserva la del campo (no la pisa con null).
+            'modalidad_reserva' => $data['modalidad_reserva'] ?? $campo->modalidad_reserva,
         ]);
 
         return $campo->fresh()->load(['tipoCampo', 'horariosAtencion']);
