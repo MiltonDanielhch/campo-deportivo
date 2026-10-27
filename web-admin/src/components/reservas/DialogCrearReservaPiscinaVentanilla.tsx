@@ -285,7 +285,7 @@ export default function DialogCrearReservaPiscinaVentanilla({
       `Reserva piscina ${resultado.codigo_seguimiento}\n` +
       `Monto: Bs ${resultado.monto_total.toFixed(2)}\n` +
       `Código de pago: ${resultado.referencia_recaudaciones ?? ''}\n` +
-      `Pagá en ventanilla del Banco Unión o escaneá el QR.`,
+      `Pagá con el código en ventanilla de cualquier banco (presentá tu CI/NIT) o escaneá el QR para pagar por Síntesis.`,
     );
     window.open(`https://wa.me/?text=${texto}`, '_blank');
   };
@@ -348,6 +348,9 @@ export default function DialogCrearReservaPiscinaVentanilla({
               <p className="mt-1 text-lg font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
                 Bs {resultado.monto_total.toFixed(2)}
               </p>
+              <p className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-200/80">
+                Monto emitido por SIREB
+              </p>
             </div>
 
             {resultado.referencia_recaudaciones ? (
@@ -401,8 +404,8 @@ export default function DialogCrearReservaPiscinaVentanilla({
                 )}
 
                 <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-                  <QrCode className="size-3.5" />
-                  El ciudadano paga con este código o QR; el sistema confirma solo.
+                  <QrCode className="size-3.5 shrink-0" />
+                  Pagá con este código en ventanilla de cualquier banco, presentando tu CI/NIT. O escaneá el QR para pagar por Síntesis.
                 </p>
               </div>
             ) : (

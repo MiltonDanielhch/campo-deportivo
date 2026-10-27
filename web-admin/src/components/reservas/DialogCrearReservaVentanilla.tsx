@@ -541,7 +541,7 @@ export default function DialogCrearReservaVentanilla({
     const texto = encodeURIComponent(
       `Reserva ${resultado.codigo_seguimiento}\nMonto: Bs ${resultado.monto_total.toFixed(2)}\n` +
         `Código de pago: ${resultado.referencia_recaudaciones ?? ''}\n` +
-        `Pagá en ventanilla del Banco Unión o escaneá el QR.`,
+        `Pagá con el código en ventanilla de cualquier banco (presentá tu CI/NIT) o escaneá el QR para pagar por Síntesis.`,
     );
     window.open(`https://wa.me/?text=${texto}`, '_blank');
   };
@@ -659,7 +659,7 @@ export default function DialogCrearReservaVentanilla({
                 Bs {resultado.monto_total.toFixed(2)}
               </p>
               <p className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-200/80">
-                Monto confirmado por SIREB
+                Monto emitido por SIREB
               </p>
             </div>
 
@@ -733,7 +733,7 @@ export default function DialogCrearReservaVentanilla({
 
                 <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
                   <QrCode className="size-3.5 shrink-0" />
-                  Presentá este código o escaneá el QR en ventanilla del Banco Unión con tu CI.
+                  Pagá con este código en ventanilla de cualquier banco, presentando tu CI/NIT. O escaneá el QR para pagar por Síntesis.
                 </p>
               </div>
             ) : (
