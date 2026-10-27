@@ -69,6 +69,25 @@ class StoreCampoDeportivoRequest extends FormRequest
                     'No puede haber dos horarios para el mismo día de la semana.'
                 );
             }
+
+            // [B97] el front restringe municipio a los de la provincia (cascada +
+            // limpia al cambiar), pero el back solo validaba municipio como string.
+            // Un request manipulado podía mandar municipio de otra provincia y
+            // ensuciar el buscador público (B10) y el mapa. Defensa en profundidad.
+            $provinciaValidada = $this->input('provincia');
+            $municipioValidado = $this->input('municipio');
+            if (filled($provinciaValidada) && filled($municipioValidado)) {
+                $mapa = (array) config('beni.municipios_por_provincia', []);
+                $permitidos = $mapa[$provinciaValidada] ?? null;
+                // Si la provincia no tiene lista en config (hueco de datos, no del
+                // request), no bloqueo: el front ya avisa amber pa' ese caso.
+                if ($permitidos !== null && !in_array($municipioValidado, (array) $permitidos, true)) {
+                    $validator->errors()->add(
+                        'municipio',
+                        "El municipio '{$municipioValidado}' no pertenece a la provincia '{$provinciaValidada}'.",
+                    );
+                }
+            }
         });
     }
 
