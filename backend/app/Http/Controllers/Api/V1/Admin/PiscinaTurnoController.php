@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\CampoDeportivo;
 use App\Models\PiscinaTurno;
 use App\Models\PiscinaTurnoPerfil;
-use App\Services\Piscina\PiscinaTurnoLoteService;
 use App\Services\Piscina\PiscinaTarifaResolver;
+use App\Services\Piscina\PiscinaTurnoLoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -80,14 +80,6 @@ class PiscinaTurnoController extends Controller
             ], 422);
         }
 
-        // ⟦Gate#1 alineado con cancha⟧ piscina no tiene EXCLUDE de rango en BD,
-        // así que el solape se corta acá en PHP (mismo criterio que el lote).
-        if ($this->lote->haySolapeEnFecha($validated['campo_id'], $validated['fecha'], $validated['hora_inicio'], $validated['hora_fin'])) {
-            return response()->json([
-                'message' => 'Ya existe un turno activo que se solapa con ese horario en esa fecha.',
-            ], 422);
-        }
-
         // [B70-store] el invariante del sistema es "reservable ⟺ tarifa SIREB
         // liquidable vigente" (comentario 862, B87). Cancha ya lo fuerza en la
         // reserva (test 422 sin-tarifa); acá lo forzamos en la CREACIÓN del turno,
@@ -111,6 +103,13 @@ class PiscinaTurnoController extends Controller
             ], 422);
         }
 
+        // ⟦Gate#1 alineado con cancha⟧ piscina no tiene EXCLUDE de rango en BD,
+        // así que el solape se corta acá en PHP (mismo criterio que el lote).
+        if ($this->lote->haySolapeEnFecha($validated['campo_id'], $validated['fecha'], $validated['hora_inicio'], $validated['hora_fin'])) {
+            return response()->json([
+                'message' => 'Ya existe un turno activo que se solapa con ese horario en esa fecha.',
+            ], 422);
+        }
 
         try {
             $turno = DB::transaction(function () use ($validated) {
@@ -188,7 +187,7 @@ class PiscinaTurnoController extends Controller
     /**
      * PATCH /api/v1/admin/piscina/turnos/{turnoId}
      * (el intervalo fecha/hora es inmutable acá → no genera solape nuevo;
-     *  el reservado=0 al recrear perfiles sigue siendo Fix 3, gate PO)
+     *  la edición de perfiles PRESERVA reservado, Fix3-real — ya no es gate PO)
      */
     public function update(Request $request, string $turnoId): JsonResponse
     {
@@ -207,19 +206,37 @@ class PiscinaTurnoController extends Controller
             'perfiles.*.tarifa_sireb_id' => ['nullable', 'uuid'],
         ]);
 
-        try {
-            DB::transaction(function () use ($turno, $validated) {
-                // [B105] el update de perfiles hace delete+recreate con reservado=0, lo que
-                // pierde el conteo de cupo tomado (sobreventa). La UI ya bloquea la edición
-                // (botón disabled, Fix 3 gate PO); este gate lleva esa decisión al back pa'
-                // que un request manipulado a PATCH no destruya el cupo. Estado/observación
-                // siguen editables (no tocan reservado).
-                if (isset($validated['perfiles'])) {
+        // [Fix3-real] reservado es contador FÍSICO (PiscinaReservaService lo incrementa al
+        // crear y lo decrementa con min(cantidad,reservado) al cancelar; NO es derivable de
+        // un SUM de detalles porque el estado vive en la cabecera, FIX 4b). El update
+        // anterior lo reseteaba a 0 → sobreventa. Validamos ANTES de la transacción
+        // (fail-fast, patrón cancelar()/B70-store): ningún cupo nuevo baja de lo ya tomado
+        // y ningún perfil con gente reservada se quita. Capturamos el reservado por perfil
+        // pa' preservarlo en el recreate de abajo.
+        $reservadoActual = [];
+        if (isset($validated['perfiles'])) {
+            $reservadoActual = $turno->perfiles()->pluck('reservado', 'perfil')->all();
+            $nuevosPerfiles = [];
+            foreach ($validated['perfiles'] as $perfilData) {
+                $nuevosPerfiles[] = $perfilData['perfil'];
+                $tomado = (int) ($reservadoActual[$perfilData['perfil']] ?? 0);
+                if ((int) $perfilData['cupo'] < $tomado) {
                     return response()->json([
-                        'message' => 'La edición de perfiles no está habilitada (Fix 3). Modificá estado u observación.',
+                        'message' => "El cupo de {$perfilData['perfil']} no puede ser menor a {$tomado} (ya reservado).",
                     ], 422);
                 }
+            }
+            foreach ($reservadoActual as $perfil => $tomado) {
+                if (! in_array($perfil, $nuevosPerfiles, true) && (int) $tomado > 0) {
+                    return response()->json([
+                        'message' => "No se puede quitar el perfil {$perfil}: tiene {$tomado} reservado(s).",
+                    ], 422);
+                }
+            }
+        }
 
+        try {
+            DB::transaction(function () use ($turno, $validated, $reservadoActual) {
                 if (isset($validated['estado'])) {
                     $turno->estado = $validated['estado'];
                 }
@@ -234,7 +251,9 @@ class PiscinaTurnoController extends Controller
                         $turno->perfiles()->create([
                             'perfil' => $perfilData['perfil'],
                             'cupo' => $perfilData['cupo'],
-                            'reservado' => 0,
+                            // [Fix3-real] preservamos el cupo tomado; el delete+recreate
+                            // ya no lo pisa a 0.
+                            'reservado' => (int) ($reservadoActual[$perfilData['perfil']] ?? 0),
                             'tarifa_sireb_id' => $perfilData['tarifa_sireb_id'] ?? null,
                             'precio_unitario' => $perfilData['precio_unitario'],
                             'estado' => 'activo',

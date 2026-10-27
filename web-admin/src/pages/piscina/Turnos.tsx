@@ -25,6 +25,8 @@ export default function TurnosPiscina() {
   const [cargando, setCargando] = useState(true);
   const [dialogAbierto, setDialogAbierto] = useState(false);
   const [loteAbierto, setLoteAbierto] = useState(false);
+  // [editar] turno en edición (null = modo crear).
+  const [turnoEditando, setTurnoEditando] = useState<PiscinaTurno | null>(null);
 
   // ⟦LOTE⟧ sin rango, un lote de 60 días × N turnos satura la lista. Filtro por
   // defecto hoy..hoy+30 (el service ya acepta fecha_desde/fecha_hasta).
@@ -74,7 +76,7 @@ export default function TurnosPiscina() {
             <Copy className="mr-2 w-4 h-4" />
             Generar en lote
           </Button>
-          <Button onClick={() => setDialogAbierto(true)}>
+          <Button onClick={() => { setTurnoEditando(null); setDialogAbierto(true); }}>
             <Plus className="w-4 h-4 mr-2" />
             Crear Turno
           </Button>
@@ -95,9 +97,10 @@ export default function TurnosPiscina() {
       </div>
 
       <CrearTurnoDialog
-        abierto={dialogAbierto}
-        onCerrar={() => setDialogAbierto(false)}
+        abierto={dialogAbierto || turnoEditando !== null}
+        onCerrar={() => { setDialogAbierto(false); setTurnoEditando(null); }}
         campoId={campoId || ''}
+        turno={turnoEditando}
         onCreado={cargarTurnos}
       />
 
@@ -133,7 +136,7 @@ export default function TurnosPiscina() {
                   <div className="flex gap-2">
                     {/* ⟦Fix 3 gate PO⟧ edición de perfiles pendiente: deshabilitado
                         con título honesto en vez de botón muerto que no hace nada. */}
-                    <Button variant="outline" size="sm" disabled title="Edición de perfiles pendiente (Fix 3)">
+                    <Button variant="outline" size="sm" onClick={() => setTurnoEditando(turno)} title="Editar perfiles / estado / observación">
                       <Edit className="w-4 h-4" />
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => handleEliminar(turno.id)}>
