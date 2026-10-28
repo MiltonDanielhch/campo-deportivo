@@ -77,10 +77,15 @@ class PiscinaDisponibilidadService
             ->get();
 
         $turnosData = [];
+        // [hueco-mensaje] cuenta los turnos de HOY excluidos por ya comenzados, pa' que
+        // el front distinga "ya comenzaron" de "no hay nada configurado". Aditivo: NO
+        // mete los pasados en $turnosData (el movil sigue viendo [] pa' pasados).
+        $comenzados = 0;
 
         foreach ($turnos as $turno) {
             // [FIX piscina-pasada] turno de HOY ya corrido → no se ofrece.
             if ($esHoyBolivia && $this->aSegundos($turno->hora_inicio) <= $ahoraSeg) {
+                $comenzados++;
                 continue;
             }
 
@@ -130,7 +135,7 @@ class PiscinaDisponibilidadService
             }
         }
 
-        return ['campo_id' => $campoId, 'fecha' => $fecha, 'abierto' => true, 'turnos' => $turnosData];
+        return ['campo_id' => $campoId, 'fecha' => $fecha, 'abierto' => true, 'turnos' => $turnosData, 'turnos_ya_comenzados' => $comenzados];
     }
 
     /**

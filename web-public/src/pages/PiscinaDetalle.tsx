@@ -244,7 +244,9 @@ export default function PiscinaDetalle({ campoId }: PiscinaDetalleProps) {
                 <Info className="w-12 h-12 mx-auto text-slate-400 mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No hay turnos disponibles</h3>
                 <p className="text-slate-500">
-                  No hay turnos disponibles para esta fecha.
+                  {(disponibilidad.turnos_ya_comenzados ?? 0) > 0
+                    ? 'Los turnos de hoy ya comenzaron. Probá mañana o elegí otra fecha.'
+                    : 'No hay turnos disponibles para esta fecha.'}
                 </p>
               </CardContent>
             </Card>

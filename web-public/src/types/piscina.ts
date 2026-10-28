@@ -20,6 +20,10 @@ export interface PiscinaDisponibilidad {
   fecha: string;
   abierto: boolean;
   turnos: PiscinaTurno[];
+  // [hueco-mensaje] solo presente cuando abierto=true; omitido (undefined) en las ramas
+  // abierto=false del backend. >0 = los turnos de hoy ya comenzaron (excluidos por el
+  // gate pasada), no "no hay nada configurado".
+  turnos_ya_comenzados?: number;
 }
 
 export interface PiscinaReservaItem {
