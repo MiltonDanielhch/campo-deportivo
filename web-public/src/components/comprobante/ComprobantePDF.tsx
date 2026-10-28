@@ -177,7 +177,7 @@ export default function ComprobantePDF({ datos }: ComprobantePDFProps) {
 
           <div className="bg-emerald-50 rounded-xl p-4 print:bg-transparent print:border-2 print:border-emerald-300">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 mb-1">
-              Monto total pagado
+              Monto total
             </p>
             <p className="text-2xl md:text-3xl font-bold text-emerald-700 tabular-nums">
               Bs {monto.toFixed(2)}
@@ -219,7 +219,7 @@ export default function ComprobantePDF({ datos }: ComprobantePDFProps) {
                   </div>
 
                   <p className="text-[10px] font-mono text-slate-400 mt-1.5">
-                    Código: {r.codigo_reserva}
+                    Código de franja: {r.codigo_reserva}
                   </p>
                 </div>
               </div>

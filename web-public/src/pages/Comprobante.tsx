@@ -59,7 +59,7 @@ export default function Comprobante() {
               </Link>
             </Button>
 
-            {vista === 'ok' && datos?.estado === 'confirmada' && (
+            {/* {vista === 'ok' && datos?.estado === 'confirmada' && (
               <Button
                 onClick={handlePrint}
                 className="rounded-full shadow-md shadow-teal-500/20"
@@ -67,7 +67,7 @@ export default function Comprobante() {
                 <Printer className="w-4 h-4 mr-2" />
                 Imprimir / PDF
               </Button>
-            )}
+            )} */}
           </div>
 
           {/* ─── Cargando ─── */}

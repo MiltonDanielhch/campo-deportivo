@@ -8,6 +8,50 @@ import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 import type { PiscinaReserva } from '@/types/piscina';
 
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const MESES_LARGOS = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+const TZ_BOLIVIA = 'America/La_Paz';
+
+/**
+ * [B36] Fecha legible para piscina. Soporta:
+ * - date-only: "2026-10-29"
+ * - datetime con zona: "2026-10-29T04:00:00.000000Z"
+ * - datetime naive: "2026-10-29T00:00:00" (se toma como hora La Paz del servidor)
+ */
+function formatearFechaLarga(fechaISO: string | null | undefined): string {
+  if (!fechaISO) return '—';
+
+  const tieneZona = /Z$|[+-]\d{2}:?\d{2}$/.test(fechaISO);
+  if (tieneZona) {
+    const dt = new Date(fechaISO);
+    if (!Number.isNaN(dt.getTime())) {
+      try {
+        const s = dt.toLocaleDateString('es-BO', {
+          timeZone: TZ_BOLIVIA,
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+        return s.replace(',', '').replace(/^./, (c) => c.toUpperCase());
+      } catch {
+        /* fallback abajo */
+      }
+    }
+  }
+
+  const [y, m, d] = fechaISO.substring(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return fechaISO;
+
+  const fecha = new Date(y, m - 1, d);
+  const dia = DIAS_SEMANA[fecha.getDay()] ?? '';
+  const mes = MESES_LARGOS[m - 1] ?? '';
+  return `${dia} ${d} de ${mes} de ${y}`;
+}
+
 export default function ComprobantePiscina() {
   const { codigo } = useParams<{ codigo: string }>();
   const [reserva, setReserva] = useState<PiscinaReserva | null>(null);
@@ -154,7 +198,7 @@ export default function ComprobantePiscina() {
                         </span>
                       </div>
                       <span className="text-sm text-slate-500">
-                        {detalle.fecha}
+                        {formatearFechaLarga(detalle.fecha)}
                       </span>
                     </div>
                     <div className="space-y-2">
