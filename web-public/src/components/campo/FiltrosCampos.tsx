@@ -92,7 +92,7 @@ export default function FiltrosCampos({
       ? 'Activos'
       : filtros.estado === 'mantenimiento'
         ? 'En mantenimiento'
-        : 'Todos';
+        : 'Todos los estados';
 
   const todosMunicipios = Object.values(ubicaciones.municipios).reduce<string[]>(
     (acc, m) => acc.concat(m),
@@ -200,7 +200,7 @@ export default function FiltrosCampos({
               <span className="flex-1 truncate text-left">{estadoLabel}</span>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="todos">Todos los estados</SelectItem>
               <SelectItem value="activo">Activos</SelectItem>
               <SelectItem value="mantenimiento">En mantenimiento</SelectItem>
             </SelectContent>

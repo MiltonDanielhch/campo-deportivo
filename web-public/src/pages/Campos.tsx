@@ -59,7 +59,7 @@ export default function Campos() {
           return;
         }
         console.error('Error al cargar campos:', err);
-        setError('No se pudieron cargar las canchas. Intenta nuevamente.');
+        setError('No se pudieron cargar los campos. Intenta nuevamente.');
         setCargando(false);
       });
 
@@ -74,10 +74,10 @@ export default function Campos() {
   return (
     <>
       <Helmet>
-        <title>Campos Deportivos Disponibles - GAD Beni</title>
+        <title>Campos Deportivos - GAD Beni</title>
         <meta
           name="description"
-          content="Explora todos los campos deportivos disponibles en Trinidad, Beni. Buscá por nombre, filtrá por tipo de deporte y ubicación."
+          content="Explora todos los campos deportivos del GAD Beni en Trinidad, Beni. Buscá por nombre, filtrá por tipo de deporte y ubicación."
         />
       </Helmet>
 
@@ -102,10 +102,10 @@ export default function Campos() {
                 <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 shadow-sm">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span className="text-sm font-semibold">
-                    {campos.length} {campos.length === 1 ? 'cancha' : 'canchas'}
+                    {campos.length} {campos.length === 1 ? 'campo' : 'campos'}
                   </span>
                   <span className="text-xs text-slate-500">
-                    · {totalDisponibles} disponibles
+                    · {totalDisponibles} reservables online
                   </span>
                 </div>
               )}
@@ -167,10 +167,10 @@ export default function Campos() {
                   <SearchX className="w-7 h-7 text-slate-400" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">
-                  No encontramos canchas
+                  No encontramos campos
                 </h3>
                 <p className="text-slate-500 max-w-md mx-auto mb-6">
-                  No hay canchas que coincidan con tu búsqueda. Probá limpiar
+                  No hay campos que coincidan con tu búsqueda. Probá limpiar
                   los filtros o buscar con otros términos.
                 </p>
                 <button

@@ -40,6 +40,7 @@ export default function CampoCard({ campo }: CampoCardProps) {
   const { diurna, nocturna } = campo.tarifas ?? { diurna: null, nocturna: null };
 
   const esOficial = campo.fuente_precios === 'SIREB' && campo.sireb != null;
+  const esPiscina = campo.fuente_precios === 'SIREB_PERFIL';
   // const codigoOficial = campo.sireb?.codigo ?? campo.servicio_sireb_codigo;
   const imagenUrl = normalizarUrlImagen(campo.imagen_url);
 
@@ -90,6 +91,12 @@ export default function CampoCard({ campo }: CampoCardProps) {
           />
         ) : (
           <CampoSinFoto />
+        )}
+
+        {esPiscina && (
+          <Badge variant="secondary" className="bg-sky-100 text-sky-800 hover:bg-sky-200">
+            Por perfil
+          </Badge>
         )}
 
         {/* Badges de estado */}
@@ -186,7 +193,7 @@ export default function CampoCard({ campo }: CampoCardProps) {
         {/* ─── CTA o mensaje único de no reservable ─── */}
         {esReservable ? (
           <div className="flex items-center justify-between text-sm font-semibold text-teal-600 group-hover:text-teal-700">
-            <span>Ver disponibilidad</span>
+            <span>{esPiscina ? 'Ver turnos' : 'Ver disponibilidad'}</span>
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </div>
         ) : (

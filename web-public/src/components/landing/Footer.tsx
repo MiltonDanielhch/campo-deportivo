@@ -20,8 +20,9 @@ export default function Footer() {
             </div>
             <p className="text-sm leading-relaxed max-w-sm text-slate-400">
               Sistema oficial de reserva de campos deportivos del Gobierno
-              Autónomo Departamental del Beni. Pago online seguro y comprobante
-              digital al instante.
+              Autónomo Departamental del Beni. Pagá con QR o en ventanilla del
+              Banco Unión con tu CI; tu comprobante digital queda guardado y lo
+              consultás con tu código.
             </p>
             <div className="flex gap-3 mt-6">
               <a
