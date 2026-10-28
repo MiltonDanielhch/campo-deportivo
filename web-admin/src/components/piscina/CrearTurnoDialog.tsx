@@ -12,9 +12,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Clock, Users } from 'lucide-react';
+import { Plus, Trash2, Clock, Users, ShieldCheck } from 'lucide-react';
 import { piscinaService } from '@/services/piscinaService';
-import type { PiscinaTurno, PiscinaTurnoRequest } from '@/types/piscina';
+import type { PiscinaTurno, PiscinaTurnoRequest, PiscinaTarifaPerfil } from '@/types/piscina';
 
 interface CrearTurnoPiscinaDialogProps {
   abierto: boolean;
@@ -28,11 +28,14 @@ interface CrearTurnoPiscinaDialogProps {
 interface PerfilTurno {
   perfil: 'mayor_12' | 'menor_12' | 'institucion';
   cupo: number;
-  precio_unitario: number;
-  tarifa_sireb_id: string | null;
+  // [B99] en edición trae el espejado de SIREB (read-only); en crear es null y el
+  // precio se muestra desde el map vivo (preciosSireb), no desde acá.
+  precio_unitario: number | null;
   // [editar] cupo ya tomado; pa' el piso del input y pa' no quitar el perfil.
   reservado: number;
 }
+
+const PERFILES = ['mayor_12', 'menor_12', 'institucion'] as const;
 
 export default function CrearTurnoPiscinaDialog({
   abierto,
@@ -52,6 +55,11 @@ export default function CrearTurnoPiscinaDialog({
   const [observacion, setObservacion] = useState('');
   const [perfiles, setPerfiles] = useState<PerfilTurno[]>([]);
 
+  // [B99-precio] map perfil -> tarifa SIREB resuelta para la hora, + estado del fetch
+  // pa' no mostrar "sin tarifa" mientras carga ni mentir si el fetch falló.
+  const [preciosSireb, setPreciosSireb] = useState<Record<string, PiscinaTarifaPerfil>>({});
+  const [preciosEstado, setPreciosEstado] = useState<'idle' | 'cargando' | 'listo' | 'error'>('idle');
+
   // [editar] precarga al abrir (y reset pa' no heredar estado de una apertura
   // anterior, bug latente que el dialog de crear también tenía).
   useEffect(() => {
@@ -67,8 +75,9 @@ export default function CrearTurnoPiscinaDialog({
         turno.perfiles.map((p) => ({
           perfil: p.perfil,
           cupo: p.cupo,
+          // [B99] traigo el precio espejado pa' mostrarlo read-only en edición (el
+          // backend lo re-resuelve al guardar, así que el dato final es SIREB).
           precio_unitario: Number(p.precio_unitario),
-          tarifa_sireb_id: p.tarifa_sireb_id,
           reservado: p.reservado,
         })),
       );
@@ -83,11 +92,52 @@ export default function CrearTurnoPiscinaDialog({
     }
   }, [abierto, turno]);
 
+  // [B99-precio] en modo crear, al tener hora válida, pido el precio SIREB por perfil
+  // vía el endpoint que reusa el resolver (fuente única; el front no duplica el corte
+  // diurno/nocturno). En edición NO fetcheo: la hora es inmutable y el precio espejado
+  // ya viene con el turno (la deriva de 1 sync sigue anotada, no regresa).
+  useEffect(() => {
+    if (!abierto || esEdicion || !campoId || !/^\d{2}:\d{2}$/.test(horaInicio)) {
+      setPreciosEstado('idle');
+      return;
+    }
+    let cancelado = false;
+    setPreciosEstado('cargando');
+    piscinaService
+      .tarifasPerfil(campoId, `${horaInicio}:00`)
+      .then((lista) => {
+        if (cancelado) return;
+        const map: Record<string, PiscinaTarifaPerfil> = {};
+        for (const t of lista) map[t.perfil] = t;
+        setPreciosSireb(map);
+        setPreciosEstado('listo');
+      })
+      .catch(() => {
+        if (cancelado) return;
+        // fetch falló -> degradamos a "Se espeja al guardar" (sigue siendo verdad:
+        // el backend resuelve al guardar). No afirmamos "sin tarifa" por un error de red.
+        setPreciosEstado('error');
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [abierto, esEdicion, campoId, horaInicio]);
+
   const agregarPerfil = () => {
-    setPerfiles([...perfiles, { perfil: 'mayor_12', cupo: 10, precio_unitario: 15, tarifa_sireb_id: null, reservado: 0 }]);
+    // [dedupe] elige el primer perfil aún no usado; si están los 3, no agrega
+    // (el botón igual está disabled en perfiles.length >= 3).
+    const usados = new Set(perfiles.map((p) => p.perfil));
+    const siguiente = PERFILES.find((x) => !usados.has(x));
+    if (!siguiente) return;
+    setPerfiles([...perfiles, { perfil: siguiente, cupo: 10, precio_unitario: null, reservado: 0 }]);
   };
 
-  const actualizarPerfil = (index: number, campo: keyof PerfilTurno, valor: any) => {
+  const actualizarPerfil = (index: number, campo: 'perfil' | 'cupo', valor: any) => {
+    // [dedupe] no dejar cambiar un perfil a uno que ya ocupa otra fila del turno.
+    if (campo === 'perfil' && perfiles.some((p, i) => i !== index && p.perfil === valor)) {
+      toast.warning('Ese perfil ya está agregado en este turno.');
+      return;
+    }
     const nuevos = [...perfiles];
     nuevos[index] = { ...nuevos[index], [campo]: valor };
     setPerfiles(nuevos);
@@ -102,18 +152,18 @@ export default function CrearTurnoPiscinaDialog({
     setGuardando(true);
 
     try {
+      // [B99] el payload manda SOLO perfil + cupo; precio_unitario y tarifa_sireb_id
+      // los resuelve el backend vía PiscinaTarifaResolver (SIREB es la fuente).
+      const perfilesPayload = perfiles.map((p) => ({
+        perfil: p.perfil,
+        cupo: p.cupo,
+      }));
+
       if (esEdicion && turno) {
-        // [editar] el intervalo (fecha/hora) es inmutable en el backend; el payload
-        // de update solo lleva estado/observacion/perfiles (campo_id viene por route).
         const payload = {
           estado,
           observacion: observacion || null,
-          perfiles: perfiles.map((p) => ({
-            perfil: p.perfil,
-            cupo: p.cupo,
-            precio_unitario: p.precio_unitario,
-            tarifa_sireb_id: p.tarifa_sireb_id,
-          })),
+          perfiles: perfilesPayload,
         };
         await piscinaService.actualizarTurno(turno.id, payload);
         toast.success('Turno actualizado');
@@ -126,7 +176,7 @@ export default function CrearTurnoPiscinaDialog({
           cupo_total: cupoTotal,
           estado,
           observacion: observacion || null,
-          perfiles,
+          perfiles: perfilesPayload,
         };
         await piscinaService.crearTurno(datos);
         toast.success('Turno creado exitosamente');
@@ -134,8 +184,6 @@ export default function CrearTurnoPiscinaDialog({
       onCreado();
       onCerrar();
     } catch (error: any) {
-      // [editar] muestro el message del backend (422 de B70-store / Fix3-real),
-      // no un "no se pudo" genérico que deja al funcionario sin saber por qué.
       toast.error(error?.response?.data?.message ?? 'No se pudo guardar el turno');
     } finally {
       setGuardando(false);
@@ -151,8 +199,8 @@ export default function CrearTurnoPiscinaDialog({
           <DialogTitle>{esEdicion ? 'Editar Turno de Piscina' : 'Crear Turno de Piscina'}</DialogTitle>
           <DialogDescription>
             {esEdicion
-              ? 'Modificá cupos, precios, estado u observación. El intervalo (fecha y hora) no se cambia acá.'
-              : 'Configura un nuevo turno con sus perfiles y cupos.'}
+              ? 'Modificá cupos, estado u observación. El precio lo define SIREB y el intervalo (fecha y hora) no se cambia acá.'
+              : 'Configurá los perfiles y cupos. El precio de cada perfil lo define SIREB y se muestra acá según la hora.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -242,7 +290,14 @@ export default function CrearTurnoPiscinaDialog({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label>Perfiles del Turno</Label>
-              <Button type="button" variant="outline" size="sm" onClick={agregarPerfil}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={agregarPerfil}
+                // [dedupe] los 3 perfiles ya están agregados.
+                disabled={perfiles.length >= PERFILES.length}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Agregar Perfil
               </Button>
@@ -254,72 +309,102 @@ export default function CrearTurnoPiscinaDialog({
               </p>
             ) : (
               <div className="space-y-3">
-                {perfiles.map((perfil, index) => (
-                  <div key={index} className="border rounded-lg p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-slate-400" />
-                        <Select
-                          value={perfil.perfil}
-                          onValueChange={(v: any) => actualizarPerfil(index, 'perfil', v)}
+                {perfiles.map((perfil, index) => {
+                  // [B99-precio] texto/clase de la caja según modo y estado del fetch.
+                  let precioTexto: string;
+                  let precioCls = 'text-sm font-medium text-slate-700';
+                  if (esEdicion) {
+                    precioTexto =
+                      perfil.precio_unitario != null ? `Bs ${Number(perfil.precio_unitario).toFixed(2)}` : '—';
+                  } else if (preciosEstado === 'cargando') {
+                    precioTexto = '…';
+                    precioCls = 'text-sm text-slate-400';
+                  } else if (preciosEstado === 'listo') {
+                    const p = preciosSireb[perfil.perfil]?.precio_unitario;
+                    if (p != null) {
+                      precioTexto = `Bs ${p.toFixed(2)}`;
+                    } else {
+                      precioTexto = 'Sin tarifa SIREB';
+                      precioCls = 'text-sm italic text-rose-500';
+                    }
+                  } else {
+                    // idle (sin hora aún) o error de fetch -> verdad de fallback.
+                    precioTexto = 'Se espeja al guardar';
+                    precioCls = 'text-sm italic text-slate-400';
+                  }
+
+                  return (
+                    <div key={index} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-slate-400" />
+                          <Select
+                            value={perfil.perfil}
+                            onValueChange={(v: any) => actualizarPerfil(index, 'perfil', v)}
+                          >
+                            <SelectTrigger className="w-48">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="mayor_12">Mayores de 12</SelectItem>
+                              <SelectItem value="menor_12">Menores de 12</SelectItem>
+                              <SelectItem value="institucion">Institución</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => eliminarPerfil(index)}
+                          disabled={esEdicion && perfil.reservado > 0}
+                          title={esEdicion && perfil.reservado > 0 ? `Tiene ${perfil.reservado} reservado(s)` : undefined}
                         >
-                          <SelectTrigger className="w-48">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="mayor_12">Mayores de 12</SelectItem>
-                            <SelectItem value="menor_12">Menores de 12</SelectItem>
-                            <SelectItem value="institucion">Institución</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => eliminarPerfil(index)}
-                        // [editar] no se puede quitar un perfil con gente reservada
-                        // (el backend Fix3-real lo bloquea; el front no ofrece lo que falla).
-                        disabled={esEdicion && perfil.reservado > 0}
-                        title={esEdicion && perfil.reservado > 0 ? `Tiene ${perfil.reservado} reservado(s)` : undefined}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Cupo</Label>
-                        <Input
-                          type="number"
-                          value={perfil.cupo}
-                          // [editar] piso en lo ya reservado: el cupo no puede bajar de ahí.
-                          onChange={(e) => {
-                            const v = Number(e.target.value);
-                            actualizarPerfil(index, 'cupo', esEdicion ? Math.max(perfil.reservado, v) : v);
-                          }}
-                          min={1}
-                          required
-                        />
-                        {esEdicion && perfil.reservado > 0 && (
-                          <p className="text-[10px] text-amber-600">{perfil.reservado} ya reservado</p>
-                        )}
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
                       </div>
 
-                      <div className="space-y-1">
-                        <Label className="text-xs">Precio Unitario</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={perfil.precio_unitario}
-                          onChange={(e) => actualizarPerfil(index, 'precio_unitario', Number(e.target.value))}
-                          min={0}
-                          required
-                        />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Cupo</Label>
+                          <Input
+                            type="number"
+                            value={perfil.cupo}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              actualizarPerfil(index, 'cupo', esEdicion ? Math.max(perfil.reservado, v) : v);
+                            }}
+                            min={1}
+                            required
+                          />
+                          {esEdicion && perfil.reservado > 0 && (
+                            <p className="text-[10px] text-amber-600">{perfil.reservado} ya reservado</p>
+                          )}
+                        </div>
+
+                        {/* [B99] precio read-only: lo define SIREB (en crear, en vivo por hora). */}
+                        <div className="space-y-1">
+                          <Label className="text-xs">Precio (SIREB)</Label>
+                          <div className={`flex h-11 items-center rounded-md border border-slate-200 bg-slate-50 px-3 ${precioCls}`}>
+                            {precioTexto}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
+              </div>
+            )}
+
+            {/* [B99] hint lock, mismo texto que la pantalla de Tarifas (coherencia). */}
+            {perfiles.length > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900">
+                <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5 text-teal-600" />
+                <p>
+                  El precio de cada perfil lo define <strong>SIREB</strong> y este sistema solo lo
+                  refleja. Para cambiarlo hay que hacerlo en el panel de recaudaciones; acá podés
+                  volver a sincronizar cuando lo actualicen.
+                </p>
               </div>
             )}
 

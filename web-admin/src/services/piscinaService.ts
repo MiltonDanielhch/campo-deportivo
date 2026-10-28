@@ -1,5 +1,5 @@
 import apiClient from '@/services/apiClient';
-import type { PiscinaTurno, PiscinaTurnoRequest } from '@/types/piscina';
+import type { PiscinaTurno, PiscinaTurnoRequest, PiscinaTarifaPerfil } from '@/types/piscina';
 import type {
   DetallePiscinaResponse,
   EstadoSireb,
@@ -18,6 +18,15 @@ export const piscinaService = {
     const { data } = await apiClient.get<{ data: PiscinaTurno[] }>(
       `/v1/admin/piscina/campos/${campoId}/turnos`,
       { params }
+    );
+    return data.data;
+  },
+
+  /** [B99-precio] precio SIREB resuelto por perfil para una hora (fuente única = resolver). */
+  async tarifasPerfil(campoId: string, horaInicio: string): Promise<PiscinaTarifaPerfil[]> {
+    const { data } = await apiClient.get<{ data: PiscinaTarifaPerfil[] }>(
+      `/v1/admin/piscina/campos/${campoId}/tarifas-perfil`,
+      { params: { hora_inicio: horaInicio } },
     );
     return data.data;
   },

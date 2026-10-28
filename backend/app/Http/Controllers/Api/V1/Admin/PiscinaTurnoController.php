@@ -67,10 +67,13 @@ class PiscinaTurnoController extends Controller
             'estado' => ['required', 'in:activo,inactivo'],
             'observacion' => ['nullable', 'string'],
             'perfiles' => ['required', 'array', 'min:1'],
-            'perfiles.*.perfil' => ['required', 'in:mayor_12,menor_12,institucion'],
+            // [dedupe] un perfil no puede repetirse en el mismo turno (2 filas mayor_12
+            // colapsan el pluck('reservado','perfil') del update y duplican precio).
+            'perfiles.*.perfil' => ['required', 'in:mayor_12,menor_12,institucion', 'distinct'],
             'perfiles.*.cupo' => ['required', 'integer', 'min:1'],
-            'perfiles.*.precio_unitario' => ['required', 'numeric', 'min:0'],
-            'perfiles.*.tarifa_sireb_id' => ['nullable', 'uuid'],
+            // [B99] precio_unitario y tarifa_sireb_id NO vienen del payload: los
+            // resuelve SIREB vía PiscinaTarifaResolver (misma fuente que disponibilidad
+            // y que el gate B70-store). El funcionario no inventa el precio.
         ]);
 
         $campo = CampoDeportivo::find($validated['campo_id']);
@@ -80,26 +83,19 @@ class PiscinaTurnoController extends Controller
             ], 422);
         }
 
-        // [B70-store] el invariante del sistema es "reservable ⟺ tarifa SIREB
-        // liquidable vigente" (comentario 862, B87). Cancha ya lo fuerza en la
-        // reserva (test 422 sin-tarifa); acá lo forzamos en la CREACIÓN del turno,
-        // porque un turno cuyos perfiles no tienen tarifa espejada nace silente
-        // (PiscinaDisponibilidadService lo descarta vía el mismo resolver). Consulto
-        // la MISMA fuente que leerá disponibilidad: no adivino estado.
-        $sinTarifa = [];
-        foreach ($validated['perfiles'] as $perfilData) {
-            if (! $this->tarifaResolver->resolver(
-                $validated['campo_id'],
-                $perfilData['perfil'],
-                $validated['hora_inicio'],
-            )) {
-                $sinTarifa[] = $perfilData['perfil'];
-            }
-        }
-        if ($sinTarifa !== []) {
+        // [B70-store + B99] un solo paso: verifica que cada perfil tenga tarifa SIREB
+        // vigente (invariante "reservable ⟺ tarifa espejada") Y resuelve el precio +
+        // tarifa_sireb_id desde esa misma tarifa. Si algún perfil no tiene tarifa,
+        // respondo 422 ANTES de persistir (fail-fast, patrón del gate de solape).
+        $res = $this->resolverTarifasPerfiles(
+            $validated['campo_id'],
+            $validated['hora_inicio'],
+            $validated['perfiles'],
+        );
+        if ($res['sinTarifa'] !== []) {
             return response()->json([
                 'message' => 'Uno o más perfiles no tienen tarifa SIREB vigente. Sincronizá tarifas (sireb:sincronizar-tarifas) o verificá el vínculo del campo antes de crear el turno.',
-                'perfiles_sin_tarifa' => $sinTarifa,
+                'perfiles_sin_tarifa' => $res['sinTarifa'],
             ], 422);
         }
 
@@ -112,7 +108,7 @@ class PiscinaTurnoController extends Controller
         }
 
         try {
-            $turno = DB::transaction(function () use ($validated) {
+            $turno = DB::transaction(function () use ($validated, $res) {
                 $turno = PiscinaTurno::create([
                     'campo_id' => $validated['campo_id'],
                     'fecha' => $validated['fecha'],
@@ -123,13 +119,15 @@ class PiscinaTurnoController extends Controller
                     'observacion' => $validated['observacion'],
                 ]);
 
-                foreach ($validated['perfiles'] as $perfilData) {
+                // [B99] guardo el precio/tarifa_sireb_id RESUELTOS por SIREB, no los
+                // que haya tipeado el funcionario (el payload ya no los trae).
+                foreach ($res['resueltos'] as $perfilResuelto) {
                     $turno->perfiles()->create([
-                        'perfil' => $perfilData['perfil'],
-                        'cupo' => $perfilData['cupo'],
+                        'perfil' => $perfilResuelto['perfil'],
+                        'cupo' => $perfilResuelto['cupo'],
                         'reservado' => 0,
-                        'tarifa_sireb_id' => $perfilData['tarifa_sireb_id'] ?? null,
-                        'precio_unitario' => $perfilData['precio_unitario'],
+                        'tarifa_sireb_id' => $perfilResuelto['tarifa_sireb_id'],
+                        'precio_unitario' => $perfilResuelto['precio_unitario'],
                         'estado' => 'activo',
                     ]);
                 }
@@ -200,10 +198,9 @@ class PiscinaTurnoController extends Controller
             'estado' => ['sometimes', 'in:activo,inactivo'], // ⟦FIX 1⟧
             'observacion' => ['nullable', 'string'],
             'perfiles' => ['sometimes', 'array'],
-            'perfiles.*.perfil' => ['required', 'in:mayor_12,menor_12,institucion'],
+            'perfiles.*.perfil' => ['required', 'in:mayor_12,menor_12,institucion', 'distinct'],
             'perfiles.*.cupo' => ['required', 'integer', 'min:1'],
-            'perfiles.*.precio_unitario' => ['required', 'numeric', 'min:0'],
-            'perfiles.*.tarifa_sireb_id' => ['nullable', 'uuid'],
+            // [B99] idem store: precio/tarifa_sireb_id los resuelve SIREB, no el payload.
         ]);
 
         // [Fix3-real] reservado es contador FÍSICO (PiscinaReservaService lo incrementa al
@@ -214,6 +211,7 @@ class PiscinaTurnoController extends Controller
         // y ningún perfil con gente reservada se quita. Capturamos el reservado por perfil
         // pa' preservarlo en el recreate de abajo.
         $reservadoActual = [];
+        $res = ['sinTarifa' => [], 'resueltos' => []];
         if (isset($validated['perfiles'])) {
             $reservadoActual = $turno->perfiles()->pluck('reservado', 'perfil')->all();
             $nuevosPerfiles = [];
@@ -233,10 +231,25 @@ class PiscinaTurnoController extends Controller
                     ], 422);
                 }
             }
+
+            // [B99] la hora es inmutable → resuelvo contra $turno->hora_inicio (no del
+            // payload). Si un perfil perdió su tarifa SIREB (sync la versionó), 422:
+            // no guardo un turno con perfil sin precio espejado.
+            $res = $this->resolverTarifasPerfiles(
+                $turno->campo_id,
+                $turno->hora_inicio,
+                $validated['perfiles'],
+            );
+            if ($res['sinTarifa'] !== []) {
+                return response()->json([
+                    'message' => 'Uno o más perfiles no tienen tarifa SIREB vigente. Sincronizá tarifas antes de guardar.',
+                    'perfiles_sin_tarifa' => $res['sinTarifa'],
+                ], 422);
+            }
         }
 
         try {
-            DB::transaction(function () use ($turno, $validated, $reservadoActual) {
+            DB::transaction(function () use ($turno, $validated, $reservadoActual, $res) {
                 if (isset($validated['estado'])) {
                     $turno->estado = $validated['estado'];
                 }
@@ -247,15 +260,16 @@ class PiscinaTurnoController extends Controller
 
                 if (isset($validated['perfiles'])) {
                     $turno->perfiles()->delete();
-                    foreach ($validated['perfiles'] as $perfilData) {
+                    foreach ($res['resueltos'] as $perfilResuelto) {
                         $turno->perfiles()->create([
-                            'perfil' => $perfilData['perfil'],
-                            'cupo' => $perfilData['cupo'],
+                            'perfil' => $perfilResuelto['perfil'],
+                            'cupo' => $perfilResuelto['cupo'],
                             // [Fix3-real] preservamos el cupo tomado; el delete+recreate
                             // ya no lo pisa a 0.
-                            'reservado' => (int) ($reservadoActual[$perfilData['perfil']] ?? 0),
-                            'tarifa_sireb_id' => $perfilData['tarifa_sireb_id'] ?? null,
-                            'precio_unitario' => $perfilData['precio_unitario'],
+                            'reservado' => (int) ($reservadoActual[$perfilResuelto['perfil']] ?? 0),
+                            // [B99] precio/tarifa_sireb_id espejados de SIREB.
+                            'tarifa_sireb_id' => $perfilResuelto['tarifa_sireb_id'],
+                            'precio_unitario' => $perfilResuelto['precio_unitario'],
                             'estado' => 'activo',
                         ]);
                     }
@@ -295,5 +309,74 @@ class PiscinaTurnoController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => 'Error al eliminar turno', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * [B99] El precio del perfil NO lo tipea el funcionario: lo resuelve SIREB vía
+     * PiscinaTarifaResolver — la MISMA fuente que lee disponibilidad (y que el gate
+     * B70-store ya consultaba solo pa' existencia). Retorna, por perfil del payload:
+     * el cupo (decisión del funcionario) + precio_unitario y tarifa_sireb_id espejados
+     * de la tarifa vigente. Si un perfil no tiene tarifa, va a sinTarifa (caller 422).
+     *
+     * Cierra B99 en la fuente: el dato almacenado ya es SIREB, así que 147/391/489
+     * (público) leen lo mismo sin parches (S49).
+     *
+     * @return array{sinTarifa: string[], resueltos: array<int, array{perfil: string, cupo: int, tarifa_sireb_id: string|null, precio_unitario: float}>}
+     */
+    private function resolverTarifasPerfiles(string $campoId, string $horaInicio, array $perfiles): array
+    {
+        $sinTarifa = [];
+        $resueltos = [];
+
+        foreach ($perfiles as $perfilData) {
+            $tarifa = $this->tarifaResolver->resolver(
+                $campoId,
+                $perfilData['perfil'],
+                $horaInicio,
+            );
+
+            if (! $tarifa) {
+                $sinTarifa[] = $perfilData['perfil'];
+                continue;
+            }
+
+            $resueltos[] = [
+                'perfil' => $perfilData['perfil'],
+                'cupo' => (int) $perfilData['cupo'],
+                'tarifa_sireb_id' => $tarifa->tarifa_sireb_id,
+                'precio_unitario' => (float) $tarifa->precio_por_hora,
+            ];
+        }
+
+        return ['sinTarifa' => $sinTarifa, 'resueltos' => $resueltos];
+    }
+
+    /**
+     * [B99-precio] GET /v1/admin/piscina/campos/{campoId}/tarifas-perfil?hora_inicio=HH:MM:SS
+     *
+     * Devuelve el precio SIREB resuelto por perfil para la hora dada, usando el MISMO
+     * PiscinaTarifaResolver que availability y que el gate de store/update. Así el front
+     * muestra el precio sin duplicar la regla diurna/nocturna (fuente única = resolver).
+     * Perfil sin tarifa vigente → precio_unitario null (el front avisa "sin tarifa"; el
+     * store igual falla 422 al guardar, B70-store). No valida existencia de campo: el
+     * resolver ya tolera campo inexistente devolviendo null (endpoint de solo lectura).
+     */
+    public function tarifasPerfil(Request $request, string $campoId): JsonResponse
+    {
+        $validated = $request->validate([
+            'hora_inicio' => ['required', 'date_format:H:i:s'],
+        ]);
+
+        $precios = [];
+        foreach (['mayor_12', 'menor_12', 'institucion'] as $perfil) {
+            $tarifa = $this->tarifaResolver->resolver($campoId, $perfil, $validated['hora_inicio']);
+            $precios[] = [
+                'perfil' => $perfil,
+                'precio_unitario' => $tarifa ? (float) $tarifa->precio_por_hora : null,
+                'tarifa_sireb_id' => $tarifa?->tarifa_sireb_id,
+            ];
+        }
+
+        return response()->json(['data' => $precios]);
     }
 }

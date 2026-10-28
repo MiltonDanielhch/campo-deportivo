@@ -19,6 +19,16 @@ const addDays = (base: string, n: number) => {
 };
 const hoy = () => iso(new Date());
 
+// [B101] formatea la fecha del turno SIN tocar ninguna timezone. El backend castea
+// 'fecha' => 'date', así que el ISO que llega tiene el día de BD en la parte previa a
+// la T (con APP_TIMEZONE <= UTC, que es el caso: Bolivia UTC-4 / Docker UTC). Reordenar
+// a dd/mm/aaaa sin new Date() evita el off-by-one que toLocaleDateString(timeZone)
+// introduce cuando APP_TIMEZONE=UTC (00:00Z reinterpretado en Bolivia cae el día anterior).
+const fechaLegible = (iso: string): string => {
+  const [y, m, d] = iso.substring(0, 10).split('-');
+  return `${d}/${m}/${y}`;
+};
+
 export default function TurnosPiscina() {
   const { campoId } = useParams<{ campoId: string }>();
   const [turnos, setTurnos] = useState<PiscinaTurno[]>([]);
@@ -147,7 +157,7 @@ export default function TurnosPiscina() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <p className="text-sm text-slate-600">Fecha: {turno.fecha}</p>
+                    <p className="text-sm text-slate-600">Fecha: {fechaLegible(turno.fecha)}</p>
                   {turno.cupo_total && (
                     <p className="text-sm text-slate-600">Cupo total: {turno.cupo_total}</p>
                   )}

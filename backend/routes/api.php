@@ -255,6 +255,8 @@ Route::middleware('auth.oauth')->group(function () {
         ->group(function () {
             // Turnos
             Route::get('/campos/{campoId}/turnos', [PiscinaTurnoController::class, 'index']);
+            // [B99-precio] precio SIREB por perfil para una hora (fuente única = resolver).
+            Route::get('/campos/{campoId}/tarifas-perfil', [PiscinaTurnoController::class, 'tarifasPerfil']);
             Route::post('/turnos', [PiscinaTurnoController::class, 'store']);
             Route::post('/turnos/lote', [PiscinaTurnoController::class, 'storeLote']);
             Route::patch('/turnos/{turnoId}', [PiscinaTurnoController::class, 'update']);
