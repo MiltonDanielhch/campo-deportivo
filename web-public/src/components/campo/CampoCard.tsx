@@ -40,7 +40,7 @@ export default function CampoCard({ campo }: CampoCardProps) {
   const { diurna, nocturna } = campo.tarifas ?? { diurna: null, nocturna: null };
 
   const esOficial = campo.fuente_precios === 'SIREB' && campo.sireb != null;
-  const codigoOficial = campo.sireb?.codigo ?? campo.servicio_sireb_codigo;
+  // const codigoOficial = campo.sireb?.codigo ?? campo.servicio_sireb_codigo;
   const imagenUrl = normalizarUrlImagen(campo.imagen_url);
 
   // Helper para formatear precio desde SIREB
@@ -119,11 +119,11 @@ export default function CampoCard({ campo }: CampoCardProps) {
           <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
             {campo.tipo_campo?.nombre ?? 'Campo deportivo'}
           </p>
-          {codigoOficial && (
+          {/* {codigoOficial && (
             <span className="font-mono text-[11px] text-slate-400">
               {codigoOficial}
             </span>
-          )}
+          )} */}
         </div>
         <h3 className="text-lg font-bold leading-tight mb-2 group-hover:text-teal-700 transition-colors">
           {campo.nombre}
@@ -152,7 +152,7 @@ export default function CampoCard({ campo }: CampoCardProps) {
           {esOficial ? (
             <div className="flex items-center gap-1.5 text-sm">
               <span className="font-semibold">{formatoPrecioSireb()}</span>
-              <span className="text-xs text-slate-500">oficial</span>
+              <span className="text-xs text-slate-500">oficial / hora</span>
             </div>
           ) : (
             <>
@@ -162,7 +162,7 @@ export default function CampoCard({ campo }: CampoCardProps) {
                   <span className="font-semibold">
                     Bs {diurna.precio_por_hora.toFixed(0)}
                   </span>
-                  <span className="text-xs text-slate-500">regular</span>
+                  <span className="text-xs text-slate-500">diurno / hora</span>
                 </div>
               ) : null}
               {nocturna ? (
@@ -171,7 +171,7 @@ export default function CampoCard({ campo }: CampoCardProps) {
                   <span className="font-semibold">
                     Bs {nocturna.precio_por_hora.toFixed(0)}
                   </span>
-                  <span className="text-xs text-slate-500">con luces</span>
+                  <span className="text-xs text-slate-500">nocturno / hora</span>
                 </div>
               ) : null}
               {!diurna && !nocturna && (

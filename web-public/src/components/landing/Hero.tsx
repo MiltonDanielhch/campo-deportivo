@@ -36,8 +36,8 @@ export default function Hero() {
         {/* Subtítulo */}
         <p className="text-lg md:text-xl text-teal-50 mb-10 max-w-2xl mx-auto leading-relaxed">
           El sistema oficial del Gobierno Autónomo Departamental del Beni para
-          reservar canchas de fútbol, tenis, vóley y más. Pago seguro y
-          comprobante digital al instante.
+          reservar canchas de fútbol, tenis, vóley y más. Pago con QR y
+          comprobante digital al confirmar.
         </p>
 
         {/* CTAs */}

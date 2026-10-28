@@ -18,8 +18,8 @@ export default function BandaCTA() {
           Reservá tu cancha esta semana
         </h2>
         <p className="text-lg md:text-xl text-teal-50 mb-10 leading-relaxed">
-          Pagá con QR, recibí tu comprobante al instante y presentalo el día de
-          tu reserva.
+          Pagá con QR, recibí tu comprobante digital al confirmar y presentalo el
+          día de tu reserva.
         </p>
         <Button
           asChild

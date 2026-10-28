@@ -6,21 +6,21 @@ const pasos = [
     icon: MapPin,
     titulo: 'Elegí tu cancha',
     descripcion:
-      'Explorá las canchas disponibles por tipo de deporte, ubicación y horario. Vedé el precio diurno y nocturno antes de reservar.',
+      'Explorá las canchas disponibles por tipo de deporte, ubicación y horario. Compará el precio diurno y nocturno antes de reservar. Necesitás tu CI o NIT para reservar.',
   },
   {
     num: '02',
     icon: CreditCard,
-    titulo: 'Pagá online',
+    titulo: 'Pagá con QR',
     descripcion:
-      'Agregá las franjas al carrito y pagá con QR bancario. El proceso toma menos de 2 minutos.',
+      'Agregá las franjas al carrito y pagá con QR bancario. Tenés unos minutos para completar el pago; si no, la franja vuelve a estar disponible. El proceso toma menos de 2 minutos.',
   },
   {
     num: '03',
     icon: CheckCircle2,
     titulo: '¡A jugar!',
     descripcion:
-      'Recibís tu comprobante digital por email. Presentalo al llegar a la cancha el día de tu reserva.',
+      'Guardá tu comprobante digital: lo ves en pantalla al confirmar y en "Mis comprobantes". Presentalo al llegar a la cancha el día de tu reserva.',
   },
 ];
 

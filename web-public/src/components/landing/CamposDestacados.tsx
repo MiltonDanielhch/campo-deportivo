@@ -196,11 +196,11 @@ export default function CamposDestacados() {
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                         {campo.tipo_campo?.nombre ?? 'Campo deportivo'}
                       </p>
-                      {campo.servicio_sireb_codigo && (
+                      {/* {campo.servicio_sireb_codigo && (
                         <span className="font-mono text-[11px] text-slate-400">
                           {campo.servicio_sireb_codigo}
                         </span>
-                      )}
+                      )} */}
                     </div>
                     <h3 className="text-lg font-bold mb-2 group-hover:text-teal-700 transition-colors">
                       {campo.nombre}
