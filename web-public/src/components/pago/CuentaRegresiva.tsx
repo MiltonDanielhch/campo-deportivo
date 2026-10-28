@@ -84,8 +84,15 @@ export default function CuentaRegresiva({
         {mm}:{ss}
       </p>
 
+      {/* [D14] consecuencia de dejar correr el timer, visible SIEMPRE (no solo en
+          crítico): la franja vuelve libre, no se pierde "para siempre". Pa' que el
+          ciudadano que entra con 14:49 y se sale también sepa qué pasa. */}
+      <p className="text-xs text-slate-500 mt-2">
+        Si no completás el pago a tiempo, la franja vuelve a estar disponible y podés elegir otra.
+      </p>
+
       {critico && (
-        <p className="text-xs text-red-700 mt-2 font-medium">
+        <p className="text-xs text-red-700 mt-1.5 font-medium">
           El QR dejará de funcionar en breve
         </p>
       )}

@@ -356,7 +356,8 @@ export default function Pago() {
                       {estado.codigo_seguimiento}
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
-                      Guardalo por si necesitás soporte
+                      Guardalo por si necesitás soporte. Con este código consultás
+                      tu reserva en «Mis comprobantes».
                     </p>
                   </div>
 
