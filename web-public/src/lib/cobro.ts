@@ -6,20 +6,36 @@ export interface CobroNormalizado {
   qrString: string;
 }
 
-// Entrada laxa a propósito: el payload de campo (SolicitudEstadoResource) y el
-// de piscina (payloadPiscina) traen estos campos con formas distintas; cuando
-// veamos EstadoSolicitudPublico con cuerpo podemos estrechar el tipo.
-export function normalizarCobro(raw: any): CobroNormalizado | null {
-  if (!raw) return null;
-  const c = raw.cobro ?? raw.datos_cobro_pendiente ?? raw;
-  if (!c || typeof c !== 'object') return null;
+// Campos planos que el helper lee en cualquier rama (raíz o caja anidada).
+export interface CobroBruto {
+  qrString?: string | null;
+  qr_string?: string | null;
+  referenciaRecaudaciones?: string | null;
+  referencia_recaudaciones?: string | null;
+  codigo_publico?: string | null;
+  codigoPublico?: string | null;
+}
 
-  const qr: string | null = c.qrString ?? c.qr_string ?? null;
+// Entrada del helper: la caja de cobro puede venir anidada (cobro /
+// datos_cobro_pendiente) o en raíz. Extender CobroBruto hace que la unión
+// CobroBruto | CobroInput sea accesible sin cast en los campos planos.
+export interface CobroInput extends CobroBruto {
+  cobro?: CobroBruto | null;
+  datos_cobro_pendiente?: CobroBruto | null;
+}
+
+export function normalizarCobro(raw: CobroInput | null | undefined): CobroNormalizado | null {
+  if (!raw) return null;
+  const c: CobroBruto | null = raw.cobro ?? raw.datos_cobro_pendiente ?? null;
+  const fuente: CobroBruto = c ?? raw;
+  if (!fuente || typeof fuente !== 'object') return null;
+
+  const qr: string | null = fuente.qrString ?? fuente.qr_string ?? null;
   const codigo: string | null =
-    c.referenciaRecaudaciones ??
-    c.referencia_recaudaciones ??
-    c.codigo_publico ??
-    c.codigoPublico ??
+    fuente.referenciaRecaudaciones ??
+    fuente.referencia_recaudaciones ??
+    fuente.codigo_publico ??
+    fuente.codigoPublico ??
     raw.referencia_recaudaciones ??
     raw.codigo_publico ??
     null;

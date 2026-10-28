@@ -7,6 +7,7 @@ import {
   Smartphone,
   ScanLine,
   MessageCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { construirWhatsappUrl, type CobroNormalizado } from '@/lib/cobro';
@@ -16,20 +17,23 @@ interface BloqueCobroQRProps {
   codigo: string;
   monto: number;
   codigoSeguimiento: string;
+  /** Base del panel SIREB; si viene, se muestra el link "Verificar en SIREB". */
+  sirebBaseUrl?: string;
 }
 
 /**
  * [S16] El bloque de cobro (QR + Descargar + WhatsApp + código de ventanilla +
  * caja "¿Estás en el celular?") extraído pa' reusarse en línea (ConsultarEstado)
  * sin obligar a navegar a Pago. La regla de cobro/wa.me viene de lib/cobro.ts
- * (fuente única). No incluye el link externo "Verificar en SIREB" (en línea el
- * polling/manual‑refresh de ConsultarEstado lo reemplaza).
+ * (fuente única). El link SIREB es opt-in (sirebBaseUrl): Pago lo pasa, la
+ * consulta en línea no (el polling/manual-refresh lo reemplaza).
  */
 export default function BloqueCobroQR({
   cobro,
   codigo,
   monto,
   codigoSeguimiento,
+  sirebBaseUrl,
 }: BloqueCobroQRProps) {
   const [copiadoCodigo, setCopiadoCodigo] = useState(false);
   const [copiadoLink, setCopiadoLink] = useState(false);
@@ -196,6 +200,20 @@ export default function BloqueCobroQR({
           </a>
         </div>
       </div>
+
+      {sirebBaseUrl && (
+        <div className="pt-4 border-t border-slate-100 text-center">
+          <a
+            href={`${sirebBaseUrl}/${cobro.codigoPublico}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-teal-600 hover:text-teal-700 font-medium"
+          >
+            Verificar estado en el panel oficial de SIREB
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+      )}
     </div>
   );
 }
