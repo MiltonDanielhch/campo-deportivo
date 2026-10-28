@@ -22,6 +22,10 @@ export interface EstadoSolicitudPublico {
   codigo_seguimiento: string;
   estado: string;
   monto_total: number;
+  // [3b] lo que SIREB reportó al confirmar (autoritativo post-pago). Viaja solo en
+  // 'confirmada' (resource cancha + payloadPiscina). Ausente/null en pendiente y en
+  // confirmadas viejas -> ComprobantePDF cae a monto_total con label neutro.
+  monto_confirmado?: number | null;
   expira_en: string | null;
   // Viaja solo en estado 'pendiente' (reabrir link de pago / ver mismo QR).
   datos_cobro_pendiente?: DatosCobroPendiente | null;

@@ -160,6 +160,10 @@ class ConsultaEstadoController extends Controller
             'codigo_seguimiento' => $r->codigo_seguimiento,
             'estado' => $r->estado->value,
             'monto_total' => (float) $r->monto_total,
+            // [3b] monto_confirmado: lo que SIREB reportó al confirmar (autoritativo
+            // post-pago, KB SIREB). Null en confirmadas viejas (la migración
+            // add_monto_confirmado lo agregó nullable) -> el front cae a monto_total.
+            'monto_confirmado' => $r->monto_confirmado !== null ? (float) $r->monto_confirmado : null,
             'expira_en' => $r->expira_en?->toIso8601String(),
             'referencia_recaudaciones' => $r->referencia_recaudaciones,
 

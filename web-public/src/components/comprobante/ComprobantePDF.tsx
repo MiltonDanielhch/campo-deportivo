@@ -71,7 +71,13 @@ export default function ComprobantePDF({ datos }: ComprobantePDFProps) {
   // El resource NO manda confirmado_en a nivel raíz; vive dentro de cada reserva.
   const confirmadoEn = reservas[0]?.confirmado_en ?? null;
   const esConfirmada = datos.estado === 'confirmada';
-  const monto = Number(datos.monto_total ?? 0);
+  // [3b] en confirmada el monto autoritativo es lo que SIREB reportó (monto_confirmado,
+  // que ahora exponen el resource de cancha y payloadPiscina). Si una confirmada vieja
+  // no lo tiene (null por add_monto_confirmado) caemos al emitido (monto_total) con
+  // label neutro. KB SIREB: post-pago manda el confirmado.
+  const montoConfirmado = datos.monto_confirmado != null ? Number(datos.monto_confirmado) : null;
+  const monto = montoConfirmado ?? Number(datos.monto_total ?? 0);
+  const labelMonto = montoConfirmado != null ? 'Monto pagado' : 'Monto total';
 
   // ⚠️ Hoy el resource NO expone referencia_recaudaciones en confirmada.
   // Este bloque se activa solo cuando el backend lo agregue (ver patch más abajo).
@@ -177,7 +183,7 @@ export default function ComprobantePDF({ datos }: ComprobantePDFProps) {
 
           <div className="bg-emerald-50 rounded-xl p-4 print:bg-transparent print:border-2 print:border-emerald-300">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 mb-1">
-              Monto total
+              {labelMonto}
             </p>
             <p className="text-2xl md:text-3xl font-bold text-emerald-700 tabular-nums">
               Bs {monto.toFixed(2)}

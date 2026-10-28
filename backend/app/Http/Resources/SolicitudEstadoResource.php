@@ -24,6 +24,16 @@ class SolicitudEstadoResource extends JsonResource
             'codigo_seguimiento' => $this->codigo_seguimiento,
             'estado' => $this->estado->value,
             'monto_total' => (float) $this->monto_total,
+            // [3b] monto_confirmado: lo que SIREB reportó al confirmar (autoritativo
+            // post-pago, KB SIREB). Es dato PUBLICO (el ciudadano necesita saber cuanto
+            // pago), no PII del solicitante como nombre/telefono que este resource omite
+            // a proposito. Solo viaja en confirmada (en pendiente aun no hay pago
+            // confirmado). Front (ComprobantePDF) lo consume cuando exista; mientras
+            // tanto es inofensivo: un campo extra en el JSON no rompe nada en JS.
+            'monto_confirmado' => $this->when(
+                $this->estado->value === 'confirmada' && $this->monto_confirmado !== null,
+                fn () => (float) $this->monto_confirmado,
+            ),
             'expira_en' => $this->expira_en?->toIso8601String(),
 
             // SIREB v1: Construimos el objeto de cobro solo si está pendiente Y hay referencia_recaudaciones
