@@ -88,14 +88,16 @@ export default function ResumenCarrito({
                       </div>
                       <div className="flex items-center gap-1 text-sm font-semibold text-slate-900 mt-0.5">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span title={etiquetaTarifa}>
+                        <span>
                           {franja.horaInicio.slice(0, 5)}–{franja.horaFin.slice(0, 5)}
                         </span>
-                        {/* Ícono de tipo de tarifa */}
-                        <IconoTarifa
-                          className={`w-3 h-3 ml-1 ${colorTarifa}`}
-
-                        />
+                        {/* [D12] ícono + etiqueta visible (el title/tooltip no sirve en móvil) */}
+                        <span className="flex items-center gap-1 ml-1">
+                          <IconoTarifa className={`w-3 h-3 ${colorTarifa}`} />
+                          <span className={`text-[10px] font-medium ${colorTarifa}`}>
+                            {etiquetaTarifa}
+                          </span>
+                        </span>
                       </div>
                     </div>
                     <div className="flex-1 min-w-0 text-right">
@@ -132,6 +134,12 @@ export default function ResumenCarrito({
             <p className="text-xs text-slate-500 uppercase tracking-wide">Total</p>
             <p className="text-2xl font-bold text-slate-900 tabular-nums">
               Bs {total.toFixed(2)}
+            </p>
+            {/* [B15] caveat SIREB: el total es orientación del espejo; el monto
+                autoritativo lo fija la orden de cobro al pagar (mismo término que
+                el card "¿Cómo sigue?" de Reserva.tsx, sin sigla que el ciudadano no conoce). */}
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              el monto final lo confirma la orden de cobro
             </p>
           </div>
         </div>

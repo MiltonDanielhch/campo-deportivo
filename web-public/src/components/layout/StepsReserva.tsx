@@ -1,4 +1,4 @@
-import { Check, MapPin, User, CreditCard } from 'lucide-react';
+import { Check, MapPin, User, QrCode } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export type PasoReserva = 1 | 2 | 3;
@@ -10,7 +10,7 @@ interface StepsReservaProps {
 const PASOS = [
   { num: 1, label: 'Elegir canchas', icon: MapPin },
   { num: 2, label: 'Tus datos', icon: User },
-  { num: 3, label: 'Pago', icon: CreditCard },
+  { num: 3, label: 'Pago', icon: QrCode },
 ] as const;
 
 export default function StepsReserva({ pasoActual }: StepsReservaProps) {
