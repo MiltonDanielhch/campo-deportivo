@@ -71,16 +71,11 @@ function tarifaParaBloque(
   return { tarifa: null, tipo: tipoHorario };
 }
 
-function clasesLibre(tipo: TipoTarifaVisible): string {
-  if (tipo === 'nocturna') {
-    return 'bg-indigo-50/60 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm';
-  }
-
-  if (tipo === 'unica') {
-    return 'bg-sky-50/60 border-sky-200 hover:bg-sky-100 hover:border-sky-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm';
-  }
-
-  return 'bg-amber-50/60 border-amber-200 hover:bg-amber-100 hover:border-amber-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm';
+// [estandar R/Y/G] el color del bloque libre YA NO codifica diurna/nocturna: todo
+// bloque disponible es verde. El tipo de tarifa se comunica con el ICONO (sol/
+// lampara/reloj) y la etiqueta ("Regular"/"Con luces"/"Única"), no con el color.
+function clasesLibre(): string {
+  return 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm';
 }
 
 export default function GrillaDisponibilidad({
@@ -132,9 +127,8 @@ export default function GrillaDisponibilidad({
   const getClase = (
     bloque: Bloque,
     tarifa: InfoTarifa | null,
-    tipo: TipoTarifaVisible,
   ) => {
-    // 'pasada' tiene prioridad: gris neutro, no rojo/naranja.
+    // 'pasada' tiene prioridad: gris neutro, no rojo/amarillo.
     if (bloque.estado === 'pasada') {
       return 'bg-slate-100 border-slate-200 cursor-not-allowed opacity-60';
     }
@@ -142,17 +136,19 @@ export default function GrillaDisponibilidad({
       return 'bg-red-50 border-red-200 cursor-not-allowed opacity-70';
     }
     if (bloque.estado === 'bloqueada_temporal') {
-      return 'bg-orange-50 border-orange-200 cursor-not-allowed opacity-80';
+      // [estandar R/Y/G] 'en cobro' = amarillo (antes naranja).
+      return 'bg-yellow-100 border-yellow-400 cursor-not-allowed opacity-90';
     }
     if (!tarifa) {
       return 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-60';
     }
     if (estaSeleccionada(bloque)) {
-      return 'bg-teal-600 text-white border-teal-600 shadow-md scale-[1.02]';
+      // [estandar R/Y/G] seleccionada = verde sólido (misma familia que 'disponible').
+      return 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-[1.02]';
     }
 
-    // Libre sin seleccionar: color por tipo + hover.
-    return clasesLibre(tipo);
+    // Libre sin seleccionar: verde (disponible) + hover. El tipo ya no pinta color.
+    return clasesLibre();
   };
 
   return (
@@ -177,7 +173,6 @@ export default function GrillaDisponibilidad({
             className={`relative p-3 border-2 rounded-xl text-center transition-all duration-200 ${getClase(
               bloque,
               tarifa,
-              tipo,
             )}`}
             title={
               bloque.estado === 'pasada'
@@ -191,30 +186,16 @@ export default function GrillaDisponibilidad({
                   : undefined
             }
           >
-            {/* Franja lateral de color por tipo (solo si es libre y tiene tarifa) */}
+            {/* Franja lateral de color: verde = disponible (el tipo ya no pinta color) */}
             {bloque.estado === 'libre' && tarifa && !seleccionado && (
-              <span
-                className={`absolute top-2 left-2 w-1 h-6 rounded-full ${
-                  tipo === 'nocturna'
-                    ? 'bg-indigo-400'
-                    : tipo === 'unica'
-                      ? 'bg-sky-400'
-                      : 'bg-amber-400'
-                }`}
-              />
+              <span className="absolute top-2 left-2 w-1 h-6 rounded-full bg-emerald-400" />
             )}
 
             <div className="flex items-center justify-center gap-1.5 font-bold text-sm">
               {bloque.estado === 'libre' && (
                 <Icono
                   className={`w-3.5 h-3.5 ${
-                    seleccionado
-                      ? 'text-white'
-                      : tipo === 'nocturna'
-                        ? 'text-indigo-500'
-                        : tipo === 'unica'
-                          ? 'text-sky-500'
-                          : 'text-amber-500'
+                    seleccionado ? 'text-white' : 'text-emerald-600'
                   }`}
                 />
               )}
@@ -237,7 +218,7 @@ export default function GrillaDisponibilidad({
                 </span>
               )}
               {bloque.estado === 'bloqueada_temporal' && (
-                <span className="text-orange-700 font-medium">
+                <span className="text-yellow-800 font-medium">
                   En cobro
                 </span>
               )}
