@@ -1,4 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import EstadoReserva from '@/components/comprobante/EstadoReserva';
+import BloqueCobroQR from '@/components/pago/BloqueCobroQR';
+import { normalizarCobro } from '@/lib/cobro';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import {
@@ -17,7 +20,6 @@ import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api';
 import type { EstadoSolicitudPublico } from '@/types/reserva';
 import ComprobantePDF from '@/components/comprobante/ComprobantePDF';
-import EstadoReserva from '@/components/comprobante/EstadoReserva';
 
 const POLLING_INTERVAL_MS = 10000; // Verificar cada 10 segundos
 
@@ -38,6 +40,9 @@ export default function ConsultarEstado() {
   const comprobantePath = esPiscina
     ? `/comprobante-piscina/${datos?.codigo_seguimiento}`
     : `/comprobante/${datos?.codigo_seguimiento}`;
+
+  // [S16] el QR se ve en línea cuando está pendiente, sin ir y volver a Pago.
+  const cobro = useMemo(() => normalizarCobro(datos), [datos]);
 
   const consultar = async () => {
     const limpio = codigo.trim().toUpperCase();
@@ -268,6 +273,18 @@ export default function ConsultarEstado() {
                 esPiscina={esPiscina}
                 mostrarAcciones
               />
+
+              {/* [S16] QR + WhatsApp + copiar link en línea (pendiente). */}
+              {datos.estado === 'pendiente' && cobro && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                  <BloqueCobroQR
+                    cobro={cobro}
+                    codigo={datos.codigo_seguimiento}
+                    monto={datos.monto_total}
+                    codigoSeguimiento={datos.codigo_seguimiento}
+                  />
+                </div>
+              )}
 
               {/* Botón para refrescar manualmente */}
               {datos.estado === 'pendiente' && (

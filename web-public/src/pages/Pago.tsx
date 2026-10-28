@@ -29,6 +29,7 @@ import { api } from '@/lib/api';
 import { useCarritoStore } from '@/store/carritoStore';
 import CuentaRegresiva from '@/components/pago/CuentaRegresiva';
 import StepsReserva from '@/components/layout/StepsReserva';
+import { normalizarCobro, construirWhatsappUrl } from '@/lib/cobro';
 
 interface EstadoPago {
   codigo_seguimiento: string;
@@ -42,33 +43,33 @@ interface EstadoPago {
   codigo_publico?: string | null;
 }
 
-interface CobroNormalizado {
-  codigoPublico: string;
-  qrString: string;
-}
+// interface CobroNormalizado {
+//   codigoPublico: string;
+//   qrString: string;
+// }
 
-function normalizarCobro(raw: EstadoPago | null): CobroNormalizado | null {
-  if (!raw) return null;
-  const c = raw.cobro ?? raw.datos_cobro_pendiente ?? raw;
-  if (!c || typeof c !== 'object') return null;
+// function normalizarCobro(raw: EstadoPago | null): CobroNormalizado | null {
+//   if (!raw) return null;
+//   const c = raw.cobro ?? raw.datos_cobro_pendiente ?? raw;
+//   if (!c || typeof c !== 'object') return null;
 
-  const qr: string | null = c.qrString ?? c.qr_string ?? null;
-  const codigo: string | null =
-    c.referenciaRecaudaciones ??
-    c.referencia_recaudaciones ??
-    c.codigo_publico ??
-    c.codigoPublico ??
-    raw.referencia_recaudaciones ??
-    raw.codigo_publico ??
-    null;
+//   const qr: string | null = c.qrString ?? c.qr_string ?? null;
+//   const codigo: string | null =
+//     c.referenciaRecaudaciones ??
+//     c.referencia_recaudaciones ??
+//     c.codigo_publico ??
+//     c.codigoPublico ??
+//     raw.referencia_recaudaciones ??
+//     raw.codigo_publico ??
+//     null;
 
-  const codigoFinal =
-    codigo ?? (qr && qr.startsWith('SIREB:') ? qr.slice('SIREB:'.length) : null);
-  const qrFinal = qr ?? (codigoFinal ? `SIREB:${codigoFinal}` : null);
+//   const codigoFinal =
+//     codigo ?? (qr && qr.startsWith('SIREB:') ? qr.slice('SIREB:'.length) : null);
+//   const qrFinal = qr ?? (codigoFinal ? `SIREB:${codigoFinal}` : null);
 
-  if (!codigoFinal || !qrFinal) return null;
-  return { codigoPublico: codigoFinal, qrString: qrFinal };
-}
+//   if (!codigoFinal || !qrFinal) return null;
+//   return { codigoPublico: codigoFinal, qrString: qrFinal };
+// }
 
 interface MensajeRechazo {
   titulo: string;
@@ -290,9 +291,7 @@ export default function Pago() {
   // URL para compartir por WhatsApp
   const whatsappShareUrl =
     cobro && estado
-      ? `https://wa.me/?text=${encodeURIComponent(
-          `Reserva Canchas GAD Beni\nCódigo: ${estado.codigo_seguimiento}\nMonto: Bs ${estado.monto_total.toFixed(2)}\nCódigo de pago: ${cobro.codigoPublico}\nQR: ${cobro.qrString}`,
-        )}`
+      ? construirWhatsappUrl(estado.codigo_seguimiento, estado.monto_total, cobro)
       : null;
 
   return (

@@ -98,7 +98,14 @@ export default function EstadoReserva({
   esPiscina = false,
   mostrarAcciones = false,
 }: EstadoReservaProps) {
-  const config = CONFIG[estado] ?? CONFIG.cancelada;
+    // [B22] si está pendiente pero el vencimiento ya pasó, pinta EXPIRADA local
+  // (sin esperar al ExpirarSolicitudJob/schedule). La comparación es tz-safe:
+  // expira_en llega con offset (toIso8601String) y Date.now() es instante
+  // absoluto, así que "venció o no" no depende del huso del navegador.
+  const vencidoLocal =
+    estado === 'pendiente' && !!expiraEn && new Date(expiraEn).getTime() < Date.now();
+  const estadoEfectivo = vencidoLocal ? 'expirada' : estado;
+  const config = CONFIG[estadoEfectivo] ?? CONFIG.cancelada;
   const Icono = config.icono;
   const comprobanteHref = `${
     esPiscina ? '/comprobante-piscina' : '/comprobante'
@@ -134,7 +141,7 @@ export default function EstadoReserva({
                 </span>
               </div>
             )}
-            {expiraEn && estado === 'pendiente' && (
+            {expiraEn && estadoEfectivo === 'pendiente' && (
               <div className="flex items-center gap-1.5">
                 <span className="text-slate-500">Vence:</span>
                 <span className="font-semibold text-slate-900">
@@ -152,7 +159,7 @@ export default function EstadoReserva({
       {/* CTAs contextuales */}
       {mostrarAcciones && (
         <div className="mt-6 pt-6 border-t border-white/60 flex flex-col sm:flex-row gap-2">
-          {estado === 'pendiente' && codigoSeguimiento && (
+          {estadoEfectivo === 'pendiente' && codigoSeguimiento && (
             <Button asChild className="rounded-full">
               <Link
                 to={`/pago/${codigoSeguimiento}`}
@@ -163,7 +170,7 @@ export default function EstadoReserva({
               </Link>
             </Button>
           )}
-          {estado === 'confirmada' && codigoSeguimiento && (
+          {estadoEfectivo === 'confirmada' && codigoSeguimiento && (
             <Button asChild className="rounded-full">
               <Link
                 to={comprobanteHref}
@@ -174,7 +181,7 @@ export default function EstadoReserva({
               </Link>
             </Button>
           )}
-          {(estado === 'expirada' || estado === 'rechazada') && (
+          {(estadoEfectivo === 'expirada' || estadoEfectivo === 'rechazada') && (
             <Button asChild className="rounded-full">
               <Link
                 to="/campos"
