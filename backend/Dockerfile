@@ -14,9 +14,10 @@ RUN composer install \
     --prefer-dist
 
 # ============================================
-# Etapa 2: Imagen final PHP-FPM 8.4
+# Etapa 2: Imagen final PHP-FPM 8.4 parcheada
 # ============================================
-FROM php:8.4-fpm-alpine
+# ACTUALIZADO: Usando PHP 8.4.27-fpm-alpine para corregir vulnerabilidades críticas
+FROM php:8.4.27-fpm-alpine
 
 # Extensiones necesarias para Laravel + PostgreSQL + Redis
 RUN apk add --no-cache \
