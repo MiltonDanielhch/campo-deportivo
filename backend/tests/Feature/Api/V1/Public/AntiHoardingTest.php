@@ -3,6 +3,8 @@
 namespace Tests\Feature\Api\V1\Public;
 
 use App\Enums\EstadoSolicitudReserva;
+use App\Models\Asociacion;
+use App\Models\SolicitudReserva;
 use App\Models\CampoDeportivo;
 use App\Models\HorarioAtencion;
 use App\Models\ParametroSistema;
@@ -238,6 +240,8 @@ class AntiHoardingTest extends TestCase
         foreach ([
             ['max_franjas_por_solicitud', '6', ''],
             ['max_pendientes_por_ip', '3', ''],
+            ['max_pendientes_por_ci', '3', ''],
+            ['max_pendientes_por_asociacion', '10', ''],
             ['umbral_expiraciones_cooldown', '3', ''],
             ['cooldown_expiracion_minutos', '30', ''],
             ['polling_intervalo_segundos', '20', ''],
@@ -307,21 +311,23 @@ class AntiHoardingTest extends TestCase
         $this->crearSolicitudConEstado($campo, $ip, EstadoSolicitudReserva::Pendiente, $fecha, $hi, $hf);
     }
 
-        private function crearSolicitudConEstado(
-            CampoDeportivo $campo,
-            string $ip,
-            EstadoSolicitudReserva $estado,
-            string $fecha = '2026-10-14',
-            string $hi = '18:00:00',
-            string $hf = '19:00:00',
-        ) {
-        $solicitud = \App\Models\SolicitudReserva::create([
+    private function crearSolicitudConEstado(
+        CampoDeportivo $campo,
+        string $ip,
+        EstadoSolicitudReserva $estado,
+        string $fecha = '2026-10-14',
+        string $hi = '18:00:00',
+        string $hf = '19:00:00',
+        string $ci = '1234567',
+        string $nombre = 'Test',
+    ) {
+        $solicitud = SolicitudReserva::create([
             'codigo_seguimiento' => 'RES-'.uniqid(),
             'monto_total' => 100,
             'monto_confirmado' => $estado === EstadoSolicitudReserva::Confirmada ? 100 : 0,
-            'nombre_pagador' => 'Test',
+            'nombre_pagador' => $nombre,
             'telefono_pagador' => '70000000',
-            'ci_nit_pagador' => '1234567',
+            'ci_nit_pagador' => $ci,
             'ip_cobrador' => $ip,
             'estado' => $estado,
             'expira_en' => now()->addMinutes(15),
@@ -352,5 +358,170 @@ class AntiHoardingTest extends TestCase
         }
 
         return $solicitud;
+    }
+
+    private function crearAsociacionVigente(string $ciResponsable): Asociacion
+    {
+        return $this->crearAsociacion($ciResponsable, now()->addYear()->toDateString());
+    }
+
+    private function crearAsociacionVencida(string $ciResponsable): Asociacion
+    {
+        return $this->crearAsociacion($ciResponsable, now()->subMonth()->toDateString());
+    }
+
+    private function crearAsociacion(string $ciResponsable, string $convenioHasta): Asociacion
+    {
+        return Asociacion::create([
+            'nit' => 'NIT-'.uniqid(),
+            'nombre' => 'Asociacion Hoarding '.uniqid(),
+            'tipo' => 'departamental',
+            'convenio_numero' => 'CONV-'.uniqid(),
+            'convenio_desde' => now()->subYear()->toDateString(),
+            'convenio_hasta' => $convenioHasta,
+            'responsable_nombre' => 'Responsable Hoarding',
+            'responsable_ci' => $ciResponsable,
+            'responsable_telefono' => '70000000',
+            'activo' => true,
+        ]);
+    }
+
+    public function test_tope_pendientes_por_ci_bloquea_a_ciudadano_no_asociado(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-13 09:00:00'));
+        config(['services.recaudaciones.simulado_modo' => 'exito']);
+
+        $campo = $this->crearCampoConHorario();
+        $ci = '1230001';
+
+        // 3 pendientes válidas, cada una desde IP distinta para no chocar con M2 por IP.
+        for ($i = 0; $i < 3; $i++) {
+            $this->crearSolicitudConEstado(
+                $campo,
+                '203.0.113.'. (100 + $i),
+                EstadoSolicitudReserva::Pendiente,
+                '2026-10-14',
+                sprintf('%02d:00:00', 10 + $i),
+                sprintf('%02d:00:00', 11 + $i),
+                $ci,
+                'No Asociado',
+            );
+        }
+
+        $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.200'])
+            ->postJson('/api/v1/public/solicitudes-reserva', [
+                'nombre_pagador' => 'No Asociado',
+                'telefono_pagador' => '70000000',
+                'ci_nit_pagador' => $ci,
+                'franjas' => [[
+                    'campo_id' => $campo->id,
+                    'fecha' => '2026-10-14',
+                    'hora_inicio' => '18:00:00',
+                    'hora_fin' => '19:00:00',
+                ]],
+            ]);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('franjas');
+
+        $this->assertSame(
+            3,
+            SolicitudReserva::where('ci_nit_pagador', $ci)->count(),
+            'El ciudadano no asociado no debe poder crear la 4ta pendiente por tope de CI.'
+        );
+    }
+
+    public function test_asociacion_vigente_usa_tope_alto_y_puede_superar_tope_por_ci(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-13 09:00:00'));
+        config(['services.recaudaciones.simulado_modo' => 'exito']);
+
+        $campo = $this->crearCampoConHorario();
+        $ci = '2230001';
+        $this->crearAsociacionVigente($ci);
+
+        // 4 pendientes: ya superaría el tope normal de CI (3),
+        // pero la asociación vigente tiene tope alto (10 en el test).
+        for ($i = 0; $i < 4; $i++) {
+            $this->crearSolicitudConEstado(
+                $campo,
+                '203.0.113.'. (110 + $i),
+                EstadoSolicitudReserva::Pendiente,
+                '2026-10-14',
+                sprintf('%02d:00:00', 10 + $i),
+                sprintf('%02d:00:00', 11 + $i),
+                $ci,
+                'Asociado Vigente',
+            );
+        }
+
+        $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.210'])
+            ->postJson('/api/v1/public/solicitudes-reserva', [
+                'nombre_pagador' => 'Asociado Vigente',
+                'telefono_pagador' => '70000000',
+                'ci_nit_pagador' => $ci,
+                'franjas' => [[
+                    'campo_id' => $campo->id,
+                    'fecha' => '2026-10-14',
+                    'hora_inicio' => '18:00:00',
+                    'hora_fin' => '19:00:00',
+                ]],
+            ]);
+
+        $response->assertStatus(201);
+
+        $this->assertSame(
+            5,
+            SolicitudReserva::where('ci_nit_pagador', $ci)->count(),
+            'La asociación vigente debe poder acumular pendientes sin chocar con el tope bajo de CI.'
+        );
+    }
+
+    public function test_asociacion_vencida_vuelve_a_tope_bajo_por_ci(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-13 09:00:00'));
+        config(['services.recaudaciones.simulado_modo' => 'exito']);
+
+        $campo = $this->crearCampoConHorario();
+        $ci = '3230001';
+        $this->crearAsociacionVencida($ci);
+
+        // Aunque exista la asociación, si está vencida no goza del tope alto.
+        for ($i = 0; $i < 3; $i++) {
+            $this->crearSolicitudConEstado(
+                $campo,
+                '203.0.113.'. (120 + $i),
+                EstadoSolicitudReserva::Pendiente,
+                '2026-10-14',
+                sprintf('%02d:00:00', 10 + $i),
+                sprintf('%02d:00:00', 11 + $i),
+                $ci,
+                'Asociado Vencido',
+            );
+        }
+
+        $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.220'])
+            ->postJson('/api/v1/public/solicitudes-reserva', [
+                'nombre_pagador' => 'Asociado Vencido',
+                'telefono_pagador' => '70000000',
+                'ci_nit_pagador' => $ci,
+                'franjas' => [[
+                    'campo_id' => $campo->id,
+                    'fecha' => '2026-10-14',
+                    'hora_inicio' => '18:00:00',
+                    'hora_fin' => '19:00:00',
+                ]],
+            ]);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('franjas');
+
+        $this->assertSame(
+            3,
+            SolicitudReserva::where('ci_nit_pagador', $ci)->count(),
+            'La asociación vencida no debe usar el tope alto; vuelve a tope por CI.'
+        );
     }
 }
