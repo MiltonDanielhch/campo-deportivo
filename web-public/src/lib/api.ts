@@ -8,6 +8,14 @@ export const api = axios.create({
   },
 });
 
+// Adjunta el token de ciudadano SOLO si existe. Los endpoints publicos lo
+// ignoran (no validan auth), entonces no cambian su comportamiento.
+api.interceptors.request.use((config) => {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('ciudadano_token') : null;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
 // Manejo centralizado de los errores del dominio de reserva
 api.interceptors.response.use(
   (response) => response,

@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
-import { ReceiptText } from 'lucide-react';
+import { ReceiptText, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useCiudadanoAuth } from '@/context/CiudadanoAuthProvider';
 
 export default function Header() {
+  const { ciudadano } = useCiudadanoAuth();
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b shadow-sm print:hidden">
       <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-3">
@@ -15,8 +18,6 @@ export default function Header() {
             alt="Logo GAD Beni"
             className="w-36 h-40 flex-shrink-0 object-contain"
           />
-          {/* whitespace-nowrap evita el wrap a 2 líneas; min-w-0 + truncate
-              corta el texto en lugar de romper el layout en pantallas muy chicas */}
           <span className="text-sm sm:text-base whitespace-nowrap overflow-hidden text-ellipsis">
             Canchas GAD Beni
           </span>
@@ -27,7 +28,22 @@ export default function Header() {
             <Link to="/campos">Canchas</Link>
           </Button>
 
-          {/* Mobile: solo ícono | Desktop: botón con texto */}
+          {ciudadano ? (
+            <Button variant="outline" asChild className="hidden sm:inline-flex">
+              <Link to="/mi-asociacion" className="flex items-center gap-2">
+                <UserRound className="w-4 h-4" />
+                <span>Mi asociación</span>
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="outline" asChild className="hidden sm:inline-flex">
+              <Link to="/login" className="flex items-center gap-2">
+                <UserRound className="w-4 h-4" />
+                <span>Ingresar</span>
+              </Link>
+            </Button>
+          )}
+
           <Button variant="outline" size="icon" asChild className="sm:hidden" aria-label="Mis comprobantes">
             <Link to="/estado">
               <ReceiptText className="w-4 h-4" />
