@@ -315,7 +315,10 @@ Route::middleware('auth.oauth')->group(function () {
     Route::middleware('role:admin_parametricas|admin_reservas')
         ->prefix('v1/admin/asociaciones')
         ->group(function () {
+            // Estatica ANTES de {asociacion} (convencion del repo, ver FIX piscina-export).
             Route::get('/por-responsable/{ci}', [AsociacionController::class, 'porResponsable']);
+            // [Fase 3] alumnos de la asociacion pa' el multi-select de ventanilla.
+            Route::get('/{asociacion}/alumnos', [AsociacionController::class, 'alumnos']);
         });
 });
 
@@ -333,5 +336,13 @@ Route::prefix('v1/ciudadanos')->group(function () {
         Route::get('/me', [App\Http\Controllers\Api\V1\Ciudadano\CiudadanoAuthController::class, 'me']);
         Route::get('/asociacion', [App\Http\Controllers\Api\V1\Ciudadano\CiudadanoAuthController::class, 'asociacion']);
         Route::post('/auth/logout', [App\Http\Controllers\Api\V1\Ciudadano\CiudadanoAuthController::class, 'logout']);
+
+        // ─── Fase 3 paso 1: catalogo de alumnos (presidente) ───
+        // asociacion_id derivado del token, nunca del payload (ver controller).
+        // Sin destroy: desactivar via /estado pa' no cascade-borrar la puente.
+        Route::get('/alumnos', [App\Http\Controllers\Api\V1\Ciudadano\AsociacionAlumnoController::class, 'index']);
+        Route::post('/alumnos', [App\Http\Controllers\Api\V1\Ciudadano\AsociacionAlumnoController::class, 'store']);
+        Route::put('/alumnos/{alumno}', [App\Http\Controllers\Api\V1\Ciudadano\AsociacionAlumnoController::class, 'update']);
+        Route::patch('/alumnos/{alumno}/estado', [App\Http\Controllers\Api\V1\Ciudadano\AsociacionAlumnoController::class, 'cambiarEstado']);
     });
 });

@@ -36,4 +36,10 @@ class Asociacion extends Model
         }
         return $this->convenio_hasta->gte(now()->startOfDay());
     }
+
+    /** Fase 3: catalogo de alumnos del presidente (1:N). */
+    public function alumnos(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(AsociacionAlumno::class, 'asociacion_id');
+    }
 }

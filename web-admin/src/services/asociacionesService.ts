@@ -52,4 +52,21 @@ export const asociacionesService = {
 
     return unwrap<{ asociacion: Asociacion | null }>(raw);
   },
+
+  /**
+   * [Fase 3] Alumnos ACTIVOS de una asociacion, pa' el multi-select de
+   * ventanilla. Mismo unwrap que porResponsable (maneja apiClient crudo o
+   * ya desenvuelto). Endpoint admin (role:admin_*), no publico: son datos de
+   * terceros, potencialmente menores.
+   */
+  listarAlumnos: async (asociacionId: string): Promise<AlumnoVentanilla[]> => {
+    const raw = await apiClient.get(`/v1/admin/asociaciones/${asociacionId}/alumnos`);
+    return unwrap<{ data: AlumnoVentanilla[] }>(raw).data;
+  },
 };
+
+export interface AlumnoVentanilla {
+  id: string;
+  ci: string;
+  nombre_completo: string;
+}

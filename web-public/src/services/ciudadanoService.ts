@@ -23,6 +23,14 @@ export interface AuthResponse {
   ciudadano: Ciudadano;
 }
 
+export interface Alumno {
+  id: string;
+  ci: string;
+  nombre_completo: string;
+  fecha_nacimiento: string | null;
+  activo: boolean;
+}
+
 // baseURL de api.ts ya incluye /api/v1, entonces las rutas van sin el prefijo.
 export const ciudadanoService = {
   registro: async (p: {
@@ -41,4 +49,24 @@ export const ciudadanoService = {
   logout: async (): Promise<void> => {
     await api.post('/ciudadanos/auth/logout');
   },
+
+  // ─── Fase 3 paso 1: catalogo de alumnos (presidente) ───
+  // El interceptor de api.ts ya adjunta el token del presidente logueado,
+  // entonces estas llamadas llevan Authorization sin tocar nada mas.
+  listarAlumnos: async (): Promise<Alumno[]> =>
+    (await api.get('/ciudadanos/alumnos')).data.data,
+
+  crearAlumno: async (p: {
+    ci: string;
+    nombre_completo: string;
+    fecha_nacimiento?: string;
+  }): Promise<Alumno> => (await api.post('/ciudadanos/alumnos', p)).data.data,
+
+  actualizarAlumno: async (
+    id: string,
+    p: { ci: string; nombre_completo: string; fecha_nacimiento?: string },
+  ): Promise<Alumno> => (await api.put(`/ciudadanos/alumnos/${id}`, p)).data.data,
+
+  desactivarAlumno: async (id: string, activo: boolean): Promise<Alumno> =>
+    (await api.patch(`/ciudadanos/alumnos/${id}/estado`, { activo })).data.data,
 };

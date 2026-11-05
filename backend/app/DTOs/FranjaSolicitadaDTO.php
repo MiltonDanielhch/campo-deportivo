@@ -20,6 +20,8 @@ final class FranjaSolicitadaDTO
         public readonly string $horaInicio,
         public readonly string $horaFin,
         public readonly ?string $varianteId = null,
+        /** [Fase 3] uuids de alumnos de la asociacion asignados a esta franja. */
+        public readonly array $alumnosIds = [],
     ) {}
 
     public function toArray(): array
@@ -30,6 +32,7 @@ final class FranjaSolicitadaDTO
             'hora_inicio' => $this->horaInicio,
             'hora_fin' => $this->horaFin,
             'variante_id' => $this->varianteId,
+            'alumnos_ids' => $this->alumnosIds,
         ];
     }
 }

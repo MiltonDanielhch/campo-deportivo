@@ -50,4 +50,20 @@ class AsociacionController extends Controller
         $a = Asociacion::where('responsable_ci', $ci)->where('activo', true)->first();
         return response()->json(['asociacion' => $a ? new AsociacionResource($a) : null]);
     }
+
+    /**
+     * [Fase 3] Alumnos ACTIVOS de una asociacion, pa' el multi-select de
+     * ventanilla. Va bajo role:admin_parametricas|admin_reservas (mismo grupo
+     * que porResponsable), no abierto a cualquier funcionario: son datos de
+     * terceros (potencialmente menores).
+     */
+    public function alumnos(Asociacion $asociacion)
+    {
+        $alumnos = $asociacion->alumnos()
+            ->where('activo', true)
+            ->orderBy('nombre_completo')
+            ->get(['id', 'ci', 'nombre_completo']);
+
+        return response()->json(['data' => $alumnos]);
+    }
 }
