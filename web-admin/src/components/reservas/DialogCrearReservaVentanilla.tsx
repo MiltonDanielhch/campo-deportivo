@@ -38,7 +38,7 @@ import {
 } from '@/services/catalogoSirebService';
 import type { CampoOption } from '@/types/reservas';
 import { QRCodeCanvas } from 'qrcode.react';
-import { asociacionesService } from '@/services/asociacionesService';
+import { asociacionesService, type AlumnoVentanilla } from '@/services/asociacionesService';
 import type { Asociacion } from '@/types/asociaciones';
 
 interface Props {
@@ -210,6 +210,11 @@ export default function DialogCrearReservaVentanilla({
   const [asociacionDetectada, setAsociacionDetectada] = useState<Asociacion | null>(null);
   const [asociacionCargando, setAsociacionCargando] = useState(false);
 
+  // [Fase 3] alumnos de la asociacion detectada + quien-va-a-que-franja.
+  const [alumnos, setAlumnos] = useState<AlumnoVentanilla[]>([]);
+  const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
+  const [alumnosPorFranja, setAlumnosPorFranja] = useState<Record<string, string[]>>({});
+
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
@@ -347,6 +352,9 @@ export default function DialogCrearReservaVentanilla({
       setTelefono('');
       setAsociacionDetectada(null);
       setAsociacionCargando(false);
+      setAlumnos([]);
+      setCargandoAlumnos(false);
+      setAlumnosPorFranja({});
       setResultado(null);
     }, 200);
   };
@@ -487,6 +495,32 @@ export default function DialogCrearReservaVentanilla({
     }
   }, [asociacionDetectada, variantesHorarias]);
 
+  // [Fase 3] al detectar asociacion VIGENTE, cargar su lista de alumnos pa' el
+  // multi-select. Depende de la asociacion, no de la variante: los alumnos
+  // pertenecen a la asociacion del GAD, paguen convenio o full (P4).
+  useEffect(() => {
+    if (!open || !asociacionDetectada?.vigente || !asociacionDetectada.id) {
+      setAlumnos([]);
+      return;
+    }
+    let activo = true;
+    setCargandoAlumnos(true);
+    asociacionesService
+      .listarAlumnos(asociacionDetectada.id)
+      .then((lista) => {
+        if (activo) setAlumnos(lista);
+      })
+      .catch(() => {
+        if (activo) setAlumnos([]);
+      })
+      .finally(() => {
+        if (activo) setCargandoAlumnos(false);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [open, asociacionDetectada]);
+
   useEffect(() => {
     if (!campoAbierto) return;
 
@@ -619,6 +653,17 @@ export default function DialogCrearReservaVentanilla({
     setServiciosSeleccionados((prev) => ({ ...prev, [vid]: cantidad }));
   };
 
+  // [Fase 3] toggle alumno<->franja, keyed por slot.inicio (identificador
+  // estable del slot, igual que toggleSlot/toggleAmedida).
+  const toggleAlumnoFranja = (inicio: string, alumnoId: string) =>
+    setAlumnosPorFranja((prev) => {
+      const actual = prev[inicio] ?? [];
+      const next = actual.includes(alumnoId)
+        ? actual.filter((id) => id !== alumnoId)
+        : [...actual, alumnoId];
+      return { ...prev, [inicio]: next };
+    });
+
   const puedeEnviar =
     !!campoId &&
     !!fecha &&
@@ -659,6 +704,9 @@ export default function DialogCrearReservaVentanilla({
           fecha,
           hora_inicio: o.inicio,
           hora_fin: o.fin,
+          ...((alumnosPorFranja[o.inicio] ?? []).length > 0
+            ? { alumnos_ids: alumnosPorFranja[o.inicio] }
+            : {}),
         })),
         ...(serviciosPayload.length > 0 ? { servicios: serviciosPayload } : {}),
         nombre_pagador: nombre.trim(),
@@ -1081,6 +1129,49 @@ export default function DialogCrearReservaVentanilla({
               )}
             </div>
 
+            {asociacionDetectada?.vigente && slots.length > 0 && (cargandoAlumnos || alumnos.length > 0) && (
+              <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
+                <Label className="text-sm font-semibold">Alumnos por franja</Label>
+                {cargandoAlumnos ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    Cargando alumnos de la asociación…
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Marcá quiénes asisten a cada franja. La lista la cargó el presidente de la asociación.
+                    </p>
+                    {slots.map((o) => (
+                      <div key={o.inicio} className="space-y-1.5">
+                        <p className="text-xs font-medium tabular-nums">
+                          {hhmm(o.inicio)}–{hhmm(o.fin)}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {alumnos.map((al) => {
+                            const activo = (alumnosPorFranja[o.inicio] ?? []).includes(al.id);
+                            return (
+                              <Button
+                                key={al.id}
+                                type="button"
+                                variant={activo ? 'default' : 'outline'}
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => toggleAlumnoFranja(o.inicio, al.id)}
+                                title={`CI ${al.ci}`}
+                              >
+                                {al.nombre_completo}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+
             {(cargandoServicios || serviciosAdicionales.length > 0) && (
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Servicios adicionales</Label>
@@ -1185,11 +1276,6 @@ export default function DialogCrearReservaVentanilla({
                   {asociacionDetectada?.vigente && (
                     <p className="text-xs text-emerald-700 dark:text-emerald-400">
                       Asociación vigente: {asociacionDetectada.nombre}
-                    </p>
-                  )}
-                  {!asociacionDetectada && !asociacionCargando && (
-                    <p className="text-xs text-muted-foreground">
-                      Tipeá el CI de un responsable con convenio: la variante se elige sola.
                     </p>
                   )}
                   {!asociacionDetectada && !asociacionCargando && (

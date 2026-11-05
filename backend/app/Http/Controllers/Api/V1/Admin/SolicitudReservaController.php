@@ -104,6 +104,7 @@ class SolicitudReservaController extends Controller
                 horaInicio: $f['hora_inicio'],
                 horaFin: $f['hora_fin'],
                 varianteId: $f['variante_id'] ?? null,
+                alumnosIds: $f['alumnos_ids'] ?? [],
             ),
             $v['franjas'],
         );

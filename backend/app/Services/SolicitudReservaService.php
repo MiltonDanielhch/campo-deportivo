@@ -20,6 +20,8 @@ use App\Models\ParametroSistema;
 use App\Models\SolicitudReserva;
 use App\Models\TarifaCampo;
 use App\Models\ArancelVariante;
+use App\Models\AsociacionAlumno;
+use App\Models\SolicitudDetalleAlumno;
 use App\Services\Sireb\SirebLiquidacionService;
 use Carbon\Carbon;
 use Generator;
@@ -110,6 +112,9 @@ class SolicitudReservaService
         // [convenio-guard] variante de convenio solo pa' asociación VIGENTE del mismo tipo.
         $this->validarVariantesConvenio($franjasResueltas, $asociacion);
 
+        // [Fase 3] alumnos asignados deben pertenecer a la asociacion del pagador.
+        $this->validarAlumnosPertenencia($franjasResueltas, $asociacion);
+
         // ── P8.4B: hora de inicio más temprana por campo, para resolver
         // servicios con tarifa diurna/nocturna (ej. escenario) según cuándo
         // se usa el espacio. ──
@@ -156,7 +161,7 @@ class SolicitudReservaService
                     /** @var \App\DTOs\FranjaSolicitadaDTO $franja */
                     $franja = $resuelta['franja'];
 
-                    $solicitudNueva->detalles()->create([
+                    $detalle = $solicitudNueva->detalles()->create([
                         'campo_id' => $franja->campoId,
                         'variante_id' => $resuelta['variante_id'],
                         'servicio_sireb_id' => $resuelta['servicio_sireb_id'],
@@ -168,6 +173,16 @@ class SolicitudReservaService
                         'hora_fin' => $franja->horaFin,
                         'tarifa_aplicada' => $resuelta['precio_unitario'],
                     ]);
+
+                    // [Fase 3] puente alumno<->franja. array_unique evita que un
+                    // payload con el mismo alumno dos veces viole el unique
+                    // (detalle_id, alumno_id). En regularizar es no-op ([]).
+                    foreach (array_unique($franja->alumnosIds) as $alumnoId) {
+                        SolicitudDetalleAlumno::create([
+                            'detalle_id' => $detalle->id,
+                            'alumno_id' => $alumnoId,
+                        ]);
+                    }
                 }
 
                 foreach ($serviciosResueltos as $resuelto) {
@@ -1148,6 +1163,46 @@ class SolicitudReservaService
                     ]);
                 }
             }
+        }
+    }
+
+    /**
+     * [Fase 3] Si alguna franja trae alumnos, la asociacion del pagador debe
+     * existir (vigente) y CADA alumno debe pertenecer a ella. Corre antes del
+     * transaction, simetrico a validarVariantesConvenio. En regularizar es
+     * no-op (el DTO trae alumnosIds=[] porque StoreRegularizacionRequest no lo
+     * valida), entonces no frena la regularizacion.
+     */
+    private function validarAlumnosPertenencia(array $franjasResueltas, ?Asociacion $asociacion): void
+    {
+        $ids = [];
+        foreach ($franjasResueltas as $resuelta) {
+            foreach ($resuelta['franja']->alumnosIds as $id) {
+                $ids[] = $id;
+            }
+        }
+
+        if ($ids === []) {
+            return;
+        }
+
+        if ($asociacion === null) {
+            throw ValidationException::withMessages([
+                'franjas' => 'Solo una asociación vigente puede asignar alumnos a una franja.',
+            ]);
+        }
+
+        $unicos = array_values(array_unique($ids));
+        $pertenecen = AsociacionAlumno::whereIn('id', $unicos)
+            ->where('asociacion_id', $asociacion->id)
+            ->pluck('id')
+            ->map(fn ($v) => (string) $v)
+            ->all();
+
+        if (array_diff($unicos, $pertenecen) !== []) {
+            throw ValidationException::withMessages([
+                'franjas' => 'Uno o más alumnos asignados no pertenecen a la asociación del pagador.',
+            ]);
         }
     }
 

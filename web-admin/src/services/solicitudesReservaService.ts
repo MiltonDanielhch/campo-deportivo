@@ -101,6 +101,8 @@ export const solicitudesReservaService = {
       fecha: string;
       hora_inicio: string;
       hora_fin: string;
+      // [Fase 3] uuids de alumnos de la asociacion asignados a esta franja.
+      alumnos_ids?: string[];
     }>;
     servicios?: Array<{
       campo_id: string;

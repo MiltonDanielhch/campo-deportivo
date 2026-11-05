@@ -315,7 +315,10 @@ Route::middleware('auth.oauth')->group(function () {
     Route::middleware('role:admin_parametricas|admin_reservas')
         ->prefix('v1/admin/asociaciones')
         ->group(function () {
+            // Estatica ANTES de {asociacion} (convencion del repo, ver FIX piscina-export).
             Route::get('/por-responsable/{ci}', [AsociacionController::class, 'porResponsable']);
+            // [Fase 3] alumnos de la asociacion pa' el multi-select de ventanilla.
+            Route::get('/{asociacion}/alumnos', [AsociacionController::class, 'alumnos']);
         });
 });
 

@@ -29,6 +29,10 @@ class StoreSolicitudReservaRequest extends FormRequest
             'franjas.*.fecha' => ['required', 'date_format:Y-m-d'],
             'franjas.*.hora_inicio' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/'],
             'franjas.*.hora_fin' => ['required', 'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/'],
+            // [Fase 3] alumnos asignados a esta franja (solo ventanilla, solo
+            // asociacion vigente; la pertenencia la valida el service, no aca).
+            'franjas.*.alumnos_ids' => ['nullable', 'array', 'max:100'],
+            'franjas.*.alumnos_ids.*' => ['uuid', 'exists:asociacion_alumnos,id'],
 
             'servicios' => ['nullable', 'array', 'max:10'],
             'servicios.*.campo_id' => ['required', 'uuid', 'exists:campos_deportivos,id'],
@@ -107,6 +111,8 @@ class StoreSolicitudReservaRequest extends FormRequest
             'franjas.*.fecha' => 'fecha de reserva',
             'franjas.*.hora_inicio' => 'hora de inicio',
             'franjas.*.hora_fin' => 'hora de fin',
+            'franjas.*.alumnos_ids' => 'alumnos de la franja',
+            'franjas.*.alumnos_ids.*' => 'alumno',
 
             'servicios' => 'servicios adicionales',
             'servicios.*.campo_id' => 'campo del servicio adicional',
