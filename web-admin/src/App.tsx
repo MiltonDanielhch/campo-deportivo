@@ -15,6 +15,7 @@ import MapaGlobal from '@/pages/ocupacion/MapaGlobal';
 import DashboardReportes from '@/pages/reportes/Dashboard';
 import ClientesFrecuentes from '@/pages/reportes/ClientesFrecuentes';
 import TurnosPiscina from '@/pages/piscina/Turnos';
+import Asociaciones from '@/pages/parametricas/Asociaciones';
 
 function App() {
   return (
@@ -49,6 +50,7 @@ function App() {
             <Route path="parametricas/campos" element={<CamposDeportivos />} />
             <Route path="parametricas/campos/:campoId/tarifas" element={<Tarifas />} />
             <Route path="parametricas/campos/:campoId/piscina/turnos" element={<TurnosPiscina />} />
+            <Route path="parametricas/asociaciones" element={<Asociaciones />} />
 
             {/* Usuarios (Fase 2.7) */}
             <Route path="funcionarios" element={<FuncionariosPage />} />

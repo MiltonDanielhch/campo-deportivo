@@ -13,6 +13,7 @@ use App\Jobs\ExpirarSolicitudJob;
 use App\Jobs\PollingSolicitudJob;
 use App\Jobs\ReintentarSolicitudJob;
 use App\Models\Auditoria;
+use App\Models\Asociacion;
 use App\Models\CampoDeportivo;
 use App\Models\Funcionario;
 use App\Models\ParametroSistema;
@@ -93,11 +94,21 @@ class SolicitudReservaService
             $this->validarAntiHoarding($datos);
         }
 
+        // [convenio] Si el pagador es responsable de una asociación VIGENTE,
+        // la solicitud es de convenio: plazo largo + tope por CI propio.
+        // La ELEGENCIA de la variante de convenio la hace el UI de ventanilla
+        // (DialogCrearReservaVentanilla) mandando varianteId; resolverTarifaParaFranja
+        // ya la acepta porque visible_publico=false solo bloquea al PÚBLICO.
+        $asociacion = $this->resolverAsociacionVigente($datos->ciNitPagador);
+
         // ── Capa 1: verificación rápida (aplicativa) ──
         $campos = $this->verificarFranjas($datos->franjas);
 
         // ── P8.2B: resolver variante/tarifa/cantidad ANTES de persistir ──
         $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin);
+
+        // [convenio-guard] variante de convenio solo pa' asociación VIGENTE del mismo tipo.
+        $this->validarVariantesConvenio($franjasResueltas, $asociacion);
 
         // ── P8.4B: hora de inicio más temprana por campo, para resolver
         // servicios con tarifa diurna/nocturna (ej. escenario) según cuándo
@@ -126,7 +137,7 @@ class SolicitudReservaService
         );
 
         // ── Capa 2: escritura protegida (EXCLUDE) ──
-        $expiracionMinutos = $this->minutosExpiracion();
+        $expiracionMinutos = $this->calcularExpiracionMinutos($asociacion);
 
         try {
             $solicitud = DB::transaction(function () use ($datos, $franjasResueltas, $serviciosResueltos, $montoTotal, $expiracionMinutos) {
@@ -287,7 +298,9 @@ class SolicitudReservaService
             2
         );
 
-        $expiracionMinutos = $this->minutosExpiracion();
+        // [convenio] regularización también puede ser de asociación vigente.
+        $asociacion = $this->resolverAsociacionVigente($datos->ciNitPagador);
+        $expiracionMinutos = $this->calcularExpiracionMinutos($asociacion);
 
         try {
             $solicitud = DB::transaction(function () use ($datos, $franjasResueltas, $serviciosResueltos, $montoTotal, $expiracionMinutos) {
@@ -996,6 +1009,44 @@ class SolicitudReservaService
     }
 
     /**
+     * [convenio] Lookup por el CI/NIT del responsable que reserva. Vigente =
+     * activo + convenio sin vencer. Devuelve null si el pagador NO es asociación
+     * (-> flujo público normal, plazo 15 min, tope por CI bajo).
+     * [GAD] hoy buscamos solo por responsable_ci; si quieren que también se
+     * reconozca por el NIT de la asociación, sumar ->orWhere('nit', $ciNit).
+     */
+    private function resolverAsociacionVigente(?string $ciNit): ?Asociacion
+    {
+        if (blank($ciNit)) {
+            return null;
+        }
+
+        $asociacion = Asociacion::where('responsable_ci', $ciNit)
+            ->where('activo', true)
+            ->where(fn ($q) => $q->whereNull('convenio_hasta')->orWhere('convenio_hasta', '>=', now()->startOfDay()))
+            ->first();
+
+        return $asociacion?->esVigente() ? $asociacion : null;
+    }
+
+    /**
+     * [convenio] Plazo de hold: público = minutos (15 default); asociación
+     * vigente = DÍAS (ventanilla + boleta, el pago no es online). El plazo NO
+     * se espeja en tarifas_campo (espejar() no guarda plazo_pago_dias), así que
+     * vive en ParametroSistema para que el GAD lo ajuste sin redeploy.
+     */
+    private function calcularExpiracionMinutos(?Asociacion $asociacion): int
+    {
+        if ($asociacion === null) {
+            return $this->minutosExpiracion();
+        }
+
+        $dias = (int) (ParametroSistema::where('clave', 'convenio_expiracion_dias')->value('valor') ?: 3);
+
+        return max(1, $dias) * 24 * 60;
+    }
+
+    /**
      * Gate anti-hoarding: 3 chequeos que corren ANTES de crear el hold.
      * Todos leen de parametros_sistema para que el GAD los ajuste sin redeploy.
      *
@@ -1007,6 +1058,33 @@ class SolicitudReservaService
      */
     private function validarAntiHoarding(SolicitudReservaDTO $datos): void
     {
+        // [Fase 2b] Tope por IDENTIDAD REAL (CI/NIT), no solo por IP.
+        // Corre SIEMPRE (antes del return de IP) porque la identidad es el CI,
+        // no la máquina. A la asociación vigente se le da un tope ALTO (o 0 =
+        // sin tope) porque el presidente acumula franjas para sus alumnos; al
+        // vecino suelto, el tope bajo anti-acaparamiento.
+        if (filled($datos->ciNitPagador)) {
+            $asociacion = $this->resolverAsociacionVigente($datos->ciNitPagador);
+            $maxPorCi = $asociacion
+                ? (int) (ParametroSistema::where('clave', 'max_pendientes_por_asociacion')->value('valor') ?: 0)
+                : (int) (ParametroSistema::where('clave', 'max_pendientes_por_ci')->value('valor') ?: 3);
+
+            if ($maxPorCi > 0) {
+                $pendientesCi = SolicitudReserva::where('ci_nit_pagador', $datos->ciNitPagador)
+                    ->where('estado', EstadoSolicitudReserva::Pendiente)
+                    ->where('expira_en', '>', now())
+                    ->count();
+
+                if ($pendientesCi >= $maxPorCi) {
+                    throw ValidationException::withMessages([
+                        'franjas' => $asociacion
+                            ? "La asociación ya tiene {$pendientesCi} reservas pendientes. Liquidá alguna antes de generar más."
+                            : "Tenés {$pendientesCi} reservas pendientes por pagar. Confirmá o esperá a que expiren antes de crear una nueva.",
+                    ]);
+                }
+            }
+        }
+
         if (! $datos->ipCobrador) {
             return; // sin IP no se puede aplicar (no debería pasar con TrustProxies)
         }
@@ -1039,6 +1117,31 @@ class SolicitudReservaService
             throw ValidationException::withMessages([
                 'franjas' => "Tenés {$pendientesActivas} reservas pendientes por pagar. Confirmá o esperá a que expiren antes de crear una nueva.",
             ]);
+        }
+    }
+
+    /**
+     * [convenio-guard] Ninguna franja resuelta puede usar una variante con
+     * tipo_asociacion filled salvo que el pagador sea asociación VIGENTE del
+     * MISMO tipo. Cierra el abuso del dialog de ventanilla (elegir convenio a
+     * mano para un CI que no lo es). Corre despues de resolverFranjasParaCrear.
+     */
+    private function validarVariantesConvenio(array $franjasResueltas, ?Asociacion $asociacion): void
+    {
+        foreach ($franjasResueltas as $resuelta) {
+            $vid = $resuelta['variante_id'] ?? null;
+            if (blank($vid)) {
+                continue;
+            }
+            $variante = ArancelVariante::find($vid);
+            if ($variante && filled($variante->tipo_asociacion)) {
+                $tipoAsoc = $asociacion?->tipo?->value; // cast enum -> string|null
+                if ($tipoAsoc !== $variante->tipo_asociacion) {
+                    throw ValidationException::withMessages([
+                        'franjas' => "La variante '{$variante->nombre}' es de convenio ({$variante->tipo_asociacion}) y el CI/NIT informado no corresponde a una asociación vigente de ese tipo.",
+                    ]);
+                }
+            }
         }
     }
 

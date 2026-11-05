@@ -523,6 +523,11 @@ class ReportesTest extends TestCase
             'expira_en' => now()->addMinutes(15),
         ]);
 
+        // [fix semillado] creado_en NO es auto-timestamp del modelo; sin esto
+        // queda NULL y el whereBetween('creado_en', [oct1, oct31]) del reporte
+        // excluye la fila -> el test daba 0. now() bajo travelTo = 2026-10-03.
+        $solicitud->forceFill(['creado_en' => now()])->save();
+
         $detalle = SolicitudReservaDetalle::create([
             'solicitud_reserva_id' => $solicitud->id,
             'campo_id' => $campo->id,
@@ -572,6 +577,8 @@ class ReportesTest extends TestCase
             'expira_en' => now()->addMinutes(15),
         ]);
 
+        $solicitud->forceFill(['creado_en' => now()])->save();
+
         $detalle = SolicitudReservaDetalle::create([
             'solicitud_reserva_id' => $solicitud->id,
             'campo_id' => $campo->id,
@@ -619,6 +626,8 @@ class ReportesTest extends TestCase
             'estado' => EstadoSolicitudReserva::Confirmada,
             'expira_en' => now()->addMinutes(15),
         ]);
+
+        $solicitud->forceFill(['creado_en' => now()])->save();
 
         $detalle = SolicitudReservaDetalle::create([
             'solicitud_reserva_id' => $solicitud->id,

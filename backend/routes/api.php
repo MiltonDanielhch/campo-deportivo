@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\Admin\CatalogoArancelarioController;
 use App\Http\Controllers\Api\V1\Admin\ArancelVarianteController;
 use App\Http\Controllers\Api\V1\UbicacionController;
+use App\Http\Controllers\Api\V1\Admin\AsociacionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -300,4 +301,20 @@ Route::middleware('auth.oauth')->group(function () {
             Route::delete('/variantes/{variante}', [ArancelVarianteController::class, 'destroy']);
         });
     // ─── FIN Fase P8.2C / P8.3A / Bloque 2 ───
+
+    // ─── Asociaciones con convenio (paramétricas) ───
+    Route::prefix('v1/asociaciones')->group(function () {
+        Route::get('/', [AsociacionController::class, 'index']);
+        Route::post('/', [AsociacionController::class, 'store']);
+        Route::get('/{asociacion}', [AsociacionController::class, 'show']);
+        Route::put('/{asociacion}', [AsociacionController::class, 'update']);
+        Route::patch('/{asociacion}/estado', [AsociacionController::class, 'cambiarEstado']);
+    });
+
+    // ─── Asociaciones: lectura por CI del responsable (pa' la ventanilla) ───
+    Route::middleware('role:admin_parametricas|admin_reservas')
+        ->prefix('v1/admin/asociaciones')
+        ->group(function () {
+            Route::get('/por-responsable/{ci}', [AsociacionController::class, 'porResponsable']);
+        });
 });
