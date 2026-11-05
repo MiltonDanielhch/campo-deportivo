@@ -94,6 +94,7 @@ export interface VarianteArancelaria {
   visible_publico: boolean;
   activo: boolean;
   orden: number;
+  tipo_asociacion?: 'departamental' | 'municipal' | null;
   tarifas: VarianteArancelariaTarifa[];
 }
 

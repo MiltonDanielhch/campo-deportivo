@@ -38,6 +38,8 @@ import {
 } from '@/services/catalogoSirebService';
 import type { CampoOption } from '@/types/reservas';
 import { QRCodeCanvas } from 'qrcode.react';
+import { asociacionesService } from '@/services/asociacionesService';
+import type { Asociacion } from '@/types/asociaciones';
 
 interface Props {
   open: boolean;
@@ -205,6 +207,9 @@ export default function DialogCrearReservaVentanilla({
   const [ciNit, setCiNit] = useState('');
   const [telefono, setTelefono] = useState('');
 
+  const [asociacionDetectada, setAsociacionDetectada] = useState<Asociacion | null>(null);
+  const [asociacionCargando, setAsociacionCargando] = useState(false);
+
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
@@ -340,6 +345,8 @@ export default function DialogCrearReservaVentanilla({
       setNombre('');
       setCiNit('');
       setTelefono('');
+      setAsociacionDetectada(null);
+      setAsociacionCargando(false);
       setResultado(null);
     }, 200);
   };
@@ -432,6 +439,53 @@ export default function DialogCrearReservaVentanilla({
       activo = false;
     };
   }, [open, campoId]);
+
+  // P2b: al tipear el CI, preguntar si es asociación vigente (debounce 400ms).
+  useEffect(() => {
+    if (!open) {
+      setAsociacionDetectada(null);
+      return;
+    }
+    const ci = ciNit.trim();
+    if (ci.length < 5) {
+      setAsociacionDetectada(null);
+      return;
+    }
+    let activo = true;
+    setAsociacionCargando(true);
+    const t = setTimeout(() => {
+      asociacionesService
+        .porResponsable(ci)
+        .then(({ asociacion }) => {
+          if (activo) setAsociacionDetectada(asociacion);
+        })
+        .catch(() => {
+          if (activo) setAsociacionDetectada(null);
+        })
+        .finally(() => {
+          if (activo) setAsociacionCargando(false);
+        });
+    }, 400);
+    return () => {
+      activo = false;
+      clearTimeout(t);
+    };
+  }, [ciNit, open]);
+
+  // P2b: si hay asociación vigente con tipo, preseleccionar la variante de convenio
+  // que matchee. Declarado DESPUES del efecto de carga de variantes para que gane
+  // sobre la preseleccion "unica horaria". Sugerencia, no bloqueo: el backend
+  // (guardia 5.6-5.8) sigue siendo la ultima linea.
+  useEffect(() => {
+    if (!asociacionDetectada?.vigente || !asociacionDetectada.tipo) return;
+    const match = variantesHorarias.find(
+      (v) => v.tipo_asociacion === asociacionDetectada.tipo,
+    );
+    if (match) {
+      setVarianteId(match.id);
+      setVarianteNombre(match.nombre);
+    }
+  }, [asociacionDetectada, variantesHorarias]);
 
   useEffect(() => {
     if (!campoAbierto) return;
@@ -872,6 +926,13 @@ export default function DialogCrearReservaVentanilla({
                       </SelectContent>
                     </Select>
 
+                    {asociacionDetectada?.vigente && varianteSeleccionada?.tipo_asociacion && (
+                      <p className="flex items-center gap-1.5 pt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                        <Check className="size-3.5 shrink-0" />
+                        Convenio {varianteSeleccionada.tipo_asociacion} · {asociacionDetectada.nombre}
+                      </p>
+                    )}
+
                     {varianteSeleccionada?.tarifas?.length ? (
                       <div className="flex flex-wrap gap-2 pt-1">
                         {varianteSeleccionada.tarifas.map((t) => {
@@ -1115,7 +1176,22 @@ export default function DialogCrearReservaVentanilla({
                 </div>
                 <div className="space-y-1.5">
                   <Label>CI / NIT *</Label>
-                  <Input value={ciNit} onChange={(e) => setCiNit(e.target.value)} />
+                  <div className="relative">
+                    <Input value={ciNit} onChange={(e) => setCiNit(e.target.value)} />
+                    {asociacionCargando && (
+                      <Loader2 className="absolute right-2 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                  {asociacionDetectada?.vigente && (
+                    <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                      Asociación vigente: {asociacionDetectada.nombre}
+                    </p>
+                  )}
+                  {asociacionDetectada && !asociacionDetectada.vigente && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      Convenio vencido — no aplica precio de convenio
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Teléfono (opcional)</Label>

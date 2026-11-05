@@ -320,6 +320,7 @@ class ArancelVarianteController extends Controller
                     'nombre' => $variante->nombre,
                     'descripcion' => $variante->descripcion,
                     'tipo_uso' => $variante->tipo_uso,
+                    'tipo_asociacion' => $variante->tipo_asociacion,
                     'servicio_sireb_id' => $variante->servicio_sireb_id,
                     'servicio_sireb_codigo' => $variante->servicio_sireb_codigo,
                     'unidad_medida' => $variante->unidad_medida,
