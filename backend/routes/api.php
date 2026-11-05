@@ -318,3 +318,20 @@ Route::middleware('auth.oauth')->group(function () {
             Route::get('/por-responsable/{ci}', [AsociacionController::class, 'porResponsable']);
         });
 });
+
+// ─── Ciudadanos (autogestion de asociaciones) ───────────────────────────
+// Bearer Sanctum puro, NO dentro de auth.oauth (que valida JWT de Ibare,
+// que los ciudadanos no tienen). Registro abierto; convenio solo si el CI
+// ya esta en la tabla asociaciones del GAD (ver controller).
+Route::prefix('v1/ciudadanos')->group(function () {
+    Route::middleware('throttle:10,1')->group(function () {
+        Route::post('/auth/registro', [App\Http\Controllers\Api\V1\Ciudadano\CiudadanoAuthController::class, 'registro']);
+        Route::post('/auth/login', [App\Http\Controllers\Api\V1\Ciudadano\CiudadanoAuthController::class, 'login']);
+    });
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/me', [App\Http\Controllers\Api\V1\Ciudadano\CiudadanoAuthController::class, 'me']);
+        Route::get('/asociacion', [App\Http\Controllers\Api\V1\Ciudadano\CiudadanoAuthController::class, 'asociacion']);
+        Route::post('/auth/logout', [App\Http\Controllers\Api\V1\Ciudadano\CiudadanoAuthController::class, 'logout']);
+    });
+});
