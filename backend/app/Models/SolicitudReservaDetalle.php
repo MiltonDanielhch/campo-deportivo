@@ -60,4 +60,15 @@ class SolicitudReservaDetalle extends Model
     {
         return $this->hasOne(Reserva::class, 'solicitud_reserva_detalle_id');
     }
+
+    /** Fase 3: alumnos que asisten a esta franja (N:M via puente). */
+    public function alumnos(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(
+            AsociacionAlumno::class,
+            'solicitud_detalle_alumno',
+            'detalle_id',
+            'alumno_id'
+        );
+    }
 }
