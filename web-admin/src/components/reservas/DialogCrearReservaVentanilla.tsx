@@ -1187,9 +1187,14 @@ export default function DialogCrearReservaVentanilla({
                       Asociación vigente: {asociacionDetectada.nombre}
                     </p>
                   )}
-                  {asociacionDetectada && !asociacionDetectada.vigente && (
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      Convenio vencido — no aplica precio de convenio
+                  {!asociacionDetectada && !asociacionCargando && (
+                    <p className="text-xs text-muted-foreground">
+                      Tipeá el CI de un responsable con convenio: la variante se elige sola.
+                    </p>
+                  )}
+                  {!asociacionDetectada && !asociacionCargando && (
+                    <p className="text-xs text-muted-foreground">
+                      Tipeá el CI de un responsable con convenio: la variante se elige sola.
                     </p>
                   )}
                 </div>
