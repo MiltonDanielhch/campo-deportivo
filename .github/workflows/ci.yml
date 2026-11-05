@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gad_beni_test
+          POSTGRES_USER: gad
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # cubro las dos formas de configurar la coneccion (discrete o DATABASE_URL)
+      DATABASE_URL: pgsql://gad:secret@127.0.0.1:5432/gad_beni_test
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: gad_beni_test
+      DB_USERNAME: gad
+      DB_PASSWORD: secret
+      PGTZ: America/La_Paz
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'          # coincide con tu tinker (PHP 8.4.24)
+          extensions: pdo_pgsql, intl, mbstring
+          coverage: none
+
+      - name: Install deps
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare .env + key
+        run: |
+          cp .env.example .env
+          php artisan key:generate --ansi
+
+      - name: Run tests
+        run: php artisan test
+
+  web-admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22             # npm 12.x => Node 22+; alinealo a tu .nvmrc si existe
+          cache: npm
+          cache-dependency-path: web-admin/package-lock.json
+      - run: npm ci
+      - run: npx tsc -b --force        # el gate que te destrabo los 8 errores
+      - run: npm run build             # vite/rolldown; el [PLUGIN_TIMINGS] es warning, no falla el job
+
+  web-public:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web-public/package-lock.json
+      - run: npm ci
+      - run: npx tsc -b --force
+      - run: npm run build

@@ -9,6 +9,7 @@ import {
   CalendarCheck,
   LayoutDashboard,
   Link2Icon,
+  Building2 as Building2Icon,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -64,6 +65,12 @@ const navItems: NavItem[] = [
     url: '/panel/parametricas/tipos-campo',
     icon: MapIcon,
     permiso: 'gestionar-tipos-campo',
+  },
+  {
+    title: 'Asociaciones',
+    url: '/panel/parametricas/asociaciones',
+    icon: Building2Icon,
+    roles: ['admin_parametricas'],
   },
 
   // ─── Usuarios ───
