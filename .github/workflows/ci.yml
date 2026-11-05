@@ -43,13 +43,13 @@ jobs:
           extensions: pdo_pgsql, intl, mbstring
           coverage: none
 
+      - name: Install deps
+        run: composer install --no-interaction --prefer-dist --no-progress
+
       - name: Prepare .env + key
         run: |
           cp .env.example .env
           php artisan key:generate --ansi
-
-      - name: Install deps
-        run: composer install --no-interaction --prefer-dist --no-progress
 
       - name: Run tests
         run: php artisan test
