@@ -137,7 +137,7 @@ class SolicitudReservaService
         );
 
         // ── Capa 2: escritura protegida (EXCLUDE) ──
-        $expiracionMinutos = $this->calcularExpiracionMinutos($asociacion);
+        $expiracionMinutos = $this->calcularExpiracionMinutos($asociacion, $esAdmin);
 
         try {
             $solicitud = DB::transaction(function () use ($datos, $franjasResueltas, $serviciosResueltos, $montoTotal, $expiracionMinutos) {
@@ -300,7 +300,8 @@ class SolicitudReservaService
 
         // [convenio] regularización también puede ser de asociación vigente.
         $asociacion = $this->resolverAsociacionVigente($datos->ciNitPagador);
-        $expiracionMinutos = $this->calcularExpiracionMinutos($asociacion);
+        // [convenio-fix #4] regularizar es admin-only (ventanilla) -> plazo largo si es asociacion.
+        $expiracionMinutos = $this->calcularExpiracionMinutos($asociacion, true);
 
         try {
             $solicitud = DB::transaction(function () use ($datos, $franjasResueltas, $serviciosResueltos, $montoTotal, $expiracionMinutos) {
@@ -1035,9 +1036,14 @@ class SolicitudReservaService
      * se espeja en tarifas_campo (espejar() no guarda plazo_pago_dias), así que
      * vive en ParametroSistema para que el GAD lo ajuste sin redeploy.
      */
-    private function calcularExpiracionMinutos(?Asociacion $asociacion): int
+    private function calcularExpiracionMinutos(?Asociacion $asociacion, bool $esAdmin): int
     {
-        if ($asociacion === null) {
+        // [convenio-fix #4] El plazo largo (boleta en ventanilla que "queda a la
+        // espera de validacion") es del CANAL ventanilla, no del atributo "es
+        // asociacion". Una asociacion que reserva por web-public paga online con
+        // QR (sin boleta) -> plazo publico normal. Bifurca por canal, no por
+        // identidad (alineado al plan de Fase 2: "convenio = ventanilla+boleta").
+        if ($asociacion === null || ! $esAdmin) {
             return $this->minutosExpiracion();
         }
 

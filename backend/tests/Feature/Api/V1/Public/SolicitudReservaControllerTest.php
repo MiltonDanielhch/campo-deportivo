@@ -9,6 +9,7 @@ use App\Models\ParametroSistema;
 use App\Models\Rol;
 use App\Models\SolicitudReserva;
 use App\Models\TarifaCampo;
+use App\Models\Asociacion;
 use App\Models\TipoCampo;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -202,5 +203,55 @@ class SolicitudReservaControllerTest extends TestCase
         ]));
 
         $response->assertStatus(422);
+    }
+
+    public function test_asociacion_vigente_en_canal_publico_paga_plazo_publico_no_convenio(): void
+    {
+        // [convenio-fix #4] El plazo largo es del CANAL ventanilla (boleta que
+        // "queda a la espera de validacion"), no de la identidad "es asociacion".
+        // Una asociacion que reserva por web-public paga online con QR -> plazo
+        // publico normal, NO 3 dias. Si el fix regresara (plazo atado a identidad),
+        // esto daria ~4320 min y el assert de 30 min falla.
+        ParametroSistema::updateOrCreate(
+            ['clave' => 'solicitud_reserva_expiracion_minutos'],
+            ['valor' => '30', 'descripcion' => 'Test expiracion canal publico'],
+        );
+        ParametroSistema::updateOrCreate(
+            ['clave' => 'convenio_expiracion_dias'],
+            ['valor' => '3', 'descripcion' => 'Test expiracion convenio'],
+        );
+
+        $ciResponsable = '7654321';
+        Asociacion::create([
+            'nit' => 'NIT-' . uniqid(),
+            'nombre' => 'Asociacion Test Publico',
+            'tipo' => 'departamental',
+            'convenio_numero' => 'CONV-TEST-PUB',
+            'convenio_desde' => now()->subMonth()->toDateString(),
+            'convenio_hasta' => now()->addYear()->toDateString(),
+            'responsable_nombre' => 'Responsable Test',
+            'responsable_ci' => $ciResponsable,
+            'responsable_telefono' => '70000000',
+            'activo' => true,
+        ]);
+
+        $fecha = Carbon::tomorrow()->toDateString();
+
+        // Payload inline (no payloadFranjas) porque el CI del pagador debe
+        // coincidir con responsable_ci de la asociacion.
+        $this->postJson('/api/v1/public/solicitudes-reserva', [
+            'nombre_pagador' => 'Responsable Test',
+            'telefono_pagador' => '70000000',
+            'ci_nit_pagador' => $ciResponsable,
+            'franjas' => [$this->franja($this->campo, $fecha)],
+        ])->assertStatus(201);
+
+        $solicitud = SolicitudReserva::first();
+
+        $this->assertEqualsWithDelta(
+            30 * 60,
+            now()->diffInSeconds($solicitud->expira_en),
+            5,
+        );
     }
 }
