@@ -34,6 +34,7 @@ jobs:
       DB_DATABASE: gad_beni_test
       DB_USERNAME: gad
       DB_PASSWORD: secret
+      PGTZ: America/La_Paz
     steps:
       - uses: actions/checkout@v4
 
