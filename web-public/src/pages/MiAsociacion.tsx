@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { useCiudadanoAuth } from '@/context/CiudadanoAuthProvider';
 import { ciudadanoService, type Alumno } from '@/services/ciudadanoService';
 
@@ -63,90 +72,130 @@ export default function MiAsociacion() {
   };
 
   return (
-    <div className="container mx-auto max-w-2xl px-4 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-teal-800">Mi asociación</h1>
-        <Button variant="outline" size="sm" onClick={() => logout()}>Cerrar sesión</Button>
+    <div className="container mx-auto max-w-2xl px-4 py-10 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-teal-800 dark:text-teal-200">
+          Mi asociación
+        </h1>
+        <Button variant="outline" size="sm" onClick={() => logout()}>
+          Cerrar sesión
+        </Button>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
-        <p className="text-sm text-gray-500">{ciudadano.nombre_completo} · CI {ciudadano.ci}</p>
-        {esAsociacion && a ? (
-          <div className="mt-4 space-y-1">
-            <p className="font-semibold text-teal-800">{a.nombre}</p>
-            <p className="text-sm text-gray-600">Tipo: {a.tipo ?? '—'} · Convenio {a.convenio_numero ?? 's/n'}</p>
-            <p className="text-sm text-gray-600">
-              Vigencia: {a.convenio_hasta ?? '—'} · {a.vigente ? <span className="text-green-700">vigente</span> : <span className="text-amber-700">vencido</span>}
-            </p>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-gray-600">
-            Tu cuenta no está vinculada a ninguna asociación con convenio vigente. El convenio lo otorga el GAD al dar de alta la asociación.
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground">
+            {ciudadano.nombre_completo} · CI {ciudadano.ci}
           </p>
-        )}
-      </div>
+          {esAsociacion && a ? (
+            <div className="mt-4 space-y-1">
+              <p className="font-semibold text-teal-800 dark:text-teal-200">{a.nombre}</p>
+              <p className="text-sm text-muted-foreground">
+                Tipo: {a.tipo ?? '—'} · Convenio {a.convenio_numero ?? 's/n'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Vigencia: {a.convenio_hasta ?? '—'} ·{' '}
+                {a.vigente ? (
+                  <span className="text-green-700 dark:text-green-400">vigente</span>
+                ) : (
+                  <span className="text-amber-700 dark:text-amber-400">vencido</span>
+                )}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Tu cuenta no está vinculada a ninguna asociación con convenio
+              vigente. El convenio lo otorga el GAD al dar de alta la asociación.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {esAsociacion && (
-        <div className="mt-8 rounded-lg border border-gray-200 bg-white p-5">
-          <h2 className="mb-1 text-lg font-semibold text-teal-800">Alumnos</h2>
-          <p className="mb-4 text-sm text-gray-500">
-            Cargá tu lista antes de ir a ventanilla. Al reservar, el funcionario elige quiénes asisten a cada franja.
-          </p>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg text-teal-800 dark:text-teal-200">
+              Alumnos
+            </CardTitle>
+            <CardDescription>
+              Cargá tu lista antes de ir a ventanilla. Al reservar, el
+              funcionario elige quiénes asisten a cada franja.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <form onSubmit={agregar} className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="alumno-ci">CI del alumno</Label>
+                <Input
+                  id="alumno-ci"
+                  value={form.ci}
+                  onChange={(e) => setForm((f) => ({ ...f, ci: e.target.value }))}
+                  inputMode="numeric"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="alumno-nombre">Nombre completo</Label>
+                <Input
+                  id="alumno-nombre"
+                  value={form.nombre_completo}
+                  onChange={(e) => setForm((f) => ({ ...f, nombre_completo: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="alumno-nacimiento">Fecha de nacimiento (opcional)</Label>
+                <Input
+                  id="alumno-nacimiento"
+                  type="date"
+                  value={form.fecha_nacimiento}
+                  onChange={(e) => setForm((f) => ({ ...f, fecha_nacimiento: e.target.value }))}
+                  max={new Date().toISOString().slice(0, 10)}
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={guardando}
+                className="bg-teal-700 hover:bg-teal-800 sm:col-span-2"
+              >
+                {guardando ? 'Agregando…' : 'Agregar alumno'}
+              </Button>
+            </form>
 
-          <form onSubmit={agregar} className="mb-5 grid gap-3 sm:grid-cols-2">
-            <input
-              value={form.ci}
-              onChange={(e) => setForm((f) => ({ ...f, ci: e.target.value }))}
-              placeholder="CI del alumno"
-              inputMode="numeric"
-              required
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
-            />
-            <input
-              value={form.nombre_completo}
-              onChange={(e) => setForm((f) => ({ ...f, nombre_completo: e.target.value }))}
-              placeholder="Nombre completo"
-              required
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
-            />
-            <input
-              type="date"
-              value={form.fecha_nacimiento}
-              onChange={(e) => setForm((f) => ({ ...f, fecha_nacimiento: e.target.value }))}
-              max={new Date().toISOString().slice(0, 10)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none sm:col-span-2"
-            />
-            <Button type="submit" disabled={guardando} className="bg-teal-700 hover:bg-teal-800 sm:col-span-2">
-              {guardando ? 'Agregando…' : 'Agregar alumno'}
-            </Button>
-          </form>
+            {error && <p className="text-sm text-destructive">{error}</p>}
 
-          {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-
-          {cargando ? (
-            <p className="text-sm text-gray-500">Cargando…</p>
-          ) : alumnos.length === 0 ? (
-            <p className="text-sm text-gray-500">Todavía no cargaste alumnos.</p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {alumnos.map((al) => (
-                <li key={al.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <p className={`truncate text-sm font-medium ${al.activo ? '' : 'text-gray-400 line-through'}`}>
-                      {al.nombre_completo}
-                    </p>
-                    <p className="truncate text-xs text-gray-500">
-                      CI {al.ci}{al.fecha_nacimiento ? ` · nace ${al.fecha_nacimiento}` : ''}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => alternar(al)}>
-                    {al.activo ? 'Desactivar' : 'Reactivar'}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+            {cargando ? (
+              <p className="text-sm text-muted-foreground">Cargando…</p>
+            ) : alumnos.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Todavía no cargaste alumnos.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {alumnos.map((al) => (
+                  <li key={al.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p
+                        className={`truncate text-sm font-medium ${
+                          al.activo ? '' : 'text-muted-foreground line-through'
+                        }`}
+                      >
+                        {al.nombre_completo}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        CI {al.ci}
+                        {al.fecha_nacimiento ? ` · nace ${al.fecha_nacimiento}` : ''}
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => alternar(al)}>
+                      {al.activo ? 'Desactivar' : 'Reactivar'}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

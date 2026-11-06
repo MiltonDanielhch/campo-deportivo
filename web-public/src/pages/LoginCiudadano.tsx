@@ -1,6 +1,15 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { useCiudadanoAuth } from '@/context/CiudadanoAuthProvider';
 
 export default function LoginCiudadano() {
@@ -20,7 +29,11 @@ export default function LoginCiudadano() {
       navigate('/mi-asociacion');
     } catch (err: any) {
       const data = err?.response?.data;
-      setError(data?.error === 'CREDENCIALES_INVALIDAS' ? 'CI o contraseña incorrectos.' : data?.message ?? 'No se pudo iniciar sesión.');
+      setError(
+        data?.error === 'CREDENCIALES_INVALIDAS'
+          ? 'CI o contraseña incorrectos.'
+          : data?.message ?? 'No se pudo iniciar sesión.',
+      );
     } finally {
       setEnviando(false);
     }
@@ -28,27 +41,56 @@ export default function LoginCiudadano() {
 
   return (
     <div className="container mx-auto max-w-md px-4 py-10">
-      <h1 className="mb-1 text-2xl font-bold text-teal-800">Ingresar</h1>
-      <p className="mb-6 text-sm text-gray-600">Accedé con tu CI para gestionar tu asociación.</p>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium">CI</label>
-          <input value={ci} onChange={(e) => setCi(e.target.value)} required inputMode="numeric"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none" />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Contraseña</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none" />
-        </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button type="submit" disabled={enviando} className="w-full bg-teal-700 hover:bg-teal-800">
-          {enviando ? 'Ingresando…' : 'Ingresar'}
-        </Button>
-        <p className="text-center text-sm text-gray-600">
-          ¿No tenés cuenta? <Link to="/registro" className="font-medium text-teal-700 underline">Registrate</Link>
-        </p>
-      </form>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-2xl text-teal-800 dark:text-teal-200">
+            Ingresar
+          </CardTitle>
+          <CardDescription>
+            Accedé con tu CI para gestionar tu asociación.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="ci">CI</Label>
+              <Input
+                id="ci"
+                value={ci}
+                onChange={(e) => setCi(e.target.value)}
+                required
+                inputMode="numeric"
+                autoComplete="username"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Contraseña</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button
+              type="submit"
+              disabled={enviando}
+              className="w-full bg-teal-700 hover:bg-teal-800"
+            >
+              {enviando ? 'Ingresando…' : 'Ingresar'}
+            </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              ¿No tenés cuenta?{' '}
+              <Link to="/registro" className="font-medium text-teal-700 underline dark:text-teal-300">
+                Registrate
+              </Link>
+            </p>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
