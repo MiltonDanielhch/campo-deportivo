@@ -1033,16 +1033,7 @@ class SolicitudReservaService
      */
     private function resolverAsociacionVigente(?string $ciNit): ?Asociacion
     {
-        if (blank($ciNit)) {
-            return null;
-        }
-
-        $asociacion = Asociacion::where('responsable_ci', $ciNit)
-            ->where('activo', true)
-            ->where(fn ($q) => $q->whereNull('convenio_hasta')->orWhere('convenio_hasta', '>=', now()->startOfDay()))
-            ->first();
-
-        return $asociacion?->esVigente() ? $asociacion : null;
+        return app(AsociacionVigenteResolver::class)->porCi($ciNit);
     }
 
     /**
