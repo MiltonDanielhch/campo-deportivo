@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Ciudadano;
 use App\Http\Controllers\Controller;
 use App\Models\Asociacion;
 use App\Models\Ciudadano;
+use App\Services\AsociacionVigenteResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -129,13 +130,7 @@ class CiudadanoAuthController extends Controller
 
     private function resolverAsociacionVigentePorCi(string $ci): ?Asociacion
     {
-        $asociacion = Asociacion::where('responsable_ci', $ci)
-            ->where('activo', true)
-            ->where(fn ($q) => $q->whereNull('convenio_hasta')
-                ->orWhere('convenio_hasta', '>=', now()->startOfDay()))
-            ->first();
-
-        return ($asociacion && $asociacion->esVigente()) ? $asociacion : null;
+        return app(AsociacionVigenteResolver::class)->porCi($ci);
     }
 
     /**
