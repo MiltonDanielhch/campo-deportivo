@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\SolicitudDetalleAlumno;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -75,6 +76,28 @@ class SolicitudReservaAdminResource extends JsonResource
                             'confirmado_en' => $detalle->reserva->confirmado_en?->toIso8601String(),
                             'asistencia_marcada_en' => $detalle->reserva->asistencia_marcada_en?->toIso8601String(),
                         ] : null,
+                        // [Fase 4] alumnos de esta franja + su asistencia.
+                        // Se consulta la BRIDGE (solicitud_detalle_alumno) directo,
+                        // no la relación detalle.alumnos: esa es belongsToMany y
+                        // oculta el pivote, donde viven asistencia_marca_en/por y
+                        // el uuid que espera el endpoint marcarAlumno. with('alumno')
+                        // evita N+1 sobre los alumnos. Deuda: eager-load en el show
+                        // cuando se toque (<=6 detalles por solicitud, acotado).
+                        'alumnos' => SolicitudDetalleAlumno::query()
+                            ->where('detalle_id', $detalle->id)
+                            ->with('alumno')
+                            ->orderBy('creado_en')
+                            ->get()
+                            ->map(fn ($b) => [
+                                'id' => $b->id,
+                                'alumno_id' => $b->alumno_id,
+                                'nombre_completo' => $b->alumno?->nombre_completo,
+                                'ci' => $b->alumno?->ci,
+                                'asistencia_marca_en' => $b->asistencia_marca_en?->toIso8601String(),
+                                'asistencia_marca_por' => $b->asistencia_marca_por,
+                            ])
+                            ->values()
+                            ->all(),
                     ])
                     ->values()
                     ->all()

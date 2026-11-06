@@ -17,6 +17,15 @@ export interface ReservaAnidada {
   asistencia_marcada_en?: string | null;
 }
 
+export interface AlumnoAsistencia {
+  id: string;
+  alumno_id: string;
+  nombre_completo: string | null;
+  ci: string | null;
+  asistencia_marca_en: string | null;
+  asistencia_marca_por: string | null;
+}
+
 export interface DetalleSolicitudAdmin {
   id: string;
   campo_id: string;
@@ -30,6 +39,7 @@ export interface DetalleSolicitudAdmin {
   hora_fin: string;
   tarifa_aplicada: number;
   reserva: ReservaAnidada | null;
+  alumnos?: AlumnoAsistencia[];
 }
 
 export interface ServicioAdicionalDetalle {
@@ -204,4 +214,12 @@ export interface FiltrosPiscinaReserva {
   buscar?: string;
   page?: number;
   per_page?: number;
+}
+
+export interface AsistenciaAlumnoResponse {
+  id: string;
+  detalle_id: string;
+  alumno_id: string;
+  asistencia_marca_en: string | null;
+  asistencia_marca_por: string | null;
 }
