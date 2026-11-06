@@ -176,4 +176,55 @@ class CiudadanoAuthTest extends TestCase
             $this->assertSame('23505', $e->getCode());
         }
     }
+
+    public function test_login_revincula_cuando_el_admin_crea_la_asociacion_despues_del_registro(): void
+    {
+        // 1) se registra como comun (no hay asociacion todavia) -> es_asociacion=false
+        $this->postJson('/api/v1/ciudadanos/auth/registro', $this->payloadRegistro('12121212'))
+            ->assertStatus(201)
+            ->assertJsonPath('data.ciudadano.es_asociacion', false);
+
+        // 2) el admin da de alta la asociacion con ese CI (fuera de banda, como haria
+        //    desde el panel: responsable_ci = el CI del presidente)
+        $asociacion = $this->asociacionVigente('12121212');
+
+        // 3) el presidente vuelve a entrar -> login re-sincroniza y prende convenio
+        $this->postJson('/api/v1/ciudadanos/auth/login', [
+            'ci' => '12121212',
+            'password' => 'secreto123',
+        ])
+            ->assertStatus(200)
+            ->assertJsonPath('data.ciudadano.es_asociacion', true)
+            ->assertJsonPath('data.ciudadano.asociacion.id', $asociacion->id);
+
+        $this->assertDatabaseHas('ciudadanos', [
+            'ci' => '12121212',
+            'es_asociacion' => true,
+            'asociacion_id' => $asociacion->id,
+        ]);
+    }
+
+    public function test_login_desvincula_cuando_la_asociacion_dejo_de_estar_vigente(): void
+    {
+        // se registra YA vinculado (asociacion vigente al momento del registro)
+        $this->asociacionVigente('13131313');
+        $this->postJson('/api/v1/ciudadanos/auth/registro', $this->payloadRegistro('13131313'))
+            ->assertStatus(201)
+            ->assertJsonPath('data.ciudadano.es_asociacion', true);
+
+        // el admin inhabilita la asociacion (activo=false)
+        Asociacion::where('responsable_ci', '13131313')->update(['activo' => false]);
+
+        // login re-sincroniza y APAGA el convenio
+        $this->postJson('/api/v1/ciudadanos/auth/login', [
+            'ci' => '13131313',
+            'password' => 'secreto123',
+        ])
+            ->assertStatus(200)
+            ->assertJsonPath('data.ciudadano.es_asociacion', false)
+            ->assertJsonPath('data.ciudadano.asociacion', null);
+
+        $this->assertDatabaseHas('ciudadanos', ['ci' => '13131313', 'es_asociacion' => false]);
+    }
 }
+
