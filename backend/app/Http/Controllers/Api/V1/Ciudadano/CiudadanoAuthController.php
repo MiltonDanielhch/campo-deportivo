@@ -36,9 +36,6 @@ class CiudadanoAuthController extends Controller
             $ciudadano->save();
         }
 
-        // refresh() trae los defaults de BD al modelo en memoria: sin esto
-        // es_asociacion queda null (no false) en los caminos NO vinculados,
-        // porque create() no seteo la columna (fuera de fillable a proposito).
         $ciudadano->refresh();
 
         $token = $ciudadano->createToken('ciudadano')->plainTextToken;
@@ -63,6 +60,17 @@ class CiudadanoAuthController extends Controller
         if (! $ciudadano || ! Hash::check($validated['password'], $ciudadano->password_hash)) {
             return response()->json(['error' => 'CREDENCIALES_INVALIDAS'], 401);
         }
+
+        // [revinculacion] El admin puede dar de alta (o inhabilitar) la asociacion
+        // DESPUES de que el presidente se registro. El registro solo vincula al
+        // crear la cuenta; sin esto, quien se registro antes queda congelado como
+        // ciudadano comun aunque ahora su CI sea responsable de una asociacion
+        // vigente. Re-sincroniza con la MISMA llave del registro (no debilita la
+        // norma: sigue exigiendo que el GAD haya dado de alta la asociacion).
+        $this->resincronizarVinculacion($ciudadano);
+        // refresh() recarga atributos Y limpia relations cacheadas: sin esto,
+        // loadMissing('asociacion') de abajo devolveria la asociacion vieja (null).
+        $ciudadano->refresh();
 
         $token = $ciudadano->createToken('ciudadano')->plainTextToken;
 
@@ -114,10 +122,6 @@ class CiudadanoAuthController extends Controller
         /** @var Ciudadano $ciudadano */
         $ciudadano = $request->user();
 
-        // tokens()->delete() en vez de currentAccessToken()->delete():
-        // currentAccessToken() sale null en este setup y con ?-> el delete se
-        // salta en silencio -> token vivo -> me() da 200. TRADE-OFF: cierra
-        // TODAS las sesiones del ciudadano, no solo la actual. Aceptable pa' MVP.
         $ciudadano->tokens()->delete();
 
         return response()->json(['message' => 'Sesion cerrada']);
@@ -132,6 +136,27 @@ class CiudadanoAuthController extends Controller
             ->first();
 
         return ($asociacion && $asociacion->esVigente()) ? $asociacion : null;
+    }
+
+    /**
+     * [revinculacion] Prende/apaga es_asociacion+asociacion_id segun la tabla
+     * del GAD, en AMBOS sentidos (alta posterior y baja/vencimiento). Idempotente:
+     * solo save() si el estado en memoria difiere del resuelto.
+     */
+    private function resincronizarVinculacion(Ciudadano $ciudadano): void
+    {
+        $asociacion = $this->resolverAsociacionVigentePorCi($ciudadano->ci);
+        $debeEstarVinculado = $asociacion !== null;
+        $estaVinculado = (bool) $ciudadano->es_asociacion;
+
+        if ($debeEstarVinculado === $estaVinculado
+            && (! $debeEstarVinculado || (string) $ciudadano->asociacion_id === (string) $asociacion->id)) {
+            return;
+        }
+
+        $ciudadano->es_asociacion = $debeEstarVinculado;
+        $ciudadano->asociacion_id = $debeEstarVinculado ? $asociacion->id : null;
+        $ciudadano->save();
     }
 
     private function serializar(Ciudadano $ciudadano): array
