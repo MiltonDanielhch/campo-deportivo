@@ -278,6 +278,7 @@ export default function DialogDetalleReserva({
   } | null>(null);
 
   const [procesandoAsistencia, setProcesandoAsistencia] = useState(false);
+  const [procesandoAlumno, setProcesandoAlumno] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && solicitudId) {
@@ -351,6 +352,26 @@ export default function DialogDetalleReserva({
     setAnularOpen(false);
     onRefresh?.();
     onOpenChange(false);
+  };
+
+  const marcarAlumno = async (bridgeId: string, marcar: boolean) => {
+    setProcesandoAlumno(bridgeId);
+    try {
+      const r = await asistenciaService.marcarAlumno(bridgeId, marcar);
+      if (marcar) {
+        toast.success(
+          `Asistencia marcada a las ${formatoHoraLocal(r.asistencia_marca_en)}`,
+        );
+      } else {
+        toast.success('Asistencia de alumno desmarcada');
+      }
+      await cargarDetalle();
+      onRefresh?.();
+    } catch (error: any) {
+      toast.error(mensajeErrorAsistencia(error));
+    } finally {
+      setProcesandoAlumno(null);
+    }
   };
 
   const confirmarAsistencia = async () => {
@@ -814,6 +835,63 @@ export default function DialogDetalleReserva({
                             <p className="mt-2 text-xs text-muted-foreground">
                               Sin reserva confirmada todavía.
                             </p>
+                          )}
+
+                          {detalle.alumnos && detalle.alumnos.length > 0 && (
+                            <div className="mt-3 border-t pt-3">
+                              <p className="mb-2 text-xs font-semibold text-muted-foreground">
+                                Alumnos en esta franja
+                              </p>
+                              <ul className="space-y-1.5">
+                                {detalle.alumnos.map((al) => {
+                                  const asistio = Boolean(al.asistencia_marca_en);
+                                  const puede = reserva
+                                    ? puedeMarcarAsistencia(solicitud, detalle, esAdmin)
+                                    : false;
+                                  const cargando = procesandoAlumno === al.id;
+
+                                  return (
+                                    <li
+                                      key={al.id}
+                                      className="flex items-center justify-between gap-2 text-xs"
+                                    >
+                                      <div className="min-w-0">
+                                        <p
+                                          className={`truncate font-medium ${
+                                            asistio ? 'text-emerald-700' : ''
+                                          }`}
+                                        >
+                                          {al.nombre_completo || 'Alumno'}
+                                        </p>
+                                        <p className="truncate text-muted-foreground">
+                                          CI {al.ci ?? '—'}
+                                          {asistio
+                                            ? ` · asistió ${formatoHoraLocal(al.asistencia_marca_en)}`
+                                            : ''}
+                                        </p>
+                                      </div>
+
+                                      <Button
+                                        size="sm"
+                                        variant={asistio ? 'default' : 'outline'}
+                                        disabled={!puede || cargando}
+                                        onClick={() => marcarAlumno(al.id, !asistio)}
+                                        className="h-7 shrink-0 text-xs"
+                                      >
+                                        {cargando ? (
+                                          <Loader2 className="mr-1 size-3.5 animate-spin" />
+                                        ) : asistio ? (
+                                          <Check className="mr-1 size-3.5" />
+                                        ) : (
+                                          <UserCheck className="mr-1 size-3.5" />
+                                        )}
+                                        {asistio ? 'Asistió' : 'Marcar'}
+                                      </Button>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
                           )}
                         </div>
                       );

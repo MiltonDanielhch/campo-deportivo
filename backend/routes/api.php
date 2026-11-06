@@ -241,6 +241,15 @@ Route::middleware('auth.oauth')->group(function () {
         });
     // ─── FIN Fase 7.2 ───
 
+    // ─── Fase 4: Asistencia por alumno (bridge detalle<->alumno) ───
+    // Mismo grupo de rol que franja: control solo dentro de ventana, admin fuera.
+    Route::middleware('role:admin_parametricas|admin_reservas|funcionario_control')
+        ->prefix('v1/admin/solicitud-detalle-alumno')
+        ->group(function () {
+            Route::post('/{id}/asistencia', [AdminAsistenciaController::class, 'marcarAlumno']);
+        });
+    // ─── FIN Fase 4 ───
+
     // ─── Fase 7.3: Exportación CSV de reservas ───
     // Solo admins. funcionario_control NO puede exportar.
     Route::middleware('role:admin_parametricas|admin_reservas')

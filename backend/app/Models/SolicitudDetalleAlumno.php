@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\Funcionario;
 
 class SolicitudDetalleAlumno extends Model
 {
@@ -25,6 +26,7 @@ class SolicitudDetalleAlumno extends Model
     {
         return [
             'creado_en' => 'datetime',
+            'asistencia_marca_en' => 'datetime',
         ];
     }
 
@@ -36,5 +38,10 @@ class SolicitudDetalleAlumno extends Model
     public function alumno(): BelongsTo
     {
         return $this->belongsTo(AsociacionAlumno::class, 'alumno_id');
+    }
+
+    public function marco(): BelongsTo
+    {
+        return $this->belongsTo(Funcionario::class, 'asistencia_marca_por');
     }
 }
