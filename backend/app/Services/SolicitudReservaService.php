@@ -123,7 +123,7 @@ class SolicitudReservaService
         $campos = $this->verificarFranjas($datos->franjas);
 
         // ── P8.2B: resolver variante/tarifa/cantidad ANTES de persistir ──
-        $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin, $puedeUsarNoVisible);
+        $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin, $puedeUsarNoVisible, $convenioAsociacion);
 
         // [convenio-guard] variante de convenio solo pa' asociación VIGENTE del mismo tipo.
         $this->validarVariantesConvenio($franjasResueltas, $asociacion);
@@ -757,7 +757,7 @@ class SolicitudReservaService
      * @param  FranjaSolicitadaDTO[]  $franjas
      * @return array<int, array<string, mixed>>
      */
-    private function resolverFranjasParaCrear(array $franjas, array $campos, bool $esAdmin, bool $puedeUsarNoVisible = false): array
+    private function resolverFranjasParaCrear(array $franjas, array $campos, bool $esAdmin, bool $puedeUsarNoVisible = false, ?Asociacion $convenioAsociacion = null): array
     {
         $resueltas = [];
 
@@ -766,7 +766,8 @@ class SolicitudReservaService
                 $franja,
                 $campos[$franja->campoId],
                 $esAdmin,
-                $puedeUsarNoVisible
+                $puedeUsarNoVisible,
+                $convenioAsociacion
             );
 
             $resuelta['franja'] = $franja;
@@ -797,7 +798,7 @@ class SolicitudReservaService
      *     precio_unitario: float
      * }
      */
-    private function resolverTarifaParaFranja(FranjaSolicitadaDTO $franja, array $campoInfo, bool $esAdmin, bool $puedeUsarNoVisible = false): array
+    private function resolverTarifaParaFranja(FranjaSolicitadaDTO $franja, array $campoInfo, bool $esAdmin, bool $puedeUsarNoVisible = false, ?Asociacion $convenioAsociacion = null): array
     {
         $variante = null;
         $tarifas = $campoInfo['tarifas'];
@@ -833,34 +834,53 @@ class SolicitudReservaService
 
             $tarifas = $tarifas->where('servicio_sireb_id', $variante->servicio_sireb_id);
         } else {
-            // Si el campo tiene variantes arancelarias y no tiene servicio base,
-            // no se puede adivinar cuál cobrar.
-            if ($campoInfo['variantes']->isNotEmpty() && blank($campoInfo['campo']->servicio_sireb_id)) {
-                throw ValidationException::withMessages([
-                    'franjas' => "El campo {$campoInfo['campo']->nombre} requiere seleccionar una variante arancelaria.",
-                ]);
-            }
+            // [Fase 6b] Auto-resolución de variante de convenio para asociación
+            // logueada que NO mandó variante_id explícito: el token ya validó la
+            // asociación (convenioAsociacion no-null) y su tipo determina cuál
+            // variante le corresponde. Solo se auto-elige si hay EXACTAMENTE UNA
+            // variante horaria activa, vinculada a SIREB, cuyo tipo_asociacion
+            // coincide con el tipo de la asociación. Cero o múltiples coincidencias
+            // -> NO se auto-resuelve: cae al logic original (422 "requiere
+            // seleccionar variante" o legacy), nunca se elige una variante de
+            // precio equivocado.
+            $autoVariante = $this->autoResolverVarianteConvenio(
+                $campoInfo['variantes'],
+                $convenioAsociacion,
+            );
 
-            // Legacy: si el campo tiene servicio base, priorizamos tarifas de ese
-            // servicio. Si no hay coincidencia (datos viejos sin servicio_sireb_id
-            // en la tarifa), caemos al comportamiento actual.
-            if (filled($campoInfo['campo']->servicio_sireb_id)) {
-                $filtradas = $tarifas->where('servicio_sireb_id', $campoInfo['campo']->servicio_sireb_id);
-
-                if ($filtradas->isNotEmpty()) {
-                    $tarifas = $filtradas;
+            if ($autoVariante !== null) {
+                $variante = $autoVariante;
+                $tarifas = $tarifas->where('servicio_sireb_id', $variante->servicio_sireb_id);
+            } else {
+                // Si el campo tiene variantes arancelarias y no tiene servicio base,
+                // no se puede adivinar cuál cobrar.
+                if ($campoInfo['variantes']->isNotEmpty() && blank($campoInfo['campo']->servicio_sireb_id)) {
+                    throw ValidationException::withMessages([
+                        'franjas' => "El campo {$campoInfo['campo']->nombre} requiere seleccionar una variante arancelaria.",
+                    ]);
                 }
-            } elseif ($tarifas->whereNotNull('servicio_sireb_id')->isNotEmpty()) {
-                // [B92-a] campo desvinculado (sin servicio_sireb_id) y sin variantes,
-                // pero con tarifas espejadas que apuntan a un servicio (huérfanas de un
-                // vínculo roto: 305 no las purga al desvincular). El invariante 862
-                // "reservable ⟺ servicio_sireb_id con tarifa" no se cumple → bloqueo pa'
-                // que no reserve/cobre la tarifa vieja. Las tarifas legacy (servicio_sireb_id
-                // null en la fila, :796-797) NO se bloquean: son datos viejos sin servicio,
-                // no huérfanas de un vínculo roto; caen al comportamiento actual.
-                throw ValidationException::withMessages([
-                    'franjas' => "El campo {$campoInfo['campo']->nombre} no está vinculado a SIREB pero tiene tarifas espejadas de un servicio. Vinculalo o ejecutá la sincronización.",
-                ]);
+
+                // Legacy: si el campo tiene servicio base, priorizamos tarifas de ese
+                // servicio. Si no hay coincidencia (datos viejos sin servicio_sireb_id
+                // en la tarifa), caemos al comportamiento actual.
+                if (filled($campoInfo['campo']->servicio_sireb_id)) {
+                    $filtradas = $tarifas->where('servicio_sireb_id', $campoInfo['campo']->servicio_sireb_id);
+
+                    if ($filtradas->isNotEmpty()) {
+                        $tarifas = $filtradas;
+                    }
+                } elseif ($tarifas->whereNotNull('servicio_sireb_id')->isNotEmpty()) {
+                    // [B92-a] campo desvinculado (sin servicio_sireb_id) y sin variantes,
+                    // pero con tarifas espejadas que apuntan a un servicio (huérfanas de un
+                    // vínculo roto: 305 no las purga al desvincular). El invariante 862
+                    // "reservable ⟺ servicio_sireb_id con tarifa" no se cumple → bloqueo pa'
+                    // que no reserve/cobre la tarifa vieja. Las tarifas legacy (servicio_sireb_id
+                    // null en la fila, :796-797) NO se bloquean: son datos viejos sin servicio,
+                    // no huérfanas de un vínculo roto; caen al comportamiento actual.
+                    throw ValidationException::withMessages([
+                        'franjas' => "El campo {$campoInfo['campo']->nombre} no está vinculado a SIREB pero tiene tarifas espejadas de un servicio. Vinculalo o ejecutá la sincronización.",
+                    ]);
+                }
             }
         }
 
@@ -908,6 +928,41 @@ class SolicitudReservaService
             'cantidad' => 1,
             'precio_unitario' => (float) $tarifa->precio_por_hora,
         ];
+    }
+
+    /**
+     * [Fase 6b] Elige la única variante de convenio que le corresponde a una
+     * asociación logueada cuando el front no mandó variante_id explícito.
+     *
+     * Devuelve null (=> NO se auto-resuelve, cae al logic original) si:
+     *  - no hay convenioAsociacion (anónimo / ventanilla / ciudadano no asociado);
+     *  - la asociación no tiene tipo definido;
+     *  - no hay EXACTAMENTE UNA variante horaria activa, vinculada a SIREB, cuyo
+     *    tipo_asociacion coincida con el tipo de la asociación.
+     *
+     * Nunca devuelve una variante ambigua: ante 0 o >1 coincidencias retorna null,
+     * así que el precio que se cobra es siempre el de LA variante que matchea el
+     * tipo de la asociación, o error ruidoso (422), jamás un precio equivocado.
+     */
+    private function autoResolverVarianteConvenio(Collection $variantes, ?Asociacion $convenioAsociacion): ?ArancelVariante
+    {
+        if ($convenioAsociacion === null) {
+            return null;
+        }
+
+        $tipoAsoc = $convenioAsociacion->tipo?->value;
+        if (blank($tipoAsoc)) {
+            return null;
+        }
+
+        $candidatas = $variantes->filter(
+            fn (ArancelVariante $v) => $v->activo
+                && $v->unidad_medida === 'hora'
+                && $v->tipo_asociacion === $tipoAsoc
+                && filled($v->servicio_sireb_id)
+        );
+
+        return $candidatas->count() === 1 ? $candidatas->first() : null;
     }
 
     /**

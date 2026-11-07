@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { User, Phone, CreditCard as IdCard, Loader2 } from 'lucide-react';
+import { User, Phone, CreditCard as IdCard, Loader2, Lock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -34,18 +34,33 @@ type FormData = z.infer<typeof schema>;
 interface FormularioSolicitanteProps {
   onSubmit: (data: FormData) => void;
   cargando: boolean;
+  /**
+   * [Fase 6b] Ciudadano logueado: nombre/CI se muestran de solo lectura (el
+   * backend los sobrescribe desde el token igual); teléfono solo se bloquea
+   * si el ciudadano lo tiene cargado (si no, hay que coletarlo para SIREB).
+   */
+  ciudadano?: { nombre_completo: string; ci: string; telefono: string | null } | null;
 }
 
 export default function FormularioSolicitante({
   onSubmit,
   cargando,
+  ciudadano,
 }: FormularioSolicitanteProps) {
+  const bloquearTelefono = Boolean(ciudadano?.telefono);
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
+    defaultValues: ciudadano
+      ? {
+          nombre_pagador: ciudadano.nombre_completo,
+          telefono_pagador: ciudadano.telefono ?? '',
+          ci_nit_pagador: ciudadano.ci,
+        }
+      : undefined,
   });
 
   return (
@@ -79,9 +94,15 @@ export default function FormularioSolicitante({
             {...register('nombre_pagador')}
             placeholder="Ej.: Juan Pérez o Asociación Deportiva San José"
             disabled={cargando}
+            readOnly={Boolean(ciudadano)}
             autoComplete="name"
             className={errors.nombre_pagador ? 'border-red-300' : ''}
           />
+          {ciudadano && (
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
+              <Lock className="w-3 h-3" /> Se usa el nombre de tu cuenta.
+            </p>
+          )}
           {errors.nombre_pagador && (
             <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
               <span className="w-1 h-1 rounded-full bg-red-500" />
@@ -105,9 +126,15 @@ export default function FormularioSolicitante({
             inputMode="tel"
             maxLength={8}
             disabled={cargando}
+            readOnly={bloquearTelefono}
             autoComplete="tel"
             className={errors.telefono_pagador ? 'border-red-300' : ''}
           />
+          {bloquearTelefono && (
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
+              <Lock className="w-3 h-3" /> Se usa el teléfono de tu cuenta.
+            </p>
+          )}
           {errors.telefono_pagador && (
             <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
               <span className="w-1 h-1 rounded-full bg-red-500" />
@@ -131,8 +158,14 @@ export default function FormularioSolicitante({
             placeholder="Ej.: 1234567 o 1234567890"
             inputMode="numeric"
             disabled={cargando}
+            readOnly={Boolean(ciudadano)}
             className={errors.ci_nit_pagador ? 'border-red-300' : ''}
           />
+          {ciudadano && (
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
+              <Lock className="w-3 h-3" /> Se usa el CI/NIT de tu cuenta; no se puede editar.
+            </p>
+          )}
           {errors.ci_nit_pagador && (
             <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
               <span className="w-1 h-1 rounded-full bg-red-500" />

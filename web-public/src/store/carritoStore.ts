@@ -17,7 +17,7 @@ interface CarritoState {
   calcularTotal: () => number;
 }
 
-const clave = (f: FranjaCarrito) => `${f.campoId}|${f.fecha}|${f.horaInicio}`;
+export const clave = (f: FranjaCarrito) => `${f.campoId}|${f.fecha}|${f.horaInicio}`;
 
 export const useCarritoStore = create<CarritoState>((set, get) => ({
   franjas: [],

@@ -74,3 +74,12 @@ export function useCiudadanoAuth(): Ctx {
   if (!ctx) throw new Error('useCiudadanoAuth debe usarse dentro de <CiudadanoAuthProvider>');
   return ctx;
 }
+
+/**
+ * Variante NO-launching: devuelve null si el árbol no está envuelto en
+ * <CiudadanoAuthProvider>. La usan páginas públicas (Reserva) que deben
+ * degradar a anónimo sin romper el render si el provider no las envuelve.
+ */
+export function useCiudadanoAuthOpcional(): Ctx | null {
+  return useContext(CiudadanoAuthContext);
+}
