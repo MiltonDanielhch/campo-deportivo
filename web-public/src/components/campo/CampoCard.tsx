@@ -156,6 +156,18 @@ export default function CampoCard({ campo }: CampoCardProps) {
 
         {/* ─── Fila de precios (mt-auto la ancla al fondo) ─── */}
         <div className="flex items-center gap-3 mt-auto pb-4 mb-4 border-b border-slate-100 min-h-[28px]">
+          {campo.convenio?.visible && (
+            <div className="flex items-center gap-1.5 text-sm">
+              <BadgeCheck className="w-4 h-4 text-teal-600" />
+              <span className="font-semibold text-teal-700">
+                {campo.convenio.precio_min != null && campo.convenio.precio_max != null
+                  ? campo.convenio.precio_min === campo.convenio.precio_max
+                    ? `Convenio Bs. ${campo.convenio.precio_min.toFixed(2)}`
+                    : `Convenio Bs. ${campo.convenio.precio_min.toFixed(2)} – ${campo.convenio.precio_max.toFixed(2)}`
+                  : 'Convenio disponible'}
+              </span>
+            </div>
+          )}
           {esOficial ? (
             <div className="flex items-center gap-1.5 text-sm">
               <span className="font-semibold">{formatoPrecioSireb()}</span>

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Asociacion;
 use App\Models\CampoDeportivo;
 use App\Models\TarifaCampo;
 use Illuminate\Support\Collection;
@@ -33,16 +34,21 @@ class CampoPublicoSirebPresenter
      * @param Collection<int, CampoDeportivo> $campos
      * @return array{data: array<int, array<string, mixed>>, meta: array<string, mixed>}
      */
-    public function index(Collection $campos): array
+    public function index(Collection $campos, ?Asociacion $convenioAsociacion = null): array
     {
         // [2b] eager-load del espejo filtrado: evita N+1 en el listado público.
-        $campos->load(['tarifas' => fn ($q) => $q->paraGrillaHoraria()]);
+        // [7a] se cargan también las variantes activas (para discriminar
+        // norma/convenio) si el caller no las eager-loadió.
+        $campos->load([
+            'tarifas' => fn ($q) => $q->paraGrillaHoraria(),
+            'variantes' => fn ($q) => $q->where('activo', true),
+        ]);
 
         [$servicios, $fuente, $aviso] = $this->obtenerServiciosSireb();
 
         return [
             'data' => $campos
-                ->map(fn (CampoDeportivo $campo) => $this->presentar($campo, $servicios, $fuente))
+                ->map(fn (CampoDeportivo $campo) => $this->presentar($campo, $servicios, $fuente, $convenioAsociacion))
                 ->values()
                 ->all(),
             'meta' => $this->meta($fuente, $aviso),
@@ -52,15 +58,18 @@ class CampoPublicoSirebPresenter
     /**
      * @return array{data: array<string, mixed>, meta: array<string, mixed>}
      */
-    public function show(CampoDeportivo $campo): array
+    public function show(CampoDeportivo $campo, ?Asociacion $convenioAsociacion = null): array
     {
         // [2b] load() fuerza la recarga con el scope (sobrescribe cualquier with previo).
-        $campo->load(['tarifas' => fn ($q) => $q->paraGrillaHoraria()]);
+        $campo->load([
+            'tarifas' => fn ($q) => $q->paraGrillaHoraria(),
+            'variantes' => fn ($q) => $q->where('activo', true),
+        ]);
 
         [$servicios, $fuente, $aviso] = $this->obtenerServiciosSireb();
 
         return [
-            'data' => $this->presentar($campo, $servicios, $fuente),
+            'data' => $this->presentar($campo, $servicios, $fuente, $convenioAsociacion),
             'meta' => $this->meta($fuente, $aviso),
         ];
     }
@@ -110,47 +119,196 @@ class CampoPublicoSirebPresenter
     private function presentar(
         CampoDeportivo $campo,
         ?Collection $servicios,
-        string $fuente
+        string $fuente,
+        ?Asociacion $convenioAsociacion = null
     ): array {
         $base = $this->base($campo);
 
-        // [2b] Fuente única de tarifas: el espejo ya cargado por index()/show().
-        $tarifasEspejo = $this->tarifasEspejoParaGrilla($campo);
-
-        // Si es piscina VINCULADA (modalidad_reserva = 'turno_por_perfil' + servicio_sireb_id),
-        // marcar como reservable independientemente de las tarifas horarias (que no tiene por
-        // diseño: sus tarifas son de perfil). [B111-display] la excepción exige vínculo pa' no
-        // violar el invariante 862 "reservable ⟺ servicio_sireb_id con tarifa": una piscina
-        // desvinculada cae al flujo normal → noVinculado() → reservable=false, coherente con el
-        // gate B111-gate que ya no la deja cobrar la tarifa vieja.
+        // Piscina vinculada: return temprano, no toca tarifas horarias (son de
+        // perfil). [B111-display] exige vínculo pa' no violar invariante 862.
         if ($campo->modalidad_reserva?->value === 'turno_por_perfil' && filled($campo->servicio_sireb_id)) {
             return array_merge($base, [
-                'tarifas' => [
-                    'diurna' => null,
-                    'nocturna' => null,
-                    'unica' => null,
-                ],
+                'tarifas' => ['diurna' => null, 'nocturna' => null, 'unica' => null],
                 'sireb' => null,
+                'convenio' => null,
                 'reservable_online' => true,
                 'mensaje_no_reservable' => null,
                 'fuente_precios' => 'SIREB_PERFIL',
             ]);
         }
 
+        // [7a-fix] Discriminar sobre el set COMPLETO (sin keyBy). Norma y
+        // convenio comparten clasificacion='diurna'; un keyBy previo (el de
+        // tarifasEspejoParaGrilla) pisaba una con la otra ANTES de separarlas.
+        // Cada sub-set se colapsa adentro, aislado.
+        $tarifasCompletas = $this->tarifasCompletasParaGrilla($campo);
+        [$tarifasNorma, $tarifasConvenio, $varianteConvenio] = $this->discriminarTarifas(
+            $campo,
+            $tarifasCompletas,
+            $convenioAsociacion,
+        );
+
+        $convenioPayload = $this->convenioPayload($tarifasConvenio, $varianteConvenio);
+
         if ($fuente === 'SIREB' && $servicios !== null) {
-            $servicio = $servicios->get((string) $campo->servicio_sireb_id);
+            $servicioNormaId = $this->resolverServicioNormaId($campo);
+            $servicio = $servicioNormaId !== null ? $servicios->get($servicioNormaId) : null;
 
             if (is_array($servicio)) {
-                return array_merge($base, $this->desdeSireb($servicio, $tarifasEspejo), [
-                    'nombre' => $servicio['nombre'] ?? $campo->nombre,
-                    'servicio_sireb_codigo' => $servicio['codigo'] ?? $campo->servicio_sireb_codigo,
+                return array_merge(
+                    $base,
+                    $this->desdeSireb($servicio, $tarifasNorma),
+                    ['convenio' => $convenioPayload],
+                    [
+                        'nombre' => $servicio['nombre'] ?? $campo->nombre,
+                        'servicio_sireb_codigo' => $servicio['codigo'] ?? $campo->servicio_sireb_codigo,
+                    ],
+                );
+            }
+
+            if ($convenioPayload !== null) {
+                return array_merge($base, $this->desdeConvenioSolo($tarifasConvenio), [
+                    'convenio' => $convenioPayload,
                 ]);
             }
 
-            return array_merge($base, $this->noVinculado());
+            return array_merge($base, $this->noVinculado(), ['convenio' => null]);
         }
 
-        return array_merge($base, $this->desdeLocal($campo, $tarifasEspejo));
+        return array_merge($base, $this->desdeLocal($campo, $tarifasNorma), ['convenio' => $convenioPayload]);
+    }
+
+    /**
+     * [7a-fix] Divide el set COMPLETO (sin colapsar) en norma vs convenio del
+     * logueado, y colapsa CADA sub-set por clasificacion. Asi desdeSireb/
+     * desdeLocal, que esperan keyBy('clasificacion'), reciben un set ya
+     * separado y colapsado, sin que una diurna pise a la otra.
+     */
+    private function discriminarTarifas(
+        CampoDeportivo $campo,
+        Collection $tarifasCompletas,
+        ?Asociacion $convenioAsociacion,
+    ): array {
+        $variantes = $campo->relationLoaded('variantes') ? $campo->variantes : collect();
+
+        $serviciosNorma = $variantes
+            ->where('visible_publico', true)
+            ->pluck('servicio_sireb_id')
+            ->filter()
+            ->unique();
+        if (filled($campo->servicio_sireb_id)) {
+            $serviciosNorma->push($campo->servicio_sireb_id);
+        }
+
+        $norma = $tarifasCompletas
+            ->filter(
+                fn (TarifaCampo $t) => $serviciosNorma->contains($t->servicio_sireb_id)
+                    || blank($t->servicio_sireb_id),
+            )
+            ->keyBy('clasificacion');
+
+        $tipoAsoc = $convenioAsociacion?->tipo?->value;
+        if ($tipoAsoc === null) {
+            return [$norma, collect(), null];
+        }
+
+        $varianteConvenio = $variantes
+            ->where('visible_publico', false)
+            ->where('tipo_asociacion', $tipoAsoc)
+            ->whereNotNull('servicio_sireb_id')
+            ->first();
+
+        if ($varianteConvenio === null) {
+            return [$norma, collect(), null];
+        }
+
+        $convenio = $tarifasCompletas
+            ->filter(fn (TarifaCampo $t) => $t->servicio_sireb_id === $varianteConvenio->servicio_sireb_id)
+            ->keyBy('clasificacion');
+
+        return [$norma, $convenio, $varianteConvenio];
+    }
+
+    /**
+     * [7a-fix] Set completo de tarifas del scope, SIN colapsar por clasificacion.
+     * index()/show() ya eager-loadean 'tarifas' con paraGrillaHoraria(); acá solo
+     * leemos la relación cargada (o queryamos si un caller no la cargó).
+     */
+    private function tarifasCompletasParaGrilla(CampoDeportivo $campo): Collection
+    {
+        if ($campo->relationLoaded('tarifas')) {
+            return $campo->tarifas;
+        }
+
+        return TarifaCampo::paraGrillaHoraria()
+            ->where('campo_id', $campo->id)
+            ->get();
+    }
+
+    /**
+     * [7a] id del servicio de la norma: base del campo, o primera variante
+     * visible_publico=true con servicio. null si no hay norma (solo convenio).
+     */
+    private function resolverServicioNormaId(CampoDeportivo $campo): ?string
+    {
+        if (filled($campo->servicio_sireb_id)) {
+            return (string) $campo->servicio_sireb_id;
+        }
+
+        $variantes = $campo->relationLoaded('variantes') ? $campo->variantes : collect();
+
+        return $variantes
+            ->where('visible_publico', true)
+            ->whereNotNull('servicio_sireb_id')
+            ->pluck('servicio_sireb_id')
+            ->first();
+    }
+
+    /**
+     * [7a] Payload de convenio para el logueado. null si no hay tarifas de
+     * convenio aplicables (anónimo, o asociación sin variante de su tipo).
+     */
+    private function convenioPayload(Collection $tarifasConvenio, $varianteConvenio): ?array
+    {
+        if ($varianteConvenio === null || $tarifasConvenio->isEmpty()) {
+            return null;
+        }
+
+        $precios = $tarifasConvenio->pluck('precio_por_hora')->filter()->values();
+        if ($precios->isEmpty()) {
+            return null;
+        }
+
+        return [
+            'visible' => true,
+            'variante_nombre' => $varianteConvenio->nombre,
+            'precio_min' => (float) $precios->min(),
+            'precio_max' => (float) $precios->max(),
+        ];
+    }
+
+    /**
+     * [7a] Campo sin norma pero con convenio vigente del logueado: reservable
+     * para él, con el precio de convenio como el único ofrecible. No expone
+     // 'sireb' (no hay servicio de norma en el catálogo vivo).
+     */
+    private function desdeConvenioSolo(Collection $tarifasConvenio): array
+    {
+        $diurna = $tarifasConvenio->get('diurna');
+        $nocturna = $tarifasConvenio->get('nocturna');
+        $unica = $tarifasConvenio->get('unica');
+
+        return [
+            'tarifas' => [
+                'diurna' => $diurna ? $this->tarifaEspejoPublica($diurna) : null,
+                'nocturna' => $nocturna ? $this->tarifaEspejoPublica($nocturna) : null,
+                'unica' => $unica ? $this->tarifaEspejoPublica($unica) : null,
+            ],
+            'sireb' => null,
+            'reservable_online' => true,
+            'mensaje_no_reservable' => null,
+            'fuente_precios' => 'SIREB',
+        ];
     }
 
     /**

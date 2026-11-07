@@ -29,6 +29,7 @@ class ArancelVariante extends Model
         'visible_publico',
         'activo',
         'orden',
+        'tipo_asociacion',
     ];
 
     protected $casts = [

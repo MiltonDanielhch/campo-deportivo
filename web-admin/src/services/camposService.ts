@@ -167,4 +167,85 @@ export const camposService = {
     );
     return data;
   },
+
+  // ─── [7b] Variantes arancelarias (ruta admin, NO bajo BASE) ───
+  // GET/POST/PUT/DELETE /v1/admin/campos/{id}/variantes[/{variante}]
+  // Lectura role:admin_parametricas|admin_reservas; escritura solo parametricas.
+
+  async listarVariantes(id: string): Promise<VarianteArancelaria[]> {
+    const { data } = await apiClient.get<{ data: VarianteArancelaria[] }>(
+      `/v1/admin/campos/${id}/variantes`,
+    );
+    return data.data;
+  },
+
+  async crearVariante(
+    id: string,
+    payload: VariantePayload,
+  ): Promise<{ message: string; data: VarianteArancelaria }> {
+    const { data } = await apiClient.post<{
+      message: string;
+      data: VarianteArancelaria;
+    }>(`/v1/admin/campos/${id}/variantes`, payload);
+    return data;
+  },
+
+  async actualizarVariante(
+    id: string,
+    varianteId: string,
+    payload: VariantePayload,
+  ): Promise<{ message: string; data: VarianteArancelaria }> {
+    const { data } = await apiClient.put<{
+      message: string;
+      data: VarianteArancelaria;
+    }>(`/v1/admin/campos/${id}/variantes/${varianteId}`, payload);
+    return data;
+  },
+
+  async eliminarVariante(
+    id: string,
+    varianteId: string,
+  ): Promise<{ message: string; data: VarianteArancelaria }> {
+    const { data } = await apiClient.delete<{
+      message: string;
+      data: VarianteArancelaria;
+    }>(`/v1/admin/campos/${id}/variantes/${varianteId}`);
+    return data;
+  },
 };
+
+/** [7b] Shape de variante que devuelve el index() del controller. */
+export interface VarianteArancelaria {
+  id: string;
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  tipo_uso: string;
+  tipo_asociacion: string | null;
+  servicio_sireb_id: string | null;
+  servicio_sireb_codigo: string | null;
+  unidad_medida: string;
+  visible_publico: boolean;
+  activo: boolean;
+  orden: number;
+  tarifas: {
+    tarifa_sireb_id: string | null;
+    etiqueta: string | null;
+    clasificacion: string | null;
+    monto: number;
+  }[];
+}
+
+/** [7b] Payload de store/update. tipo_asociacion solo para convenio. */
+export interface VariantePayload {
+  codigo: string;
+  nombre: string;
+  descripcion?: string | null;
+  tipo_uso: string;
+  servicio_sireb_id?: string | null;
+  unidad_medida: string;
+  visible_publico: boolean;
+  activo: boolean;
+  orden: number;
+  tipo_asociacion?: string | null;
+}

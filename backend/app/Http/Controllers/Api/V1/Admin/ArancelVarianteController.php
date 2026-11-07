@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Enums\TipoAsociacion;
 use App\Http\Controllers\Controller;
 use App\Models\ArancelVariante;
 use App\Models\CampoDeportivo;
@@ -100,6 +101,10 @@ class ArancelVarianteController extends Controller
             'visible_publico' => ['boolean'],
             'activo' => ['boolean'],
             'orden' => ['integer', 'min:0'],
+            // [7b] tipo_asociacion: varchar nullable en BD + enum PHP para
+            // validacion (patrón del repo: sin cast automatico en la variante,
+            // porque 6b/presenter comparan contra string via ->value).
+            'tipo_asociacion' => ['nullable', Rule::enum(TipoAsociacion::class)],
         ]);
 
         $servicioSirebCodigo = null;
@@ -130,6 +135,7 @@ class ArancelVarianteController extends Controller
                 'visible_publico' => $validated['visible_publico'] ?? false,
                 'activo' => $validated['activo'] ?? true,
                 'orden' => $validated['orden'] ?? 0,
+                'tipo_asociacion' => $validated['tipo_asociacion'] ?? null,
             ]);
         });
 
@@ -173,6 +179,7 @@ class ArancelVarianteController extends Controller
             'visible_publico' => ['boolean'],
             'activo' => ['boolean'],
             'orden' => ['integer', 'min:0'],
+            'tipo_asociacion' => ['nullable', Rule::enum(TipoAsociacion::class)],
         ]);
 
         $servicioSirebCodigo = $variante->servicio_sireb_codigo;
@@ -208,6 +215,7 @@ class ArancelVarianteController extends Controller
             'visible_publico' => $validated['visible_publico'] ?? $variante->visible_publico,
             'activo' => $validated['activo'] ?? $variante->activo,
             'orden' => $validated['orden'] ?? $variante->orden,
+            'tipo_asociacion' => $validated['tipo_asociacion'] ?? $variante->tipo_asociacion,
         ]);
 
         AuditoriaService::registrar(
