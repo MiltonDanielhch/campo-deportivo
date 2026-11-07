@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Building2, Loader2, Pencil, Plus, Search } from 'lucide-react';
+import { Building2, Loader2, Pencil, Plus, Search, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import {
 
 import { asociacionesService } from '@/services/asociacionesService';
 import type { Asociacion, AsociacionPayload, TipoAsociacion } from '@/types/asociaciones';
+import DialogAlumnosAsociacion from '@/components/parametricas/DialogAlumnosAsociacion';
 
 const TIPOS: { value: TipoAsociacion; label: string }[] = [
   { value: 'departamental', label: 'Departamental' },
@@ -56,6 +57,9 @@ export default function Asociaciones() {
   const [form, setForm] = useState<AsociacionPayload>(vacio());
   const [errores, setErrores] = useState<ErroresForm>({});
   const [guardando, setGuardando] = useState(false);
+
+  const [alumnosOpen, setAlumnosOpen] = useState(false);
+  const [alumnosAsociacion, setAlumnosAsociacion] = useState<Asociacion | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -269,6 +273,17 @@ export default function Asociaciones() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setAlumnosAsociacion(a);
+                          setAlumnosOpen(true);
+                        }}
+                        aria-label="Gestionar alumnos"
+                      >
+                        <Users className="size-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => abrirEditar(a)} aria-label="Editar">
                         <Pencil className="size-4" />
                       </Button>
@@ -403,6 +418,12 @@ export default function Asociaciones() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <DialogAlumnosAsociacion
+        asociacion={alumnosAsociacion}
+        open={alumnosOpen}
+        onOpenChange={setAlumnosOpen}
+      />
     </div>
   );
 }

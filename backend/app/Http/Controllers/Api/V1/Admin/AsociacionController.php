@@ -7,7 +7,10 @@ use App\Http\Requests\Admin\StoreAsociacionRequest;
 use App\Http\Requests\Admin\UpdateAsociacionRequest;
 use App\Http\Resources\AsociacionResource;
 use App\Models\Asociacion;
+use App\Models\AsociacionAlumno;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class AsociacionController extends Controller
 {
@@ -65,5 +68,100 @@ class AsociacionController extends Controller
             ->get(['id', 'ci', 'nombre_completo']);
 
         return response()->json(['data' => $alumnos]);
+    }
+
+    // ─── Fase 5: admin-fallback de alumnos (respaldo del presidente) ───
+    // Espejo de AsociacionAlumnoController (ciudadano) con UNA diferencia de
+    // fuente: asociacion_id sale del ROUTE PARAM validado por model binding
+    // ($asociacion->id), no del token. Mismas defensas: asociacion_id fuera
+    // de fillable (set por propiedad), scope where(asociacion_id)->findOrFail
+    // (404 sin leakage de otra asociacion), CI unico por asociacion, sin
+    // destroy (desactivar via /estado). NO filtra vigencia de la asociacion:
+    // el GAD prepara la proxima temporada antes de reactivar; cargar alumnos
+    // en una inactiva no da convenio (el descuento se valida al reservar via
+    // AsociacionVigenteResolver, no aqui).
+
+    /** Read de gestion: TODOS los alumnos (activos e inactivos) con fecha. */
+    public function alumnosGestion(Asociacion $asociacion): JsonResponse
+    {
+        $alumnos = $asociacion->alumnos()
+            ->orderBy('nombre_completo')
+            ->get()
+            ->map(fn (AsociacionAlumno $a) => $this->serializarAlumno($a));
+
+        return response()->json(['data' => $alumnos]);
+    }
+
+    public function storeAlumno(Request $r, Asociacion $asociacion): JsonResponse
+    {
+        $aid = $asociacion->id;
+
+        $v = $r->validate([
+            'ci' => [
+                'required', 'string', 'max:20', 'regex:/^[0-9]+$/',
+                Rule::unique('asociacion_alumnos', 'ci')->where('asociacion_id', $aid),
+            ],
+            'nombre_completo' => ['required', 'string', 'max:120'],
+            'fecha_nacimiento' => ['nullable', 'date', 'before_or_equal:today'],
+        ]);
+
+        $alumno = new AsociacionAlumno();
+        $alumno->asociacion_id = $aid;
+        $alumno->ci = $v['ci'];
+        $alumno->nombre_completo = $v['nombre_completo'];
+        $alumno->fecha_nacimiento = $v['fecha_nacimiento'] ?? null;
+        $alumno->save();
+        $alumno->refresh();
+
+        return response()->json(['data' => $this->serializarAlumno($alumno)], 201);
+    }
+
+    public function updateAlumno(Request $r, Asociacion $asociacion, string $alumno): JsonResponse
+    {
+        $aid = $asociacion->id;
+
+        // Scoped: si el id es de otra asociacion, 404 sin cargar la fila ajena.
+        $modelo = AsociacionAlumno::where('asociacion_id', $aid)->findOrFail($alumno);
+
+        $v = $r->validate([
+            'ci' => [
+                'required', 'string', 'max:20', 'regex:/^[0-9]+$/',
+                Rule::unique('asociacion_alumnos', 'ci')->where('asociacion_id', $aid)->ignore($modelo->id),
+            ],
+            'nombre_completo' => ['required', 'string', 'max:120'],
+            'fecha_nacimiento' => ['nullable', 'date', 'before_or_equal:today'],
+        ]);
+
+        // asociacion_id intocable: no esta en fillable y no se toca aca.
+        $modelo->ci = $v['ci'];
+        $modelo->nombre_completo = $v['nombre_completo'];
+        $modelo->fecha_nacimiento = $v['fecha_nacimiento'] ?? null;
+        $modelo->save();
+
+        return response()->json(['data' => $this->serializarAlumno($modelo)]);
+    }
+
+    public function cambiarEstadoAlumno(Request $r, Asociacion $asociacion, string $alumno): JsonResponse
+    {
+        $aid = $asociacion->id;
+        $modelo = AsociacionAlumno::where('asociacion_id', $aid)->findOrFail($alumno);
+
+        $r->validate(['activo' => 'required|boolean']);
+        $modelo->activo = (bool) $r->input('activo');
+        $modelo->save();
+
+        return response()->json(['data' => $this->serializarAlumno($modelo)]);
+    }
+
+    /** Mismo shape que el ciudadano (incluye fecha_nacimiento pa' editar). */
+    private function serializarAlumno(AsociacionAlumno $a): array
+    {
+        return [
+            'id' => $a->id,
+            'ci' => $a->ci,
+            'nombre_completo' => $a->nombre_completo,
+            'fecha_nacimiento' => $a->fecha_nacimiento?->toDateString(),
+            'activo' => $a->activo,
+        ];
     }
 }

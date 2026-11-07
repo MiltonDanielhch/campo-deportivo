@@ -42,3 +42,22 @@ export interface Paginated<T> {
   meta?: { total: number; current_page: number; last_page: number; from?: number; to?: number };
   links?: { next?: string | null; prev?: string | null };
 }
+
+// ─── Fase 5: admin-fallback de alumnos ──────────────────────────────────
+// Alumno completo (gestión admin). Distinto de AlumnoVentanilla (flaco,
+// activo-only, en asociacionesService) a propósito: el multi-select de
+// ventanilla no necesita fecha_nacimiento ni inactivos.
+export interface Alumno {
+  id: string;
+  ci: string;
+  nombre_completo: string;
+  fecha_nacimiento: string | null;
+  activo: boolean;
+}
+
+/** Lo que manda el form de alumno (sin id/activo, que maneja el backend). */
+export interface AlumnoPayload {
+  ci: string;
+  nombre_completo: string;
+  fecha_nacimiento: string | null;
+}
