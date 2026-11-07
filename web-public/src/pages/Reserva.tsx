@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
@@ -8,19 +8,50 @@ import {
   QrCode,
   FileText,
   Lock,
+  Users,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useCarritoStore } from '@/store/carritoStore';
+import { useCarritoStore, clave } from '@/store/carritoStore';
 import { api } from '@/lib/api';
 import ResumenCarrito from '@/components/reserva/ResumenCarrito';
 import FormularioSolicitante from '@/components/reserva/FormularioSolicitante';
+import SelectorAlumnosFranja from '@/components/reserva/SelectorAlumnosFranja';
 import StepsReserva from '@/components/layout/StepsReserva';
+import { useCiudadanoAuthOpcional } from '@/context/CiudadanoAuthProvider';
+import { ciudadanoService, type Alumno } from '@/services/ciudadanoService';
 
 export default function Reserva() {
   const navigate = useNavigate();
   const { franjas } = useCarritoStore();
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // [Fase 6b] Sesión opcional: si está logueado y es asociación, se prellenan
+  // sus datos, se ofrece el multi-select de alumnos y el backend auto-resuelve
+  // la variante de convenio (no hace falta mandar variante_id).
+  const auth = useCiudadanoAuthOpcional();
+  const ciudadano = auth?.ciudadano ?? null;
+  const esAsociacion = Boolean(ciudadano?.es_asociacion);
+
+  const [alumnos, setAlumnos] = useState<Alumno[]>([]);
+  const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
+  const [alumnosPorFranja, setAlumnosPorFranja] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    if (!esAsociacion) {
+      setAlumnos([]);
+      return;
+    }
+    let vivo = true;
+    setCargandoAlumnos(true);
+    ciudadanoService
+      .listarAlumnos()
+      .then((res) => { if (vivo) setAlumnos(res); })
+      .catch(() => { if (vivo) setAlumnos([]); })
+      .finally(() => { if (vivo) setCargandoAlumnos(false); });
+    return () => { vivo = false; };
+  }, [esAsociacion]);
 
   const handleEnviar = async (data: {
     nombre_pagador: string;
@@ -40,6 +71,10 @@ export default function Reserva() {
           fecha: f.fecha,
           hora_inicio: f.horaInicio,
           hora_fin: f.horaFin,
+          // [Fase 6b] alumnos de esta franja (solo asociación logueada). El
+          // backend valida pertenencia contra la asociación del token y
+          // auto-resuelve la variante de convenio; no se manda variante_id.
+          alumnos_ids: esAsociacion ? (alumnosPorFranja[clave(f)] ?? []) : [],
         })),
       };
 
@@ -155,7 +190,51 @@ export default function Reserva() {
               </div>
 
               {/* Form */}
-              <FormularioSolicitante onSubmit={handleEnviar} cargando={cargando} />
+              <FormularioSolicitante
+                onSubmit={handleEnviar}
+                cargando={cargando}
+                ciudadano={ciudadano}
+              />
+
+              {/* [Fase 6b] Alumnos por franja (solo asociación logueada) */}
+              {esAsociacion && (
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/50 p-5">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-100">
+                      <Users className="h-5 w-5 text-teal-700" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold tracking-tight">Alumnos de la franja</h2>
+                      <p className="text-xs text-slate-500">
+                        Marcá qué alumnos asisten a cada franja. Opcional: podés confirmar sin seleccionar.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-4 p-5">
+                    {cargandoAlumnos ? (
+                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Cargando alumnos…
+                      </div>
+                    ) : alumnos.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        Tu asociación aún no tiene alumnos cargados. Podés confirmar igual; el presidente los carga desde «Mi asociación».
+                      </p>
+                    ) : (
+                      franjas.map((f) => (
+                        <SelectorAlumnosFranja
+                          key={clave(f)}
+                          etiqueta={`${f.campoNombre} · ${f.fecha} ${f.horaInicio.slice(0, 5)}–${f.horaFin.slice(0, 5)}`}
+                          alumnos={alumnos}
+                          seleccionados={alumnosPorFranja[clave(f)] ?? []}
+                          onChange={(ids) =>
+                            setAlumnosPorFranja((prev) => ({ ...prev, [clave(f)]: ids }))
+                          }
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* DER: Resumen sticky + card explicativo */}
@@ -170,6 +249,13 @@ export default function Reserva() {
                       Resumen de tu reserva
                     </h2>
                   </div>
+
+                  {esAsociacion && (
+                    <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Tarifa de convenio · el monto exacto se confirma al generar el comprobante
+                    </div>
+                  )}
 
                   <ResumenCarrito compacto />
 
