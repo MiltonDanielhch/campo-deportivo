@@ -27,6 +27,13 @@ readonly class SolicitudReservaDTO
                 horaInicio: $f['hora_inicio'],
                 horaFin: $f['hora_fin'],
                 varianteId: $f['variante_id'] ?? null,
+                // [Fase 6a] Propagar alumnos_ids desde el payload público.
+                // Sin esto, validarAlumnosPertenencia ve [] y hace return
+                // temprano: los alumnos asignados online se pierden en silencio.
+                // El FormRequest ya validó la forma (uuid, exists); acá solo
+                // se hilan al DTO para que el service los valide contra la
+                // asociación del token.
+                alumnosIds: $f['alumnos_ids'] ?? [],
             ))
             ->all();
 
