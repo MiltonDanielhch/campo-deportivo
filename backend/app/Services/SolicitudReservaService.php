@@ -86,28 +86,44 @@ class SolicitudReservaService
         private SirebLiquidacionService $liquidaciones,
     ) {}
 
-    public function crear(SolicitudReservaDTO $datos, bool $esAdmin = false): SolicitudCreadaDTO
+    /**
+     * [Fase 6a] 3er arg opcional: asociación vigente del token del ciudadano.
+     * Si no-null, el service BYPASSEA resolverAsociacionVigente(payload CI) y
+     * usa esta asociación directamente → abre visibility gate de convenio,
+     * da plazo largo, y valida alumnos contra su id.
+     * Si null (anónimo o ciudadano no-asociado), comportamiento idéntico a hoy.
+     */
+    public function crear(
+        SolicitudReservaDTO $datos,
+        bool $esAdmin = false,
+        ?Asociacion $convenioAsociacion = null,
+    ): SolicitudCreadaDTO
     {
         // ── Gate anti-hoarding: SOLO canal público ──
         // El mostrador (admin) crea a nombre del ciudadano desde la IP de la
         // oficina; aplicarle el tope por IP bloquearía la operación del GAD.
         // El resto (disponibilidad, EXCLUDE, precio espejo) se mantiene igual.
         if (! $esAdmin) {
-            $this->validarAntiHoarding($datos);
+            $this->validarAntiHoarding($datos, $convenioAsociacion);
         }
 
         // [convenio] Si el pagador es responsable de una asociación VIGENTE,
         // la solicitud es de convenio: plazo largo + tope por CI propio.
-        // La ELEGENCIA de la variante de convenio la hace el UI de ventanilla
-        // (DialogCrearReservaVentanilla) mandando varianteId; resolverTarifaParaFranja
-        // ya la acepta porque visible_publico=false solo bloquea al PÚBLICO.
-        $asociacion = $this->resolverAsociacionVigente($datos->ciNitPagador);
+        // [Fase 6a] Si convenioAsociacion viene del token (no-null), BYPASSEA
+        // la resolución desde el payload CI → el CI del pagador ya fue
+        // sobrescrito por el controller con el del token.
+        $asociacion = $convenioAsociacion ?? $this->resolverAsociacionVigente($datos->ciNitPagador);
+
+        // [Fase 6a] Flag que abre el visibility gate de variantes de convenio
+        // (visible_publico=false) sin flipo la flag. Solo true si el token
+        // resolvió una asociación vigente.
+        $puedeUsarNoVisible = $convenioAsociacion !== null;
 
         // ── Capa 1: verificación rápida (aplicativa) ──
         $campos = $this->verificarFranjas($datos->franjas);
 
         // ── P8.2B: resolver variante/tarifa/cantidad ANTES de persistir ──
-        $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin);
+        $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin, $puedeUsarNoVisible);
 
         // [convenio-guard] variante de convenio solo pa' asociación VIGENTE del mismo tipo.
         $this->validarVariantesConvenio($franjasResueltas, $asociacion);
@@ -133,6 +149,7 @@ class SolicitudReservaService
             $campos,
             $esAdmin,
             $horasPorCampo,
+            $puedeUsarNoVisible,
         );
 
         $montoTotal = round(
@@ -142,7 +159,7 @@ class SolicitudReservaService
         );
 
         // ── Capa 2: escritura protegida (EXCLUDE) ──
-        $expiracionMinutos = $this->calcularExpiracionMinutos($asociacion, $esAdmin);
+        $expiracionMinutos = $this->calcularExpiracionMinutos($asociacion, $esAdmin, $convenioAsociacion !== null);
 
         try {
             $solicitud = DB::transaction(function () use ($datos, $franjasResueltas, $serviciosResueltos, $montoTotal, $expiracionMinutos) {
@@ -740,7 +757,7 @@ class SolicitudReservaService
      * @param  FranjaSolicitadaDTO[]  $franjas
      * @return array<int, array<string, mixed>>
      */
-    private function resolverFranjasParaCrear(array $franjas, array $campos, bool $esAdmin): array
+    private function resolverFranjasParaCrear(array $franjas, array $campos, bool $esAdmin, bool $puedeUsarNoVisible = false): array
     {
         $resueltas = [];
 
@@ -748,7 +765,8 @@ class SolicitudReservaService
             $resuelta = $this->resolverTarifaParaFranja(
                 $franja,
                 $campos[$franja->campoId],
-                $esAdmin
+                $esAdmin,
+                $puedeUsarNoVisible
             );
 
             $resuelta['franja'] = $franja;
@@ -779,7 +797,7 @@ class SolicitudReservaService
      *     precio_unitario: float
      * }
      */
-    private function resolverTarifaParaFranja(FranjaSolicitadaDTO $franja, array $campoInfo, bool $esAdmin): array
+    private function resolverTarifaParaFranja(FranjaSolicitadaDTO $franja, array $campoInfo, bool $esAdmin, bool $puedeUsarNoVisible = false): array
     {
         $variante = null;
         $tarifas = $campoInfo['tarifas'];
@@ -793,7 +811,9 @@ class SolicitudReservaService
                 ]);
             }
 
-            if (! $esAdmin && ! $variante->visible_publico) {
+            // [Fase 6a] puedeUsarNoVisible abre el gate para el asociado logueado
+            // online SIN flipo la flag visible_publico. El anónimo sigue bloqueado.
+            if (! $esAdmin && ! $puedeUsarNoVisible && ! $variante->visible_publico) {
                 throw ValidationException::withMessages([
                     'franjas' => "La variante {$variante->nombre} solo está disponible en ventanilla.",
                 ]);
@@ -908,6 +928,7 @@ class SolicitudReservaService
         array $campos,
         bool $esAdmin,
         array $horasPorCampo = [],
+        bool $puedeUsarNoVisible = false,
     ): array {
         $resueltos = [];
 
@@ -934,7 +955,7 @@ class SolicitudReservaService
                 ]);
             }
 
-            if (! $esAdmin && ! $variante->visible_publico) {
+            if (! $esAdmin && ! $puedeUsarNoVisible && ! $variante->visible_publico) {
                 throw ValidationException::withMessages([
                     'servicios' => "El servicio {$variante->nombre} solo está disponible en ventanilla.",
                 ]);
@@ -1042,14 +1063,23 @@ class SolicitudReservaService
      * se espeja en tarifas_campo (espejar() no guarda plazo_pago_dias), así que
      * vive en ParametroSistema para que el GAD lo ajuste sin redeploy.
      */
-    private function calcularExpiracionMinutos(?Asociacion $asociacion, bool $esAdmin): int
+    private function calcularExpiracionMinutos(?Asociacion $asociacion, bool $esAdmin, bool $convenioOnline = false): int
     {
         // [convenio-fix #4] El plazo largo (boleta en ventanilla que "queda a la
         // espera de validacion") es del CANAL ventanilla, no del atributo "es
         // asociacion". Una asociacion que reserva por web-public paga online con
         // QR (sin boleta) -> plazo publico normal. Bifurca por canal, no por
         // identidad (alineado al plan de Fase 2: "convenio = ventanilla+boleta").
-        if ($asociacion === null || ! $esAdmin) {
+        //
+        // [Fase 6a] Excepción controlada: el asociado LOGUEADO online
+        // ($convenioOnline=true) obtiene plazo largo PERO pagando por QR (no
+        // boleta). Su identidad ya fue validada por el token Sanctum y
+        // re-validada por AsociacionVigenteResolver al reservar
+        // (ResolveCiudadanoOpcional): la misma garantía que el mostrador
+        // presencial, por otra vía. El anónimo con CI tipeado sigue 15 min
+        // ($convenioOnline=false), y el asociado cuya asociación venció entre
+        // login y reserva también (convenioAsociacion=null -> asociacion=null).
+        if ($asociacion === null || (! $esAdmin && ! $convenioOnline)) {
             return $this->minutosExpiracion();
         }
 
@@ -1068,7 +1098,7 @@ class SolicitudReservaService
      *
      * @throws ValidationException
      */
-    private function validarAntiHoarding(SolicitudReservaDTO $datos): void
+    private function validarAntiHoarding(SolicitudReservaDTO $datos, ?Asociacion $asociacionConocida = null): void
     {
         // [Fase 2b] Tope por IDENTIDAD REAL (CI/NIT), no solo por IP.
         // Corre SIEMPRE (antes del return de IP) porque la identidad es el CI,
@@ -1076,7 +1106,12 @@ class SolicitudReservaService
         // sin tope) porque el presidente acumula franjas para sus alumnos; al
         // vecino suelto, el tope bajo anti-acaparamiento.
         if (filled($datos->ciNitPagador)) {
-            $asociacion = $this->resolverAsociacionVigente($datos->ciNitPagador);
+            // [Fase 6a] Si el token ya resolvió la asociación vigente
+            // ($asociacionConocida no-null), la reusamos: evita la doble query
+            // y honra la re-validación del middleware (asociación vencida entre
+            // login y reserva -> convenioAsociacion=null -> resolvemos del
+            // payload como hoy, y da null -> tope bajo + plazo público).
+            $asociacion = $asociacionConocida ?? $this->resolverAsociacionVigente($datos->ciNitPagador);
             $maxPorCi = $asociacion
                 ? (int) (ParametroSistema::where('clave', 'max_pendientes_por_asociacion')->value('valor') ?: 0)
                 : (int) (ParametroSistema::where('clave', 'max_pendientes_por_ci')->value('valor') ?: 3);

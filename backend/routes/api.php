@@ -77,7 +77,10 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
     Route::get('/ubicaciones', [PublicCampoController::class, 'ubicaciones']);
     Route::get('/campos/{campo}', [PublicCampoController::class, 'show']);
     Route::get('/campos/{campo}/disponibilidad', [DisponibilidadController::class, 'show']);
-    Route::post('/solicitudes-reserva', [SolicitudReservaController::class, 'store']);
+    // [Fase 6a] Auth opcional: si hay bearer de Ciudadano con asociación vigente,
+    // el middleware setea convenio_asociacion; si no, null → flujo anónimo idéntico.
+    Route::post('/solicitudes-reserva', [SolicitudReservaController::class, 'store'])
+        ->middleware(\App\Http\Middleware\ResolveCiudadanoOpcional::class);
     Route::get('/solicitudes-reserva/{codigo}/estado', [SolicitudEstadoController::class, 'show']);
     Route::get('solicitudes-reserva', [SolicitudReservaController::class, 'index']);
     // Consulta ciudadana unificada: campos + piscina, por seguimiento, código

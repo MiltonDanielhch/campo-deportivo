@@ -6,6 +6,7 @@ use App\DTOs\SolicitudReservaDTO;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreSolicitudReservaRequest;
 use App\Http\Resources\SolicitudReservaResource;
+use App\Models\Ciudadano;
 use App\Services\SolicitudReservaService;
 use Illuminate\Http\JsonResponse;
 
@@ -32,9 +33,28 @@ class SolicitudReservaController extends Controller
         $validated = $request->validated();
         $validated['ip_cobrador'] = $request->ip();
 
+        // [Fase 6a] Si el middleware resolvió un Ciudadano logueado, el CI/NIT
+        // del pagador sale del TOKEN, nunca del payload. Esto cierra el agujero
+        // "tipear CI de asociación ajena para obtener Bs 25": sin token, el
+        // payload manda (anónimo, como hoy); con token, el payload se ignora.
+        /** @var Ciudadano|null $ciudadano */
+        $ciudadano = $request->attributes->get('ciudadano');
+        $convenioAsociacion = $request->attributes->get('convenio_asociacion');
+
+        if ($ciudadano) {
+            $validated['ci_nit_pagador'] = $ciudadano->ci;
+            $validated['nombre_pagador'] = $ciudadano->nombre_completo;
+            if (filled($ciudadano->telefono)) {
+                $validated['telefono_pagador'] = $ciudadano->telefono;
+            }
+        }
+
         $dto = SolicitudReservaDTO::desdeArray($validated);
 
-        $resultado = $this->service->crear($dto);
+        // [Fase 6a] 3er arg: asociación vigente del token (null = anónimo).
+        // El service la usa para: abrir visibility gate de convenio, dar plazo
+        // largo, y validar pertenencia de alumnos contra su id.
+        $resultado = $this->service->crear($dto, false, $convenioAsociacion);
 
         $cobro = $resultado->cobro;
 
