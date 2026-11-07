@@ -328,6 +328,14 @@ Route::middleware('auth.oauth')->group(function () {
             Route::get('/por-responsable/{ci}', [AsociacionController::class, 'porResponsable']);
             // [Fase 3] alumnos de la asociacion pa' el multi-select de ventanilla.
             Route::get('/{asociacion}/alumnos', [AsociacionController::class, 'alumnos']);
+
+            // ─── Fase 5: admin-fallback de alumnos (respaldo del presidente) ───
+            // 'gestion' (estatica) ANTES de {alumno} (param), convencion del repo.
+            Route::get('/{asociacion}/alumnos/gestion', [AsociacionController::class, 'alumnosGestion']);
+            Route::post('/{asociacion}/alumnos', [AsociacionController::class, 'storeAlumno']);
+            Route::put('/{asociacion}/alumnos/{alumno}', [AsociacionController::class, 'updateAlumno']);
+            Route::patch('/{asociacion}/alumnos/{alumno}/estado', [AsociacionController::class, 'cambiarEstadoAlumno']);
+            // ─── FIN Fase 5 ───
         });
 });
 

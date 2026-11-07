@@ -1,5 +1,7 @@
 import apiClient from './apiClient';
 import type {
+  Alumno,
+  AlumnoPayload,
   Asociacion,
   AsociacionListParams,
   AsociacionPayload,
@@ -62,6 +64,49 @@ export const asociacionesService = {
   listarAlumnos: async (asociacionId: string): Promise<AlumnoVentanilla[]> => {
     const raw = await apiClient.get(`/v1/admin/asociaciones/${asociacionId}/alumnos`);
     return unwrap<{ data: AlumnoVentanilla[] }>(raw).data;
+  },
+
+  // ─── Fase 5: admin-fallback de alumnos ───
+  listarAlumnosGestion: async (asociacionId: string): Promise<Alumno[]> => {
+    const raw = await apiClient.get(
+      `/v1/admin/asociaciones/${asociacionId}/alumnos/gestion`,
+    );
+    return unwrap<{ data: Alumno[] }>(raw).data;
+  },
+
+  crearAlumno: async (
+    asociacionId: string,
+    payload: AlumnoPayload,
+  ): Promise<Alumno> => {
+    const raw = await apiClient.post(
+      `/v1/admin/asociaciones/${asociacionId}/alumnos`,
+      payload,
+    );
+    return unwrap<{ data: Alumno }>(raw).data;
+  },
+
+  actualizarAlumno: async (
+    asociacionId: string,
+    alumnoId: string,
+    payload: AlumnoPayload,
+  ): Promise<Alumno> => {
+    const raw = await apiClient.put(
+      `/v1/admin/asociaciones/${asociacionId}/alumnos/${alumnoId}`,
+      payload,
+    );
+    return unwrap<{ data: Alumno }>(raw).data;
+  },
+
+  cambiarEstadoAlumno: async (
+    asociacionId: string,
+    alumnoId: string,
+    activo: boolean,
+  ): Promise<Alumno> => {
+    const raw = await apiClient.patch(
+      `/v1/admin/asociaciones/${asociacionId}/alumnos/${alumnoId}/estado`,
+      { activo },
+    );
+    return unwrap<{ data: Alumno }>(raw).data;
   },
 };
 
