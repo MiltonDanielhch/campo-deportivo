@@ -77,7 +77,18 @@ export interface CampoPublico {
   reservable_online: boolean;
   mensaje_no_reservable?: string | null;
   fuente_precios?: string;
-}
+  /**
+   * [7a] Precio de convenio, revelado SOLO al logueado con asociación vigente
+   * cuyo tipo matchea una variante de convenio del campo. null para el anónimo
+   * (invariante: el publico jamas ve precio de convenio).
+   */
+  convenio?: {
+    visible: boolean;
+    variante_nombre: string | null;
+    precio_min: number | null;
+    precio_max: number | null;
+  } | null;
+} 
 
 export interface CamposResponse {
   data: CampoPublico[];

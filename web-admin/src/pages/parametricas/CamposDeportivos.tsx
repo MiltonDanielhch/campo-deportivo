@@ -59,6 +59,7 @@ import {
 } from '@/components/ui/table';
 import CampoFormDialog from '@/components/parametricas/CampoFormDialog';
 import VincularSirebDialog from '@/components/parametricas/VincularSirebDialog';
+import GestionarVariantesDialog from '@/components/parametricas/GestionarVariantesDialog';
 import { camposService } from '@/services/camposService';
 import { catalogoSirebService } from '@/services/catalogoSirebService';
 import type { CampoDeportivo, EstadoCampo } from '@/types/parametricas';
@@ -212,6 +213,7 @@ export default function CamposDeportivos() {
 
   // ─── Vinculación SIREB ───
   const [campoVinculando, setCampoVinculando] = useState<CampoDeportivo | null>(null);
+  const [campoVariantes, setCampoVariantes] = useState<CampoDeportivo | null>(null);
 
   // ─── Cambio de estado ───
   const [campoEstado, setCampoEstado] = useState<CampoDeportivo | null>(null);
@@ -812,7 +814,9 @@ export default function CamposDeportivos() {
                 case 'crear_campo_simple':
                   return btn(<Plus className="size-4" />, 'outline', false, () => abrirNuevoDesdeSireb(item));
                 case 'agregar_como_variante':
-                  return btn(<Link2 className="size-4" />, 'outline', true);
+                  return campoLocal
+                    ? btn(<Link2 className="size-4" />, 'outline', false, () => setCampoVariantes(campoLocal))
+                    : btn(<Link2 className="size-4" />, 'outline', true);
                 case 'modulo_piscina':
                   return campoLocal
                     ? btn(
@@ -827,7 +831,9 @@ export default function CamposDeportivos() {
                     ? btn(<Unlink className="size-4" />, 'ghost', false, () => desvincular(campoLocal))
                     : btn(<Unlink className="size-4" />, 'ghost', true);
                 case 'gestionar_variante':
-                  return btn(<Unlink className="size-4" />, 'ghost', true);
+                  return campoLocal
+                    ? btn(<Database className="size-4" />, 'ghost', false, () => setCampoVariantes(campoLocal))
+                    : btn(<Database className="size-4" />, 'ghost', true);
                 case 'fuera_de_alcance':
                   return <Badge variant="secondary" className="text-xs">{label}</Badge>;
                 case 'revisar_clasificacion':
@@ -1082,10 +1088,10 @@ export default function CamposDeportivos() {
                                 </DropdownMenuItem>
                               )}
 
-                              {tieneCatalogo && variantes.length > 0 && (
-                                <DropdownMenuItem disabled>
+                              {tieneCatalogo && (
+                                <DropdownMenuItem onClick={() => setCampoVariantes(campo)}>
                                   <Database className="mr-2 size-4" />
-                                  Gestionar variantes ({variantes.length})
+                                  Gestionar variantes{variantes.length > 0 ? ` (${variantes.length})` : ''}
                                 </DropdownMenuItem>
                               )}
                             </>
@@ -1155,6 +1161,18 @@ export default function CamposDeportivos() {
         }}
         campo={campoVinculando}
         onVinculado={() => {
+          cargar();
+          cargarCatalogoSireb();
+        }}
+      />
+
+      <GestionarVariantesDialog
+        open={campoVariantes !== null}
+        onOpenChange={(abierto) => {
+          if (!abierto) setCampoVariantes(null);
+        }}
+        campo={campoVariantes}
+        onGuardado={() => {
           cargar();
           cargarCatalogoSireb();
         }}

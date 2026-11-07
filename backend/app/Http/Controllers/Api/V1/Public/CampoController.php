@@ -35,26 +35,32 @@ class CampoController extends Controller
             'tipoCampo',
             'horariosAtencion',
             'tarifas' => fn ($q) => $q->whereNull('vigente_hasta'),
+            // [7a] El presenter necesita las variantes para separar norma
+            // (visible_publico=true / servicio base) de convenio
+            // (visible_publico=false + tipo_asociacion). Sin esto mezcla las
+            // tarifas de todas las variantes bajo el mismo campo_id.
+            'variantes' => fn ($q) => $q->where('activo', true),
         ]);
     }
 
     /**
-     * Base común: solo campos visibles al público.
-     * 'inactivo' queda excluido por completo.
+     * Base común: solo campos visibles al público. 'inactivo' excluido.
      *
-     * Bug A (Fase 2): el público NO puede reservar
-     *  - campos "padre de variantes" (CV-001 / PAL-001 / EGM-001): tienen
-     *    servicio_sireb_id null y N servicios espejados, entonces
-     *    calcularGrilla no resuelve un único precio y la grilla sale gris.
-     *  - campos solo-ventanilla (sin_reserva_online).
-     * Se mantienen la piscina (turno_por_perfil) y los legacy (CS1/CS3),
-     * que no tienen filas activas en arancel_variantes.
+     * [7a] Se quita el whereDoesntHave('variantes') de Fase 2. Ese filtro
+     * escondía a los campos "padre de variantes" (CV-001/EGM-001) porque el
+     * presenter mezclaba las tarifas de todas las variantes y la grilla salía
+     * gris. Ahora el presenter DISCRIMINA norma (visible_publico=true o
+     * servicio base) vs convenio (visible_publico=false + tipo_asociacion),
+     * así que el campo aparece y:
+     *  - el ANÓNIMO ve/reserva solo la NORMA (reservable_online = tiene norma);
+     *  - el LOGUEADO con convenio vigente ve además el PRECIO DE CONVENIO
+     *    (revelado por ResolveCiudadanoOpcional -> convenio_asociacion).
+     * Un campo sin norma (solo convenio, p.ej. CV-001 antes de 7b) sigue
+     * apareciendo en el listado pero reservable_online=false para el anónimo:
+     * no se le ofrece un precio que no puede cobrar. El convenio lo habilita
+     * solo para el asociado autenticado.
      *
-     * El NULL en modalidad_reserva se trata como "no es sin_reserva_online"
-     * (NOT IN / <> con NULL descartaría campos legacy sin modalidad set).
-     *
-     * TODO P8.5: cuando existan variantes visible_publico=true, revisar este
-     * filtro para no esconder un campo que sí tenga variante pública.
+     * El NULL en modalidad_reserva se trata como "no es sin_reserva_online".
      */
     private function visibles(): Builder
     {
@@ -62,8 +68,7 @@ class CampoController extends Controller
             ->whereIn('estado', ['activo', 'mantenimiento'])
             ->where(fn ($q) => $q
                 ->whereNull('modalidad_reserva')
-                ->orWhere('modalidad_reserva', '<>', ModalidadReservaCampo::SinReservaOnline->value))
-            ->whereDoesntHave('variantes', fn ($q) => $q->where('activo', true));
+                ->orWhere('modalidad_reserva', '<>', ModalidadReservaCampo::SinReservaOnline->value));
     }
 
     /**
@@ -111,7 +116,11 @@ class CampoController extends Controller
             ->orderBy('nombre')
             ->get();
 
-        return response()->json($this->presenter->index($campos));
+        // [7a] convenio_asociacion lo setea ResolveCiudadanoOpcional (bearer
+        // opcional). null = anónimo -> el presenter no revela convenio.
+        $convenioAsociacion = $request->attributes->get('convenio_asociacion');
+
+        return response()->json($this->presenter->index($campos, $convenioAsociacion));
     }
 
     /**
@@ -119,12 +128,14 @@ class CampoController extends Controller
      * Detalle con horarios y tarifa vigente desde SIREB.
      * Un campo inactivo → 404.
      */
-    public function show(string $campo): JsonResponse
+    public function show(Request $request, string $campo): JsonResponse
     {
         $campoModel = $this->conRelaciones($this->visibles())
             ->findOrFail($campo);
 
-        return response()->json($this->presenter->show($campoModel));
+        $convenioAsociacion = $request->attributes->get('convenio_asociacion');
+
+        return response()->json($this->presenter->show($campoModel, $convenioAsociacion));
     }
 
     /**

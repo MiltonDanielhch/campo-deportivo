@@ -73,9 +73,14 @@ Route::get('/v1/public/storage/{path}', function (string $path) {
 // throttle:60,1 = salvaguarda mínima; el rate-limiting robusto por IP/
 // dispositivo llega con la Épica G (HU-G1).
 Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
-    Route::get('/campos', [PublicCampoController::class, 'index']);
+    // [7a] Auth OPCIONAL en el catálogo: si hay bearer de asociación vigente,
+    // ResolveCiudadanoOpcional setea convenio_asociacion y el presenter revela
+    // el precio de convenio. Sin token -> null -> solo norma (anónimo intacto).
+    Route::get('/campos', [PublicCampoController::class, 'index'])
+        ->middleware(\App\Http\Middleware\ResolveCiudadanoOpcional::class);
     Route::get('/ubicaciones', [PublicCampoController::class, 'ubicaciones']);
-    Route::get('/campos/{campo}', [PublicCampoController::class, 'show']);
+    Route::get('/campos/{campo}', [PublicCampoController::class, 'show'])
+        ->middleware(\App\Http\Middleware\ResolveCiudadanoOpcional::class);
     Route::get('/campos/{campo}/disponibilidad', [DisponibilidadController::class, 'show']);
     // [Fase 6a] Auth opcional: si hay bearer de Ciudadano con asociación vigente,
     // el middleware setea convenio_asociacion; si no, null → flujo anónimo idéntico.
