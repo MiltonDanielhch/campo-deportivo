@@ -33,7 +33,7 @@ export default function ResumenCarrito({
   compacto = false,
   horaInicioNoche = '18:00',
 }: ResumenCarritoProps) {
-  const { franjas, quitarFranja, calcularTotal } = useCarritoStore();
+  const { franjas, quitarFranja } = useCarritoStore();
 
   if (franjas.length === 0) return null;
 
@@ -43,7 +43,16 @@ export default function ResumenCarrito({
     return acc;
   }, {});
 
-  const total = calcularTotal();
+  // [6c] El total NO puede mostrarse como número definitivo cuando alguna
+  // franja llegó con precio null (grilla multi-servicio o sin tarifa
+  // espejada: el DisponibilidadControllerTest lo llama "precio nulo cuando
+  // el campo tiene multiples servicios"). Mostrar Bs 0.00 o un parcial sería
+  // un precio equivocado (invariante "jamás un precio equivocado"); se
+  // muestra "Por confirmar" y, si hay franjas resueltas, cuánto está firme.
+  const resueltas = franjas.filter((f) => f.precio !== null);
+  const pendientes = franjas.length - resueltas.length;
+  const totalResuelto = resueltas.reduce((s, f) => s + (f.precio as number), 0);
+  const hayPendientes = pendientes > 0;
 
   return (
     <div className="space-y-3">
@@ -132,9 +141,23 @@ export default function ResumenCarrito({
           </span>
           <div className="text-right">
             <p className="text-xs text-slate-500 uppercase tracking-wide">Total</p>
-            <p className="text-2xl font-bold text-slate-900 tabular-nums">
-              Bs {total.toFixed(2)}
-            </p>
+            {hayPendientes ? (
+              <>
+                <p className="text-2xl font-bold text-slate-900 tabular-nums">
+                  Por confirmar
+                </p>
+                {totalResuelto > 0 && (
+                  <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
+                    Bs {totalResuelto.toFixed(2)} firme · {pendientes}{' '}
+                    {pendientes === 1 ? 'franja' : 'franjas'} al pagar
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-2xl font-bold text-slate-900 tabular-nums">
+                Bs {totalResuelto.toFixed(2)}
+              </p>
+            )}
             {/* [B15] caveat SIREB: el total es orientación del espejo; el monto
                 autoritativo lo fija la orden de cobro al pagar (mismo término que
                 el card "¿Cómo sigue?" de Reserva.tsx, sin sigla que el ciudadano no conoce). */}
