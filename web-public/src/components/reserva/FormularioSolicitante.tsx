@@ -6,6 +6,31 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 
+/**
+ * [fix-teléfono] Normaliza el teléfono de la cuenta al formato nacional de 8
+ * dígitos que espera la validación (y el Core/SIREB, HU-D8). Streapea `+591` y
+ * separadores porque el registro guardó algunos teléfonos en E.164 y el campo
+ * está readOnly cuando la cuenta tiene teléfono: sin esto el prellenado
+ * reintroduce el `+591` que el regex `^[0-9]{8}$` rechaza y el ciudadano queda
+ * atrapado en "Continuar al pago" sin poder editar.
+ *
+ * "Falla ruidoso": si el valor NO se reduce a 8 dígitos nacionales se devuelve
+ * tal cual (el regex lo rechazará) y `bloquearTelefono` lo detecta para ABRIR
+ * el campo a corrección manual — no mutilamos un número desconocido en silencio.
+ */
+function normalizarTelefonoNacional(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const digitos = raw.replace(/\D/g, '');
+  // E.164 boliviano: +591 + 8 dígitos = 11 dígitos. Quitar el 591 solo si el
+  // resto son exactamente 8 (no tocar un fijo de 8 ni un número raro).
+  if (digitos.length === 11 && digitos.startsWith('591')) {
+    return digitos.slice(3);
+  }
+  return digitos;
+}
+
+const TELEFONO_NACIONAL_RE = /^[0-9]{8}$/;
+
 const schema = z.object({
   nombre_pagador: z
     .string()
@@ -47,7 +72,11 @@ export default function FormularioSolicitante({
   cargando,
   ciudadano,
 }: FormularioSolicitanteProps) {
-  const bloquearTelefono = Boolean(ciudadano?.telefono);
+  const telefonoNormalizado = normalizarTelefonoNacional(ciudadano?.telefono);
+  // Se bloquea (readOnly) solo cuando el teléfono de la cuenta es usable; si la
+  // normalización no da 8 dígitos, se abre el campo para corregir a mano.
+  const bloquearTelefono =
+    Boolean(ciudadano?.telefono) && TELEFONO_NACIONAL_RE.test(telefonoNormalizado);
   const {
     register,
     handleSubmit,
@@ -57,7 +86,7 @@ export default function FormularioSolicitante({
     defaultValues: ciudadano
       ? {
           nombre_pagador: ciudadano.nombre_completo,
-          telefono_pagador: ciudadano.telefono ?? '',
+          telefono_pagador: telefonoNormalizado,
           ci_nit_pagador: ciudadano.ci,
         }
       : undefined,

@@ -27,7 +27,7 @@ class CiudadanoAuthController extends Controller
         $ciudadano = Ciudadano::create([
             'ci' => $validated['ci'],
             'nombre_completo' => $validated['nombre_completo'],
-            'telefono' => $validated['telefono'] ?? null,
+            'telefono' => $this->normalizarTelefonoNacional($validated['telefono'] ?? null),
             'password_hash' => Hash::make($validated['password']),
         ]);
 
@@ -126,6 +126,40 @@ class CiudadanoAuthController extends Controller
         $ciudadano->tokens()->delete();
 
         return response()->json(['message' => 'Sesion cerrada']);
+    }
+
+    /**
+     * [fix-teléfono-origen] Normaliza el teléfono al formato nacional de 8
+     * dígitos ANTES de guardarlo, para que la BD sea fuente de verdad limpia y
+     * el prellenado del front no hereda `+591` (que el regex `^[0-9]{8}$` de
+     * FormularioSolicitante rechaza y, con el campo readOnly, atrapa al
+     * ciudadano en "Continuar al pago"). Misma regla que el helper del front:
+     * streapea no-dígitos y quita `591` solo si el resto son exactamente 8.
+     *
+     * "Falla ruidoso": sin dígitos útiles -> null (el front abre el campo pa'
+     * corregir); dígitos parciales (ej. "12345") -> se guardan tal cual y el
+     * front los muestra editables (no los mutila a 8 en silencio). Lo que
+     * viaja al Core/SIREB (HU-D8) es el valor del FORMULARIO ya validado por
+     * zod a 8 dígitos, nunca esta columna, así que guardar best-effort es
+     * inocuo para el cobro y solo afecta al prellenado.
+     */
+    private function normalizarTelefonoNacional(?string $raw): ?string
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        $digitos = preg_replace('/\D/', '', $raw);
+
+        if ($digitos === null || $digitos === '') {
+            return null;
+        }
+
+        if (strlen($digitos) === 11 && str_starts_with($digitos, '591')) {
+            return substr($digitos, 3);
+        }
+
+        return $digitos;
     }
 
     private function resolverAsociacionVigentePorCi(string $ci): ?Asociacion
