@@ -10,9 +10,13 @@ use App\Models\Rol;
 use App\Models\SolicitudReserva;
 use App\Models\TarifaCampo;
 use App\Models\TipoCampo;
+use App\Services\AuditoriaService;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Mockery;
 use Tests\TestCase;
 
 /**
@@ -169,5 +173,82 @@ class SolicitudReservaCobroTest extends TestCase
 
         $response->assertStatus(201);
         $response->assertJsonMissingPath('error');
+    }
+
+    /**
+     * [25P02-fix] La persistencia de la liquidación (update + auditoría) es
+     * atómica: si la auditoría FALLA después de que el HTTP al Core ya creó la
+     * liquidación (modo exito), el update se revierte junto con ella y la
+     * solicitud queda SIN liquidacion_id — no half-persist. El reintento se
+     * despacha igual (canal público), y la idempotency key del Core hace que
+     * el re-intento no doble-cobre.
+     */
+    public function test_liquidacion_no_deja_persistencia_a_medio_si_la_auditoria_falla(): void
+    {
+        $auditoria = Mockery::mock(AuditoriaService::class);
+        $auditoria->shouldReceive('registrar')
+            ->andThrow(new \RuntimeException('auditoría fallida a propósito'));
+        $this->instance(AuditoriaService::class, $auditoria);
+
+        config(['services.recaudaciones.simulado_modo' => 'exito']);
+
+        $this->postJson('/api/v1/public/solicitudes-reserva', $this->payload())
+            ->assertStatus(201);
+
+        $solicitud = SolicitudReserva::first();
+        $this->assertSame('pendiente', $solicitud->estado->value);
+        $this->assertNull($solicitud->liquidacion_id, 'El update debió revertirse junto con la auditoría (tx atómica)');
+        $this->assertNull($solicitud->referencia_recaudaciones, 'Sin referencia local si la persistencia atómica se revirtió');
+
+        Queue::assertPushed(ReintentarSolicitudJob::class, 1);
+    }
+
+    /**
+     * [25P02-regression] El EXCLUDE (23P01) se captura DESPUÉS del rollback y
+     * el re-check corre en conexión limpia; la conexión sigue utilizable. Si
+     * el 23P01 hubiera dejado la tx abortada (cascada 25P02), el create
+     * posterior revienta 500 en vez de 201. Forzamos el 23P01 por debajo de la
+     * capa 1 (inserción directa de un detalle solapado) para ejercitar la rama
+     * de concurrencia real, no la de grilla secuencial.
+     */
+    public function test_23p01_del_exclude_se_recupera_sin_cascada_25p02(): void
+    {
+        config(['services.recaudaciones.simulado_modo' => 'exito']);
+        $this->postJson('/api/v1/public/solicitudes-reserva', $this->payload())
+            ->assertStatus(201);
+
+        $campo = CampoDeportivo::first();
+        $solicitud = SolicitudReserva::first();
+
+        $caught = null;
+        try {
+            DB::transaction(function () use ($solicitud, $campo) {
+                // Solapa el 10:00-11:00 del primer detalle, mismo campo, misma
+                // fecha, estado_solicitud generado = 'pendiente' del padre ->
+                // el EXCLUDE rechaza con 23P01 (no 25P02).
+                $solicitud->detalles()->create([
+                    'campo_id' => $campo->id,
+                    'fecha_reserva' => Carbon::tomorrow()->toDateString(),
+                    'hora_inicio' => '10:30',
+                    'hora_fin' => '11:30',
+                    'tarifa_aplicada' => 50.00,
+                    'cantidad' => 1,
+                ]);
+            });
+        } catch (QueryException $e) {
+            $caught = $e;
+        }
+
+        $this->assertNotNull($caught, 'El EXCLUDE debió rechazar el solape');
+        $this->assertSame('23P01', $caught->getCode(), 'Debe emerger el 23P01 real, no un 25P02 enmascarado');
+
+        // Post-rollback: conexión limpia. Otra franja del mismo campo (14-15,
+        // dentro del horario 08-20 y tarifa diurna) se crea con 201. Si hubiera
+        // cascada 25P02, esto sería 500.
+        $otra = $this->payload();
+        $otra['franjas'][0]['hora_inicio'] = '14:00';
+        $otra['franjas'][0]['hora_fin'] = '15:00';
+        $this->postJson('/api/v1/public/solicitudes-reserva', $otra)
+            ->assertStatus(201);
     }
 }

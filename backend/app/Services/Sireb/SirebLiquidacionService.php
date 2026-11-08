@@ -6,6 +6,7 @@ use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
 use App\Models\PiscinaReserva;
 use App\Models\SolicitudReserva;
 use App\Services\AuditoriaService;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Helper central de liquidación SIREB.
@@ -108,37 +109,66 @@ class SirebLiquidacionService
 
         $montoAutoritativo = (float) $montoAutoritativo;
 
-        // 3. Persistir referencias.
+        // 3+4. Persistir referencias + auditoría ATÓMICAMENTE. [25P02-fix]
         // SIREB es la fuente de verdad del monto: sobrescribimos el estimado
         // local con el autoritativo devuelto por el gateway (ya validado > 0).
         // El shape de datos_cobro_pendiente es SIEMPRE el mismo, inline o
         // reintento, para que el frontend (QR + código copiable) no tenga que
         // distinguir.
-        $reserva->update([
-            'referencia_recaudaciones' => $codigoPublico,
-            'liquidacion_id' => $liquidacionId,
-            'monto_total' => $montoAutoritativo,
-            'datos_cobro_pendiente' => [
-                'codigo_publico' => $codigoPublico,
-                'qr_string' => 'SIREB:' . $codigoPublico,
-                'qr_image_base64' => null,
-                'monto' => $montoAutoritativo,
-                'fecha_vencimiento' => $liquidacion['fecha_vencimiento'] ?? null,
-                'items' => $liquidacion['items'] ?? [],
-            ],
-        ]);
-        // 4. Auditoría.
-        $this->auditoria->registrar(
+        //
+        // OJO: el HTTP al Core (buscarCliente/registrarCliente/crearLiquidacion
+        // + la validación de contrato) va ANTES y FUERA de esta transacción,
+        // respetando el invariante del README ("recién DESPUÉS de que la tx
+        // tiene éxito se llama a SIREB"). Meter el HTTP dentro sería el error
+        // clásico que esta deuda nombra: sostiene la tx abierta a lo largo de
+        // un round-trip de red (segundos, con locks) y, si el HTTP ya creó la
+        // liquidación en el Core pero el write de abajo falla, el rollback
+        // local deja una liquidación HUÉRFANA en el Core SIN referencia local
+        // — peor que el estado actual. Por eso la atomicidad cubre SOLO los dos
+        // writes locales: si la auditoría falla, el update se revierte y la
+        // solicitud queda sin liquidacion_id, así el reintento re-persiste
+        // limpio (la idempotency key 'sedede:reserva:{id}' hace que el Core
+        // devuelva la liquidación existente, no doble-cobra). Si algún caller
+        // ya envolviera esto en su propia DB::transaction (piscina), Laravel
+        // anida como savepoint: el rollback solo deshace hasta el savepoint,
+        // nunca la tx externa, así que no hay 25P02 en cascada ni se rompe al
+        // caller.
+        DB::transaction(function () use (
+            $reserva,
+            $codigoPublico,
+            $liquidacionId,
+            $montoAutoritativo,
+            $liquidacion,
             $tablaAuditoria,
-            $reserva->id,
             $accionAuditoria,
-            null,
             $antesAuditoria,
-            [
-                'liquidacion_id' => $liquidacion['id'],
-                'codigo_publico' => $liquidacion['codigo_publico'],
-                'monto' => $liquidacion['monto'],
-            ],
-        );
+        ) {
+            $reserva->update([
+                'referencia_recaudaciones' => $codigoPublico,
+                'liquidacion_id' => $liquidacionId,
+                'monto_total' => $montoAutoritativo,
+                'datos_cobro_pendiente' => [
+                    'codigo_publico' => $codigoPublico,
+                    'qr_string' => 'SIREB:' . $codigoPublico,
+                    'qr_image_base64' => null,
+                    'monto' => $montoAutoritativo,
+                    'fecha_vencimiento' => $liquidacion['fecha_vencimiento'] ?? null,
+                    'items' => $liquidacion['items'] ?? [],
+                ],
+            ]);
+
+            $this->auditoria->registrar(
+                $tablaAuditoria,
+                $reserva->id,
+                $accionAuditoria,
+                null,
+                $antesAuditoria,
+                [
+                    'liquidacion_id' => $liquidacion['id'],
+                    'codigo_publico' => $liquidacion['codigo_publico'],
+                    'monto' => $liquidacion['monto'],
+                ],
+            );
+        });
     }
 }
