@@ -89,11 +89,11 @@ export default function AppLayout() {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="min-w-0 max-w-full">
         <BreadcrumbBar />
-        <main className="flex-1 overflow-auto">
+        <div className="min-w-0 flex-1 overflow-auto">
           <Outlet />
-        </main>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );
