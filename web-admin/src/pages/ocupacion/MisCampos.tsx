@@ -8,8 +8,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ocupacionService } from '@/services/ocupacionService';
 import { asistenciaService } from '@/services/asistenciaService';
 import type { CampoOcupacion, CampoPiscinaOcupacion, Franja, FranjaVerificada, VerificarCodigoResponse } from '@/types/ocupacion';
-import { format, parseISO } from 'date-fns';
-import { es } from 'date-fns/locale';
+import {
+  fechaMedianaBolivia,
+  hoyISO,
+  horaLegible,
+  minutosDesdeMedianocheBolivia,
+  tiempoRelativoDesdeDate,
+} from '@/lib/fecha';
 import { toast } from 'sonner';
 
 export default function MisCampos() {
@@ -17,7 +22,7 @@ export default function MisCampos() {
   const [piscinaCampos, setPiscinaCampos] = useState<CampoPiscinaOcupacion[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [fecha, setFecha] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [fecha, setFecha] = useState(hoyISO());
   const [codigoBusqueda, setCodigoBusqueda] = useState('');
   const [resultadoVerificacion, setResultadoVerificacion] =
     useState<VerificarCodigoResponse['data'] | null>(null);
@@ -119,28 +124,21 @@ export default function MisCampos() {
     }
   };
 
-  const formatTiempoRelativo = (fecha: Date): string => {
-    const ahora = new Date();
-    const diff = Math.floor((ahora.getTime() - fecha.getTime()) / 1000);
-
-    if (diff < 10) return 'hace un momento';
-    if (diff < 60) return `hace ${diff} segundos`;
-    if (diff < 3600) return `hace ${Math.floor(diff / 60)} minutos`;
-    return `hace ${Math.floor(diff / 3600)} horas`;
-  };
-
   // [FIX B187] el pulso de "franja actual" solo aplica si la fecha seleccionada
   // es HOY; antes pulsaba la franja del reloj actual aunque miraras otro día.
+  //
+  // [FIX #46 tz] la comparación de día usa hoyISO() en America/La_Paz y los
+  // minutos actuales usan minutosDesdeMedianocheBolivia(), para que un browser
+  // configurado en UTC u otra zona no pulse la franja equivocada.
   const esFranjaActual = (franja: Franja): boolean => {
-    const ahora = new Date();
-    if (fecha !== format(ahora, 'yyyy-MM-dd')) return false;
+    if (fecha !== hoyISO()) return false;
 
     const [hInicio, mInicio] = franja.hora_inicio.split(':').map(Number);
     const [hFin, mFin] = franja.hora_fin.split(':').map(Number);
 
     const inicioMinutos = hInicio * 60 + mInicio;
     const finMinutos = hFin * 60 + mFin;
-    const ahoraMinutos = ahora.getHours() * 60 + ahora.getMinutes();
+    const ahoraMinutos = minutosDesdeMedianocheBolivia();
 
     return ahoraMinutos >= inicioMinutos && ahoraMinutos < finMinutos;
   };
@@ -221,7 +219,7 @@ export default function MisCampos() {
         {ultimaActualizacion && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Clock className="size-3" />
-            <span>Actualizado {formatTiempoRelativo(ultimaActualizacion)}</span>
+            <span>Actualizado {tiempoRelativoDesdeDate(ultimaActualizacion)}</span>
           </div>
         )}
       </div>
@@ -317,7 +315,7 @@ export default function MisCampos() {
                         <p className="text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                           <span className="flex items-center gap-1">
                             <Calendar className="size-3 text-slate-400" />
-                            {format(parseISO(f.fecha), "d 'de' MMM, yyyy", { locale: es })}
+                            {fechaMedianaBolivia(f.fecha)}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="size-3 text-slate-400" />
@@ -345,7 +343,7 @@ export default function MisCampos() {
                           <>
                             <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 gap-1">
                               <UserCheck className="size-3" />
-                              {format(parseISO(f.asistencia_marcada_en), 'HH:mm')}
+                              {horaLegible(f.asistencia_marcada_en)}
                             </Badge>
                             <Button
                               size="sm"
@@ -479,10 +477,7 @@ export default function MisCampos() {
                               <div className="flex items-center gap-1 text-xs text-green-700">
                                 <UserCheck className="size-3" />
                                 <span>
-                                  {format(
-                                    parseISO(franja.asistencia_marcada_en),
-                                    'HH:mm'
-                                  )}
+                                  {horaLegible(franja.asistencia_marcada_en)}
                                 </span>
                               </div>
                             )}

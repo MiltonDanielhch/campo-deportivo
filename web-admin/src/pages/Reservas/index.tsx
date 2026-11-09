@@ -56,6 +56,8 @@ import DialogDetalleReserva from '@/components/reservas/DialogDetalleReserva';
 import PiscinaReservasTab from '@/components/reservas/PiscinaReservasTab';
 import DialogCrearReservaVentanilla from '@/components/reservas/DialogCrearReservaVentanilla';
 import RegularizarUsoDialog from '@/components/reservas/RegularizarUsoDialog';
+import { fechaHoraLegible } from '@/lib/fecha';
+import { formatMontoBoB } from '@/lib/moneda';
 
 const estadoConfig: Record<
   EstadoReserva,
@@ -104,20 +106,6 @@ function BadgeEstado({ estado }: { estado: EstadoReserva }) {
       {config.label}
     </Badge>
   );
-}
-
-function formatoMonto(valor?: number | null): string {
-  return `Bs ${Number(valor ?? 0).toFixed(2)}`;
-}
-
-function formatoFecha(valor?: string | null): string {
-  if (!valor) return '—';
-
-  const fecha = new Date(valor);
-
-  if (Number.isNaN(fecha.getTime())) return valor;
-
-  return fecha.toLocaleString('es-BO');
 }
 
 function resumirCampos(detalles?: DetalleSolicitudAdmin[]): string {
@@ -364,7 +352,7 @@ export default function Reservas() {
     },
     {
       label: 'Monto confirmado',
-      value: formatoMonto(stats?.monto_confirmado ?? 0),
+      value: formatMontoBoB(stats?.monto_confirmado),
       Icon: Banknote,
       accent: 'text-teal-600',
     },
@@ -621,12 +609,12 @@ export default function Reservas() {
 
                   <TableCell>
                     <p className="font-semibold tabular-nums">
-                      {formatoMonto(solicitud.monto_total)}
+                      {formatMontoBoB(solicitud.monto_total)}
                     </p>
                     {solicitud.estado === 'confirmada' &&
                       solicitud.monto_confirmado !== null && (
                         <p className="text-xs text-green-600">
-                          Confirmado: {formatoMonto(solicitud.monto_confirmado)}
+                          Confirmado: {formatMontoBoB(solicitud.monto_confirmado)}
                         </p>
                       )}
                   </TableCell>
@@ -636,7 +624,7 @@ export default function Reservas() {
                   </TableCell>
 
                   <TableCell className="text-xs text-muted-foreground">
-                    {formatoFecha(solicitud.creado_en)}
+                    {fechaHoraLegible(solicitud.creado_en)}
                   </TableCell>
 
                   <TableCell className="text-right">
