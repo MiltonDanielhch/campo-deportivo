@@ -323,22 +323,27 @@ export default function Funcionarios() {
     ).length,
   };
 
-  // ─── Fuerza de la contraseña ───
+  // ─── Política de contraseña (debe batir con el regex del backend) ───
+  const CRITERIOS_PASSWORD = [
+    { test: (p: string) => p.length >= 8 },
+    { test: (p: string) => /[a-z]/.test(p) },
+    { test: (p: string) => /[A-Z]/.test(p) },
+    { test: (p: string) => /\d/.test(p) },
+    { test: (p: string) => /[^A-Za-z0-9]/.test(p) },
+  ];
+
   const fuerzaPassword = useMemo(() => {
     if (!password) return { nivel: 0, label: '', color: '' };
-    let score = 0;
-    if (password.length >= 8) score++;
-    if (password.length >= 12) score++;
-    if (/[A-Z]/.test(password)) score++;
-    if (/[0-9]/.test(password)) score++;
-    if (/[^A-Za-z0-9]/.test(password)) score++;
-
-    if (score <= 2)
-      return { nivel: score, label: 'Débil', color: 'bg-destructive' };
-    if (score <= 3)
-      return { nivel: score, label: 'Media', color: 'bg-amber-500' };
-    return { nivel: score, label: 'Fuerte', color: 'bg-emerald-500' };
+    const nivel = CRITERIOS_PASSWORD.filter((c) => c.test(password)).length;
+    if (nivel <= 2) return { nivel, label: 'Débil', color: 'bg-destructive' };
+    if (nivel <= 4) return { nivel, label: 'Media', color: 'bg-amber-500' };
+    return { nivel, label: 'Fuerte', color: 'bg-emerald-500' };
   }, [password]);
+
+  const cumplePolitica = useMemo(
+    () => CRITERIOS_PASSWORD.every((c) => c.test(password)),
+    [password],
+  );
 
   return (
     <div className="space-y-6 p-6 max-w-[1600px] mx-auto">
@@ -746,7 +751,7 @@ export default function Funcionarios() {
                     setPassword(e.target.value);
                     setPasswordConfirmation('');
                   }}
-                  placeholder="Mínimo 8 caracteres"
+                  placeholder="Mínimo 8, con mayúscula, número y símbolo"
                   required
                   className="pr-20 font-mono text-sm"
                 />
@@ -869,7 +874,8 @@ export default function Funcionarios() {
                 type="submit"
                 disabled={
                   guardando ||
-                  (password.length > 0 && password !== passwordConfirmation)
+                  (password.length > 0 && password !== passwordConfirmation) ||
+                  !cumplePolitica
                 }
                 className="rounded-full"
               >

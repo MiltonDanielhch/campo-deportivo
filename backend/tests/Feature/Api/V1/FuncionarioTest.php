@@ -59,8 +59,8 @@ class FuncionarioTest extends TestCase
             'nombre_completo' => 'Juan Pérez',
             'ci' => '87654321',
             'usuario' => 'juan.perez',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Admin2026!',
+            'password_confirmation' => 'Admin2026!',
             'rol_id' => $this->rolControl->id,
         ]);
 
@@ -70,8 +70,8 @@ class FuncionarioTest extends TestCase
 
         // Verificar que la contraseña está hasheada
         $funcionario = Funcionario::where('ci', '87654321')->first();
-        $this->assertNotEquals('password123', $funcionario->password_hash);
-        $this->assertTrue(Hash::check('password123', $funcionario->password_hash));
+        $this->assertNotEquals('Admin2026!', $funcionario->password_hash);
+        $this->assertTrue(Hash::check('Admin2026!', $funcionario->password_hash));
 
         // Verificar que se generó auditoría
         $auditoria = Auditoria::where('tabla', 'funcionarios')
@@ -100,8 +100,8 @@ class FuncionarioTest extends TestCase
             'nombre_completo' => 'Otro Funcionario',
             'ci' => '87654321',
             'usuario' => 'otro.usuario',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Admin2026!',
+            'password_confirmation' => 'Admin2026!',
             'rol_id' => $this->rolControl->id,
         ]);
 
@@ -126,8 +126,8 @@ class FuncionarioTest extends TestCase
             'nombre_completo' => 'Otro Funcionario',
             'ci' => '22222222',
             'usuario' => 'juan.perez',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Admin2026!',
+            'password_confirmation' => 'Admin2026!',
             'rol_id' => $this->rolControl->id,
         ]);
 
