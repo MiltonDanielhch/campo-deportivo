@@ -39,7 +39,13 @@ class StoreFuncionarioRequest extends FormRequest
                     : Rule::unique('funcionarios', 'usuario'),
             ],
             // La contraseña solo es obligatoria al crear; en update es opcional
-            'password' => [$funcionarioId ? 'nullable' : 'required', 'string', 'min:8', 'confirmed'],
+            'password' => [
+                $funcionarioId ? 'nullable' : 'required',
+                'string',
+                'min:8',
+                'confirmed',
+                'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/',
+            ],
             'rol_id' => ['required', 'uuid', 'exists:roles,id'],
         ];
     }
@@ -57,6 +63,7 @@ class StoreFuncionarioRequest extends FormRequest
             'password.required' => 'La contraseña es obligatoria.',
             'password.min' => 'La contraseña debe tener al menos 8 caracteres.',
             'password.confirmed' => 'Las contraseñas no coinciden.',
+            'password.regex' => 'La contraseña debe incluir al menos una minúscula, una mayúscula, un número y un símbolo.',
             'rol_id.required' => 'El rol es obligatorio.',
             'rol_id.exists' => 'El rol indicado no existe.',
         ];
