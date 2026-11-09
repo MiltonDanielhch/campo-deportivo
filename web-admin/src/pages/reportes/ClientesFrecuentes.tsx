@@ -14,12 +14,13 @@ import {
 } from '@/components/ui/table';
 import { reportesService } from '@/services/reportesService';
 import type { ClienteFrecuente } from '@/types/reportes';
-import { format, subDays } from 'date-fns';
+import { haceNDiasISO, hoyISO } from '@/lib/fecha';
+import { formatMontoBoB } from '@/lib/moneda';
 import { toast } from 'sonner';
 
 export default function ClientesFrecuentes() {
-  const [desde, setDesde] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
-  const [hasta, setHasta] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [desde, setDesde] = useState(haceNDiasISO(30));
+  const [hasta, setHasta] = useState(hoyISO());
   const [clientes, setClientes] = useState<ClienteFrecuente[]>([]);
   const [totalClientes, setTotalClientes] = useState(0);
   const [cargando, setCargando] = useState(true);
@@ -70,14 +71,6 @@ export default function ClientesFrecuentes() {
   useEffect(() => {
     cargarClientes();
   }, [desde, hasta]);
-
-  const formatMonto = (monto: number): string => {
-    return new Intl.NumberFormat('es-BO', {
-      style: 'currency',
-      currency: 'BOB',
-      minimumFractionDigits: 2,
-    }).format(monto);
-  };
 
   if (sinPermisos) {
     return (
@@ -202,7 +195,7 @@ export default function ClientesFrecuentes() {
                         {cliente.total_reservas}
                       </TableCell>
                       <TableCell className="text-right font-semibold">
-                        {formatMonto(cliente.monto_total_gastado)}
+                        {formatMontoBoB(cliente.monto_total_gastado)}
                       </TableCell>
                     </TableRow>
                   ))}

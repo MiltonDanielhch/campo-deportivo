@@ -18,12 +18,13 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { reportesService } from '@/services/reportesService';
 import type { IngresoPorCampo, HoraPico } from '@/types/reportes';
-import { format, subDays } from 'date-fns';
+import { haceNDiasISO, hoyISO } from '@/lib/fecha';
+import { formatMontoBoB } from '@/lib/moneda';
 import { toast } from 'sonner';
 
 export default function Dashboard() {
-  const [desde, setDesde] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
-  const [hasta, setHasta] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [desde, setDesde] = useState(haceNDiasISO(30));
+  const [hasta, setHasta] = useState(hoyISO());
   const [ingresos, setIngresos] = useState<IngresoPorCampo[]>([]);
   const [horasPico, setHorasPico] = useState<HoraPico[]>([]);
   const [totalGeneral, setTotalGeneral] = useState(0);
@@ -87,14 +88,6 @@ export default function Dashboard() {
 
   const formatHora = (hora: number): string => {
     return `${hora.toString().padStart(2, '0')}:00`;
-  };
-
-  const formatMonto = (monto: number): string => {
-    return new Intl.NumberFormat('es-BO', {
-      style: 'currency',
-      currency: 'BOB',
-      minimumFractionDigits: 2,
-    }).format(monto);
   };
 
   if (sinPermisos) {
@@ -182,7 +175,7 @@ export default function Dashboard() {
             <DollarSign className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatMonto(totalGeneral)}</div>
+            <div className="text-2xl font-bold">{formatMontoBoB(totalGeneral)}</div>
             <p className="text-xs text-muted-foreground">
               Período seleccionado
             </p>
@@ -239,7 +232,7 @@ export default function Dashboard() {
                 <XAxis dataKey="campo_nombre" angle={-45} textAnchor="end" height={80} />
                 <YAxis />
                 <Tooltip
-                  formatter={(value) => formatMonto(Number(value))}
+                  formatter={(value) => formatMontoBoB(Array.isArray(value) ? value[0] : value)}
                   labelFormatter={(label) => `Campo: ${label}`}
                 />
                 <Bar dataKey="total_ingresos" fill="#14b8a6" name="Ingresos" />
