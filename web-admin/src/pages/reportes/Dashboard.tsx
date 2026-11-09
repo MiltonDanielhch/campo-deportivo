@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   BarChart,
   Bar,
@@ -31,17 +31,30 @@ export default function Dashboard() {
   const [horaPico, setHoraPico] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sinPermisos, setSinPermisos] = useState(false);
   const [nota, setNota] = useState('');
+  const peticionRef = useRef(0);
 
   const cargarReportes = async () => {
+    if (desde > hasta) {
+      setCargando(false);
+      setError('El rango de fechas no es válido: Desde no puede ser mayor que Hasta.');
+      return;
+    }
+
+    const id = ++peticionRef.current;
+
     try {
       setCargando(true);
       setError(null);
+      setSinPermisos(false);
 
       const [ingresosRes, horasPicoRes] = await Promise.all([
         reportesService.ingresos(desde, hasta),
         reportesService.horasPico(desde, hasta),
       ]);
+
+      if (id !== peticionRef.current) return;
 
       setIngresos(ingresosRes.data);
       setTotalGeneral(ingresosRes.meta.total_general);
@@ -51,14 +64,20 @@ export default function Dashboard() {
       setTotalReservas(horasPicoRes.meta.total_reservas);
       setHoraPico(horasPicoRes.meta.hora_pico);
     } catch (err: any) {
-      const mensaje =
-        err.response?.status === 403
-          ? 'No tenés permisos para ver reportes'
-          : err.response?.data?.message || 'Error al cargar reportes';
+      if (id !== peticionRef.current) return;
+
+      const es403 = err.response?.status === 403;
+      const mensaje = es403
+        ? 'No tenés permisos para ver reportes'
+        : err.response?.data?.message || 'Error al cargar reportes';
+
+      setSinPermisos(es403);
       setError(mensaje);
       toast.error(mensaje);
     } finally {
-      setCargando(false);
+      if (id === peticionRef.current) {
+        setCargando(false);
+      }
     }
   };
 
@@ -78,7 +97,7 @@ export default function Dashboard() {
     }).format(monto);
   };
 
-  if (error && error.includes('permisos')) {
+  if (sinPermisos) {
     return (
       <div className="p-6">
         <Alert variant="destructive">
@@ -117,19 +136,27 @@ export default function Dashboard() {
         <CardContent>
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Desde</label>
+              <label htmlFor="dashboard-desde" className="text-sm font-medium">
+                Desde
+              </label>
               <Input
+                id="dashboard-desde"
                 type="date"
                 value={desde}
+                max={hasta}
                 onChange={(e) => setDesde(e.target.value)}
                 className="w-auto"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Hasta</label>
+              <label htmlFor="dashboard-hasta" className="text-sm font-medium">
+                Hasta
+              </label>
               <Input
+                id="dashboard-hasta"
                 type="date"
                 value={hasta}
+                min={desde}
                 onChange={(e) => setHasta(e.target.value)}
                 className="w-auto"
               />

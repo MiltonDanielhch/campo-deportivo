@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Calendar, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,25 +24,46 @@ export default function ClientesFrecuentes() {
   const [totalClientes, setTotalClientes] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sinPermisos, setSinPermisos] = useState(false);
   const [nota, setNota] = useState('');
+  const peticionRef = useRef(0);
 
   const cargarClientes = async () => {
+    if (desde > hasta) {
+      setCargando(false);
+      setError('El rango de fechas no es válido: Desde no puede ser mayor que Hasta.');
+      return;
+    }
+
+    const id = ++peticionRef.current;
+
     try {
       setCargando(true);
       setError(null);
+      setSinPermisos(false);
+
       const response = await reportesService.clientesFrecuentes(desde, hasta);
+
+      if (id !== peticionRef.current) return;
+
       setClientes(response.data);
       setTotalClientes(response.meta.total_clientes);
       setNota(response.meta.nota);
     } catch (err: any) {
-      const mensaje =
-        err.response?.status === 403
-          ? 'No tenés permisos para ver clientes frecuentes'
-          : err.response?.data?.message || 'Error al cargar clientes';
+      if (id !== peticionRef.current) return;
+
+      const es403 = err.response?.status === 403;
+      const mensaje = es403
+        ? 'No tenés permisos para ver clientes frecuentes'
+        : err.response?.data?.message || 'Error al cargar clientes';
+
+      setSinPermisos(es403);
       setError(mensaje);
       toast.error(mensaje);
     } finally {
-      setCargando(false);
+      if (id === peticionRef.current) {
+        setCargando(false);
+      }
     }
   };
 
@@ -58,7 +79,7 @@ export default function ClientesFrecuentes() {
     }).format(monto);
   };
 
-  if (error && error.includes('permisos')) {
+  if (sinPermisos) {
     return (
       <div className="p-6">
         <Alert variant="destructive">
@@ -97,19 +118,27 @@ export default function ClientesFrecuentes() {
         <CardContent>
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Desde</label>
+              <label htmlFor="clientes-desde" className="text-sm font-medium">
+                Desde
+              </label>
               <Input
+                id="clientes-desde"
                 type="date"
                 value={desde}
+                max={hasta}
                 onChange={(e) => setDesde(e.target.value)}
                 className="w-auto"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Hasta</label>
+              <label htmlFor="clientes-hasta" className="text-sm font-medium">
+                Hasta
+              </label>
               <Input
+                id="clientes-hasta"
                 type="date"
                 value={hasta}
+                min={desde}
                 onChange={(e) => setHasta(e.target.value)}
                 className="w-auto"
               />
@@ -133,7 +162,7 @@ export default function ClientesFrecuentes() {
           <CardTitle className="flex items-center justify-between text-lg">
             <div className="flex items-center gap-2">
               <Users className="size-5" />
-              Top {clientes.length} clientes
+              {clientes.length > 0 ? `Top ${clientes.length} clientes` : 'Clientes frecuentes'}
             </div>
             <span className="text-sm font-normal text-muted-foreground">
               Total: {totalClientes} clientes únicos
