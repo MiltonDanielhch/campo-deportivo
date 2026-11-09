@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Users,
@@ -179,6 +180,8 @@ export default function Funcionarios() {
   const [guardando, setGuardando] = useState(false);
   const [errores, setErrores] = useState<Record<string, string[]>>({});
 
+  const navigate = useNavigate();
+
   // ─── AlertDialog de inactivación ───
   const [funcionarioAInactivar, setFuncionarioAInactivar] =
     useState<Funcionario | null>(null);
@@ -240,7 +243,7 @@ export default function Funcionarios() {
     setErrores({});
 
     try {
-      await funcionariosService.crear({
+      const creado = await funcionariosService.crear({
         nombre_completo: nombreCompleto.trim(),
         ci: ci.trim(),
         usuario: usuario.trim(),
@@ -248,7 +251,23 @@ export default function Funcionarios() {
         password_confirmation: passwordConfirmation,
         rol_id: rolId,
       });
-      toast.success('Funcionario creado exitosamente');
+
+      const rolElegido = roles.find((r) => r.id === rolId);
+      const esControl = rolElegido?.nombre === 'funcionario_control';
+
+      toast.success('Funcionario creado exitosamente', {
+        description: esControl
+          ? 'Asignale las canchas que va a supervisar.'
+          : undefined,
+        action: esControl
+          ? {
+              label: 'Asignar canchas',
+              onClick: () => navigate('/panel/asignaciones', { state: { funcionarioId: creado.id } }),
+            }
+          : undefined,
+        duration: esControl ? 8000 : 4000,
+      });
+
       setDialogAbierto(false);
       cargar();
     } catch (error: any) {

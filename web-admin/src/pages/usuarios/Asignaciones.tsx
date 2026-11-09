@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Layers,
@@ -132,6 +133,9 @@ export default function Asignaciones() {
   // ─── Filtros de la grilla ───
   const [busqueda, setBusqueda] = useState('');
 
+  const location = useLocation();
+  const puenteId = (location.state as { funcionarioId?: string } | null)?.funcionarioId;
+
   // Rol funcionario_control (para filtrar)
   const rolControl = useMemo(
     () => roles.find((r) => r.nombre === ROL_CONTROL),
@@ -170,6 +174,12 @@ export default function Asignaciones() {
       .then((resp) => setFuncionariosControl(resp.data))
       .catch(() => toast.error('No se pudieron cargar los funcionarios de control'));
   }, [rolControl]);
+
+  useEffect(() => {
+    if (!puenteId || funcionarioId === puenteId) return;
+    if (!funcionariosControl.some((f) => f.id === puenteId)) return;
+    seleccionarFuncionario(puenteId);
+  }, [puenteId, funcionariosControl, funcionarioId]);
 
   // ─── Al cambiar de funcionario, cargar sus asignaciones ────────────────
   const cargarAsignaciones = useCallback(async (id: string) => {
