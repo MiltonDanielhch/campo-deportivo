@@ -69,6 +69,8 @@ import type {
 } from '@/types/reservas';
 import DialogCrearReservaPiscinaVentanilla from '@/components/reservas/DialogCrearReservaPiscinaVentanilla';
 import { SnapshotEtiquetado } from '@/components/reservas/SnapshotAuditoria';
+import { fechaCortaISO, fechaHoraLegible, horaLegible } from '@/lib/fecha';
+import { formatMontoBoB } from '@/lib/moneda';
 
 const estadoConfig: Record<
   EstadoReserva,
@@ -128,53 +130,13 @@ function BadgeEstado({ estado }: { estado: EstadoReserva }) {
   );
 }
 
-function formatoMonto(valor?: number | string | null): string {
-  return `Bs ${Number(valor ?? 0).toFixed(2)}`;
-}
-
-function formatoFecha(valor?: string | null): string {
-  if (!valor) return '—';
-  const fecha = new Date(valor);
-  if (Number.isNaN(fecha.getTime())) return valor;
-  return fecha.toLocaleString('es-BO');
-}
-
-/** HH:MM en hora oficial de Bolivia, a partir de un ISO datetime o de "HH:MM:SS". */
-function formatoHora(valor?: string | null): string {
-  if (!valor) return '--:--';
-
-  // Ya viene como hora pura ("14:30:00" o "14:30")
-  if (/^\d{2}:\d{2}/.test(valor) && !valor.includes('T')) {
-    return valor.slice(0, 5);
-  }
-
-  const fecha = new Date(valor);
-  if (Number.isNaN(fecha.getTime())) return '--:--';
-  try {
-    return fecha.toLocaleTimeString('es-BO', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      timeZone: 'America/La_Paz',
-    });
-  } catch {
-    return fecha.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' });
-  }
-}
-
-/** Fecha (Y-m-d) a partir de un ISO datetime. */
-function fechaCorta(valor?: string | null): string {
-  if (!valor) return '—';
-  return valor.slice(0, 10);
-}
-
 function resumirCampo(reserva: PiscinaReservaAdmin): string {
   return reserva.campo?.nombre ?? 'Piscina';
 }
 
 function primeraFechaDetalle(reserva: PiscinaReservaAdmin): string {
   const detalle = reserva.detalles?.[0];
-  return detalle?.fecha ? fechaCorta(detalle.fecha) : '—';
+  return detalle?.fecha ? fechaCortaISO(detalle.fecha) : '—';
 }
 
 /**
@@ -483,7 +445,7 @@ export default function PiscinaReservasTab() {
     },
     {
       label: 'Monto confirmado',
-      value: formatoMonto(stats?.monto_confirmado ?? 0),
+      value: formatMontoBoB(stats?.monto_confirmado),
       Icon: Banknote,
       accent: 'text-teal-600',
     },
@@ -685,12 +647,12 @@ export default function PiscinaReservasTab() {
 
                   <TableCell>
                     <p className="font-semibold tabular-nums">
-                      {formatoMonto(reserva.monto_total)}
+                      {formatMontoBoB(reserva.monto_total)}
                     </p>
                     {reserva.estado === 'confirmada' &&
                       reserva.monto_confirmado !== null && (
                         <p className="text-xs text-green-600">
-                          Confirmado: {formatoMonto(reserva.monto_confirmado)}
+                          Confirmado: {formatMontoBoB(reserva.monto_confirmado)}
                         </p>
                       )}
                   </TableCell>
@@ -700,7 +662,7 @@ export default function PiscinaReservasTab() {
                   </TableCell>
 
                   <TableCell className="text-xs text-muted-foreground">
-                    {formatoFecha(reserva.created_at)}
+                    {fechaHoraLegible(reserva.created_at)}
                   </TableCell>
 
                   <TableCell className="text-right">
@@ -806,30 +768,30 @@ export default function PiscinaReservasTab() {
                 <div>
                   <p className="text-xs text-muted-foreground">Monto total</p>
                   <p className="text-lg font-bold tabular-nums">
-                    {formatoMonto(reservaDetalle.monto_total)}
+                    {formatMontoBoB(reservaDetalle.monto_total)}
                   </p>
 
                   {reservaDetalle.monto_confirmado !== null && (
                     <p className="text-xs text-green-600">
-                      Confirmado: {formatoMonto(reservaDetalle.monto_confirmado)}
+                      Confirmado: {formatMontoBoB(reservaDetalle.monto_confirmado)}
                     </p>
                   )}
                 </div>
 
                 <div>
                   <p className="text-xs text-muted-foreground">Creado</p>
-                  <p className="text-sm">{formatoFecha(reservaDetalle.created_at)}</p>
+                  <p className="text-sm">{fechaHoraLegible(reservaDetalle.created_at)}</p>
                 </div>
 
                 <div>
                   <p className="text-xs text-muted-foreground">Expira</p>
-                  <p className="text-sm">{formatoFecha(reservaDetalle.expira_en)}</p>
+                  <p className="text-sm">{fechaHoraLegible(reservaDetalle.expira_en)}</p>
                 </div>
               </div>
 
               <div>
                 <p className="text-xs text-muted-foreground">Confirmado</p>
-                <p className="text-sm">{formatoFecha(reservaDetalle.confirmado_en)}</p>
+                <p className="text-sm">{fechaHoraLegible(reservaDetalle.confirmado_en)}</p>
               </div>
 
               <Separator />
@@ -862,7 +824,7 @@ export default function PiscinaReservasTab() {
                           <p className="text-sm font-medium">{visual.label}</p>
 
                           <p className="text-xs text-muted-foreground">
-                            {formatoFecha(entrada.fecha)}
+                            {fechaHoraLegible(entrada.fecha)}
                             {entrada.usuario_nombre ? ` · ${entrada.usuario_nombre}` : ''}
                           </p>
 
@@ -960,7 +922,7 @@ export default function PiscinaReservasTab() {
                             <p>
                               Monto:{' '}
                               <strong>
-                                {formatoMonto(Number(estadoSirebDetalle.monto))}
+                                {formatMontoBoB(estadoSirebDetalle.monto)}
                               </strong>
                             </p>
                           )}
@@ -1023,14 +985,14 @@ export default function PiscinaReservasTab() {
                               {perfilLabel[d.perfil] ?? d.perfil}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {fechaCorta(d.fecha)} · {formatoHora(d.hora_inicio)} -{' '}
-                              {formatoHora(d.hora_fin)}
+                              {fechaCortaISO(d.fecha)} · {horaLegible(d.hora_inicio)} -{' '}
+                              {horaLegible(d.hora_fin)}
                             </p>
                           </div>
 
                           <div className="text-right">
                             <p className="text-sm font-semibold tabular-nums">
-                              {formatoMonto(d.precio_unitario)} c/u
+                              {formatMontoBoB(d.precio_unitario)} c/u
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {d.cantidad} {d.cantidad === 1 ? 'persona' : 'personas'}
