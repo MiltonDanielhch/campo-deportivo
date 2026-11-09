@@ -9,6 +9,7 @@ use App\Models\PiscinaTurnoPerfil;
 use App\Services\Piscina\PiscinaTarifaResolver;
 use App\Services\Piscina\PiscinaTurnoLoteService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -197,7 +198,7 @@ class PiscinaTurnoController extends Controller
         $validated = $request->validate([
             'estado' => ['sometimes', 'in:activo,inactivo'], // ⟦FIX 1⟧
             'observacion' => ['nullable', 'string'],
-            'perfiles' => ['sometimes', 'array'],
+            'perfiles' => ['sometimes', 'array', 'min:1'],
             'perfiles.*.perfil' => ['required', 'in:mayor_12,menor_12,institucion', 'distinct'],
             'perfiles.*.cupo' => ['required', 'integer', 'min:1'],
             // [B99] idem store: precio/tarifa_sireb_id los resuelve SIREB, no el payload.
@@ -206,67 +207,77 @@ class PiscinaTurnoController extends Controller
         // [Fix3-real] reservado es contador FÍSICO (PiscinaReservaService lo incrementa al
         // crear y lo decrementa con min(cantidad,reservado) al cancelar; NO es derivable de
         // un SUM de detalles porque el estado vive en la cabecera, FIX 4b). El update
-        // anterior lo reseteaba a 0 → sobreventa. Validamos ANTES de la transacción
-        // (fail-fast, patrón cancelar()/B70-store): ningún cupo nuevo baja de lo ya tomado
-        // y ningún perfil con gente reservada se quita. Capturamos el reservado por perfil
-        // pa' preservarlo en el recreate de abajo.
-        $reservadoActual = [];
-        $res = ['sinTarifa' => [], 'resueltos' => []];
-        if (isset($validated['perfiles'])) {
-            $reservadoActual = $turno->perfiles()->pluck('reservado', 'perfil')->all();
-            $nuevosPerfiles = [];
-            foreach ($validated['perfiles'] as $perfilData) {
-                $nuevosPerfiles[] = $perfilData['perfil'];
-                $tomado = (int) ($reservadoActual[$perfilData['perfil']] ?? 0);
-                if ((int) $perfilData['cupo'] < $tomado) {
-                    return response()->json([
-                        'message' => "El cupo de {$perfilData['perfil']} no puede ser menor a {$tomado} (ya reservado).",
-                    ], 422);
-                }
-            }
-            foreach ($reservadoActual as $perfil => $tomado) {
-                if (! in_array($perfil, $nuevosPerfiles, true) && (int) $tomado > 0) {
-                    return response()->json([
-                        'message' => "No se puede quitar el perfil {$perfil}: tiene {$tomado} reservado(s).",
-                    ], 422);
-                }
-            }
-
-            // [B99] la hora es inmutable → resuelvo contra $turno->hora_inicio (no del
-            // payload). Si un perfil perdió su tarifa SIREB (sync la versionó), 422:
-            // no guardo un turno con perfil sin precio espejado.
-            $res = $this->resolverTarifasPerfiles(
-                $turno->campo_id,
-                $turno->hora_inicio,
-                $validated['perfiles'],
-            );
-            if ($res['sinTarifa'] !== []) {
-                return response()->json([
-                    'message' => 'Uno o más perfiles no tienen tarifa SIREB vigente. Sincronizá tarifas antes de guardar.',
-                    'perfiles_sin_tarifa' => $res['sinTarifa'],
-                ], 422);
-            }
-        }
-
+        // anterior lo reseteaba a 0 → sobreventa. Validamos DENTRO de la transacción y con
+        // lockForUpdate pa' no leer un reservado viejo mientras entra una reserva concurrente.
         try {
-            DB::transaction(function () use ($turno, $validated, $reservadoActual, $res) {
+            $turnoActualizado = DB::transaction(function () use ($turno, $validated) {
+                $res = ['sinTarifa' => [], 'resueltos' => []];
+                $perfilesBloqueados = collect();
+
+                if (isset($validated['perfiles'])) {
+                    $perfilesBloqueados = $turno->perfiles()->lockForUpdate()->get();
+                    $reservadoActual = $perfilesBloqueados->pluck('reservado', 'perfil')->all();
+
+                    $nuevosPerfiles = [];
+                    foreach ($validated['perfiles'] as $perfilData) {
+                        $nuevosPerfiles[] = $perfilData['perfil'];
+                        $tomado = (int) ($reservadoActual[$perfilData['perfil']] ?? 0);
+                        if ((int) $perfilData['cupo'] < $tomado) {
+                            throw new HttpResponseException(response()->json([
+                                'message' => "El cupo de {$perfilData['perfil']} no puede ser menor a {$tomado} (ya reservado).",
+                            ], 422));
+                        }
+                    }
+
+                    foreach ($reservadoActual as $perfil => $tomado) {
+                        if (! in_array($perfil, $nuevosPerfiles, true) && (int) $tomado > 0) {
+                            throw new HttpResponseException(response()->json([
+                                'message' => "No se puede quitar el perfil {$perfil}: tiene {$tomado} reservado(s).",
+                            ], 422));
+                        }
+                    }
+
+                    // [B99] la hora es inmutable → resuelvo contra $turno->hora_inicio.
+                    // Si un perfil perdió su tarifa SIREB, 422: no guardo un turno con
+                    // perfil sin precio espejado.
+                    $res = $this->resolverTarifasPerfiles(
+                        $turno->campo_id,
+                        $turno->hora_inicio,
+                        $validated['perfiles'],
+                    );
+
+                    if ($res['sinTarifa'] !== []) {
+                        throw new HttpResponseException(response()->json([
+                            'message' => 'Uno o más perfiles no tienen tarifa SIREB vigente. Sincronizá tarifas antes de guardar.',
+                            'perfiles_sin_tarifa' => $res['sinTarifa'],
+                        ], 422));
+                    }
+                }
+
                 if (isset($validated['estado'])) {
                     $turno->estado = $validated['estado'];
                 }
-                if (isset($validated['observacion'])) {
+
+                // array_key_exists, no isset: si el payload manda observacion: null,
+                // hay que limpiarla. isset(null) es false y antes no se borraba.
+                if (array_key_exists('observacion', $validated)) {
                     $turno->observacion = $validated['observacion'];
                 }
+
                 $turno->save();
 
                 if (isset($validated['perfiles'])) {
                     $turno->perfiles()->delete();
+
                     foreach ($res['resueltos'] as $perfilResuelto) {
+                        $perfilBloqueado = $perfilesBloqueados->firstWhere('perfil', $perfilResuelto['perfil']);
+
                         $turno->perfiles()->create([
                             'perfil' => $perfilResuelto['perfil'],
                             'cupo' => $perfilResuelto['cupo'],
-                            // [Fix3-real] preservamos el cupo tomado; el delete+recreate
-                            // ya no lo pisa a 0.
-                            'reservado' => (int) ($reservadoActual[$perfilResuelto['perfil']] ?? 0),
+                            // [Fix3-real] preservamos el cupo tomado bajo lock; el
+                            // delete+recreate ya no lo pisa a 0 ni usa un valor viejo.
+                            'reservado' => (int) ($perfilBloqueado?->reservado ?? 0),
                             // [B99] precio/tarifa_sireb_id espejados de SIREB.
                             'tarifa_sireb_id' => $perfilResuelto['tarifa_sireb_id'],
                             'precio_unitario' => $perfilResuelto['precio_unitario'],
@@ -274,11 +285,22 @@ class PiscinaTurnoController extends Controller
                         ]);
                     }
                 }
+
+                return $turno->load('perfiles');
             });
 
-            return response()->json(['message' => 'Turno actualizado exitosamente', 'data' => $turno->load('perfiles')]);
+            return response()->json([
+                'message' => 'Turno actualizado exitosamente',
+                'data' => $turnoActualizado,
+            ]);
+        } catch (HttpResponseException $e) {
+            // Las validaciones 422 internas deben salir como respuesta, no como 500.
+            throw $e;
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Error al actualizar turno', 'error' => $e->getMessage()], 500);
+            // No filtramos $e->getMessage() al cliente: es un 500 operativo.
+            return response()->json([
+                'message' => 'Error al actualizar turno',
+            ], 500);
         }
     }
 
