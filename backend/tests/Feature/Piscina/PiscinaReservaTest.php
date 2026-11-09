@@ -6,11 +6,15 @@ use App\DTOs\PiscinaReservaDTO;
 use App\Enums\EstadoPiscinaReserva;
 use App\Enums\ModalidadReservaCampo;
 use App\Exceptions\FranjaNoDisponibleException;
+use App\Integrations\Recaudaciones\RecaudacionesApiClientInterface;
+use App\Jobs\ExpirarPiscinaReservaJob;
 use App\Models\CampoDeportivo;
 use App\Models\PiscinaReserva;
+use App\Models\PiscinaReservaDetalle;
 use App\Models\PiscinaTurno;
 use App\Models\PiscinaTurnoPerfil;
 use App\Models\TipoCampo;
+use App\Services\AuditoriaService;
 use App\Services\Piscina\PiscinaDisponibilidadService;
 use App\Services\Piscina\PiscinaReservaService;
 use Carbon\Carbon;
@@ -162,11 +166,85 @@ class PiscinaReservaTest extends TestCase
 
     /**
      * [B62/B43] Una reserva NO expira si el pago llega antes del TTL.
-     * Placeholder para test de conversión completo (requiere mock de SIREB).
+     *
+     * Simulamos el efecto del pago/webhook: la reserva pasa a confirmada antes
+     * de vencer expira_en. Después avanzamos el reloj más allá del TTL y
+     * ejecutamos el job de expiración manualmente. El job debe hacer early
+     * return por estado != Pendiente: ni expira, ni anula en SIREB, ni libera cupo.
      */
     public function test_reserva_no_expira_si_pago_llega_antes_del_ttl(): void
     {
-        $this->markTestSkipped('Requiere mock de SirebLiquidacionService; se completa al cerrar Fix3 piscina A/B.');
+        $this->travelTo(Carbon::parse('2026-10-25 10:00:00'));
+
+        [$campo, $turno, $perfil] = $this->crearSetupPiscina();
+
+        // Simula que la reserva ya tomó cupo.
+        $perfil->update([
+            'cupo'      => 10,
+            'reservado' => 1,
+            'estado'    => 'activo',
+        ]);
+
+        $reserva = PiscinaReserva::create([
+            'codigo_seguimiento' => 'PIS-20261025-TTL01',
+            'campo_id'           => $campo->id,
+            'estado'             => EstadoPiscinaReserva::Pendiente,
+            'monto_total'        => 10.00,
+            'nombre_pagador'     => 'Pago Antes TTL',
+            'telefono_pagador'   => '70000000',
+            'ci_nit_pagador'     => '1234567',
+            'expira_en'          => now()->addMinutes(20),
+        ]);
+
+        PiscinaReservaDetalle::create([
+            'reserva_id'      => $reserva->id,
+            'turno_id'        => $turno->id,
+            'perfil'          => $perfil->perfil,
+            'cantidad'        => 1,
+            'precio_unitario' => 10.00,
+            'hora_inicio'     => $turno->hora_inicio,
+            'hora_fin'        => $turno->hora_fin,
+            'fecha'           => $turno->fecha,
+        ]);
+
+        // Pago llega antes del TTL: misma puerta de confirmación local que usa
+        // webhook/polling. No hace falta tocar SIREB para probar el job.
+        app(\App\Services\Piscina\PiscinaConfirmacionCobroService::class)
+            ->confirmar($reserva, 10.00);
+
+        $reserva->refresh();
+
+        $this->assertSame(
+            EstadoPiscinaReserva::Confirmada->value,
+            $reserva->estado->value,
+        );
+        $this->assertNotNull($reserva->confirmado_en);
+
+        // Avanzamos más allá del TTL y corremos el job como lo haría la cola.
+        $this->travelTo(Carbon::parse('2026-10-25 10:25:00'));
+
+        $client = $this->mock(RecaudacionesApiClientInterface::class);
+        $client->shouldNotReceive('anularLiquidacion');
+
+        $auditoria = $this->mock(AuditoriaService::class);
+        $auditoria->shouldNotReceive('registrar');
+
+        (new ExpirarPiscinaReservaJob($reserva->id))->handle($client, $auditoria);
+
+        $reserva->refresh();
+        $perfil->refresh();
+
+        $this->assertSame(
+            EstadoPiscinaReserva::Confirmada->value,
+            $reserva->estado->value,
+            'una reserva confirmada antes del TTL no debe expirar',
+        );
+
+        $this->assertSame(
+            1,
+            (int) $perfil->reservado,
+            'confirmada antes del TTL no debe liberar cupo',
+        );
     }
 
     public function test_disponibilidad_calcula_cupo_correctamente(): void
