@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Api\V1\Admin;
 
+use App\Enums\EstadoPiscinaReserva;
 use App\Models\CampoDeportivo;
 use App\Models\Funcionario;
 use App\Models\PiscinaTurno;
 use App\Models\PiscinaTurnoPerfil;
 use App\Models\Rol;
+use App\Models\PiscinaReserva;
+use App\Models\PiscinaReservaDetalle;
 use App\Models\TarifaCampo;
 use App\Models\TipoCampo;
 use App\Services\Piscina\PiscinaTarifaResolver;
@@ -291,4 +294,153 @@ class PiscinaTurnoControllerTest extends TestCase
             'precio_unitario' => 50,
         ]);
     }
+
+    public function test_destroy_bloquea_turno_con_reserva_pendiente(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $campo = $this->campoPiscina();
+        $turno = $this->turno($campo, [
+            ['perfil' => 'mayor_12', 'cupo' => 5, 'reservado' => 1],
+        ]);
+
+        // Simular una reserva pendiente asociada al turno.
+        $reserva = PiscinaReserva::create([
+            'codigo_seguimiento' => 'PIS-TEST-000001',
+            'campo_id' => $campo->id,
+            'estado' => EstadoPiscinaReserva::Pendiente,
+            'monto_total' => 50,
+            'nombre_pagador' => 'Juan Test',
+            'telefono_pagador' => '70000001',
+            'ci_nit_pagador' => '70000001',
+            'expira_en' => now()->addMinutes(20),
+        ]);
+
+        PiscinaReservaDetalle::create([
+            'reserva_id' => $reserva->id,
+            'turno_id' => $turno->id,
+            'perfil' => 'mayor_12',
+            'cantidad' => 1,
+            'precio_unitario' => 50,
+            'hora_inicio' => '10:00:00',
+            'hora_fin' => '12:00:00',
+            'fecha' => $turno->fecha,
+        ]);
+
+        $response = $this->deleteJson("/api/v1/admin/piscina/turnos/{$turno->id}");
+
+        $response->assertStatus(422);
+        $this->assertStringContainsString(
+            'reservas asociadas',
+            (string) $response->json('message')
+        );
+
+        $this->assertDatabaseHas('piscina_turnos', ['id' => $turno->id]);
+    }
+
+    public function test_destroy_bloquea_turno_con_reserva_confirmada(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $campo = $this->campoPiscina();
+        $turno = $this->turno($campo, [
+            ['perfil' => 'mayor_12', 'cupo' => 5, 'reservado' => 1],
+        ]);
+
+        $reserva = PiscinaReserva::create([
+            'codigo_seguimiento' => 'PIS-TEST-000002',
+            'campo_id' => $campo->id,
+            'estado' => EstadoPiscinaReserva::Confirmada,
+            'monto_total' => 50,
+            'monto_confirmado' => 50,
+            'nombre_pagador' => 'María Test',
+            'telefono_pagador' => '70000002',
+            'ci_nit_pagador' => '70000002',
+            'expira_en' => now()->addMinutes(20),
+        ]);
+
+        PiscinaReservaDetalle::create([
+            'reserva_id' => $reserva->id,
+            'turno_id' => $turno->id,
+            'perfil' => 'mayor_12',
+            'cantidad' => 1,
+            'precio_unitario' => 50,
+            'hora_inicio' => '10:00:00',
+            'hora_fin' => '12:00:00',
+            'fecha' => $turno->fecha,
+        ]);
+
+        $response = $this->deleteJson("/api/v1/admin/piscina/turnos/{$turno->id}");
+
+        $response->assertStatus(422);
+        $this->assertStringContainsString(
+            'reservas asociadas',
+            (string) $response->json('message')
+        );
+
+        $this->assertDatabaseHas('piscina_turnos', ['id' => $turno->id]);
+    }
+
+    public function test_destroy_permite_turno_sin_reservas(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $campo = $this->campoPiscina();
+        $turno = $this->turno($campo, [
+            ['perfil' => 'mayor_12', 'cupo' => 5, 'reservado' => 0],
+        ]);
+
+        $response = $this->deleteJson("/api/v1/admin/piscina/turnos/{$turno->id}");
+
+        $response->assertOk();
+        $this->assertDatabaseMissing('piscina_turnos', ['id' => $turno->id]);
+    }
+
+    public function test_update_no_inactiva_turno_con_reserva_pendiente(): void
+    {
+        Sanctum::actingAs($this->admin());
+
+        $campo = $this->campoPiscina();
+        $turno = $this->turno($campo, [
+            ['perfil' => 'mayor_12', 'cupo' => 5, 'reservado' => 1],
+        ]);
+
+        $reserva = PiscinaReserva::create([
+            'codigo_seguimiento' => 'PIS-TEST-000003',
+            'campo_id' => $campo->id,
+            'estado' => EstadoPiscinaReserva::Pendiente,
+            'monto_total' => 50,
+            'nombre_pagador' => 'Pedro Test',
+            'telefono_pagador' => '70000003',
+            'ci_nit_pagador' => '70000003',
+            'expira_en' => now()->addMinutes(20),
+        ]);
+
+        PiscinaReservaDetalle::create([
+            'reserva_id' => $reserva->id,
+            'turno_id' => $turno->id,
+            'perfil' => 'mayor_12',
+            'cantidad' => 1,
+            'precio_unitario' => 50,
+            'hora_inicio' => '10:00:00',
+            'hora_fin' => '12:00:00',
+            'fecha' => $turno->fecha,
+        ]);
+
+        $response = $this->patchJson("/api/v1/admin/piscina/turnos/{$turno->id}", [
+            'estado' => 'inactivo',
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertStringContainsString(
+            'reservas pendientes',
+            (string) $response->json('message')
+        );
+
+        $this->assertDatabaseHas('piscina_turnos', [
+            'id' => $turno->id,
+            'estado' => 'activo',
+        ]);
+    }
 }
+

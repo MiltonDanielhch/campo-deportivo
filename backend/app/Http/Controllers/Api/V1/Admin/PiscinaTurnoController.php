@@ -255,6 +255,20 @@ class PiscinaTurnoController extends Controller
                 }
 
                 if (isset($validated['estado'])) {
+                    // [P37-b] No se puede inactivar un turno con reservas pendientes:
+                    // el ciudadano ya tiene un QR/código activo que apunta a este turno.
+                    if ($validated['estado'] === 'inactivo') {
+                        $hayPendientes = $turno->reservas()
+                            ->whereHas('reserva', fn ($q) => $q->where('estado', 'pendiente'))
+                            ->exists();
+
+                        if ($hayPendientes) {
+                            throw new HttpResponseException(response()->json([
+                                'message' => 'No se puede inactivar: el turno tiene reservas pendientes. Cancelalas o esperá que expiren.',
+                            ], 422));
+                        }
+                    }
+
                     $turno->estado = $validated['estado'];
                 }
 
@@ -306,6 +320,11 @@ class PiscinaTurnoController extends Controller
 
     /**
      * DELETE /api/v1/admin/piscina/turnos/{turnoId}
+     *
+     * [P37-a] Solo se puede eliminar un turno SIN reservas asociadas de ningún
+     * estado. Si tiene pendiente, confirmada, expirada, cancelada o rechazada,
+     * el turno es parte del histórico de cobro y NO se borra. Usá inactivar
+     * (estado: 'inactivo') para ocultarlo sin perder trazabilidad.
      */
     public function destroy(string $turnoId): JsonResponse
     {
@@ -314,14 +333,11 @@ class PiscinaTurnoController extends Controller
             return response()->json(['message' => 'Turno no encontrado'], 404);
         }
 
-        // ⟦FIX 4b⟧ el detalle NO tiene columna 'estado'; se filtra por cabecera.
-        $hayPendientes = $turno->reservas()
-            ->whereHas('reserva', fn ($q) => $q->where('estado', 'pendiente'))
-            ->exists();
+        $hayReservas = $turno->reservas()->exists();
 
-        if ($hayPendientes) {
+        if ($hayReservas) {
             return response()->json([
-                'message' => 'No se puede eliminar: el turno tiene reservas pendientes',
+                'message' => 'No se puede eliminar: el turno tiene reservas asociadas. Usá "Inactivar" para ocultarlo sin perder histórico.',
             ], 422);
         }
 
@@ -329,7 +345,7 @@ class PiscinaTurnoController extends Controller
             $turno->delete();
             return response()->json(['message' => 'Turno eliminado exitosamente']);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Error al eliminar turno', 'error' => $e->getMessage()], 500);
+            return response()->json(['message' => 'Error al eliminar turno'], 500);
         }
     }
 
