@@ -65,6 +65,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { tiposCampoService } from '@/services/tiposCampoService';
+import { fechaRelativa } from '@/lib/fecha';
 import type { EstadoTipoCampo, TipoCampo } from '@/types/parametricas';
 
 const TODOS = 'todos';
@@ -142,30 +143,6 @@ function iconoDeTipo(nombre: string): IconoConfig {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
-
-const fechaRelativa = (iso?: string | null): string => {
-  if (!iso) return '—';
-
-  const fecha = new Date(iso);
-
-  if (Number.isNaN(fecha.getTime())) {
-    return '—';
-  }
-
-  const diff = Date.now() - fecha.getTime();
-  const minutos = Math.floor(diff / 60_000);
-  const horas = Math.floor(minutos / 60);
-  const dias = Math.floor(horas / 24);
-  const meses = Math.floor(dias / 30);
-
-  if (minutos < 1) return 'recién';
-  if (minutos < 60) return `hace ${minutos} min`;
-  if (horas < 24) return `hace ${horas} h`;
-  if (dias < 30) return `hace ${dias} d`;
-  if (meses < 12) return `hace ${meses} mes${meses === 1 ? '' : 'es'}`;
-
-  return fecha.toLocaleDateString('es-BO', { dateStyle: 'medium' });
-};
 
 const ESTADO_CONFIG: Record<
   EstadoTipoCampo,
