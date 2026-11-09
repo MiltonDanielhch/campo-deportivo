@@ -25,6 +25,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/context/AuthContext';
 
@@ -34,71 +35,91 @@ type NavItem = {
   icon: React.ElementType;
   permiso?: string | null;
   roles?: string[];
-  dividerBefore?: boolean;
-  groupLabel?: string;
 };
 
-const navItems: NavItem[] = [
-  { title: 'Dashboard', url: '/panel', icon: HomeIcon, permiso: null },
-  {
-    title: 'Ocupación',
-    url: '/panel/ocupacion',
-    icon: CalendarCheck,
-    roles: ['admin_parametricas', 'admin_reservas', 'funcionario_control'],
-  },
-  {
-    title: 'Reservas',
-    url: '/panel/reservas',
-    icon: CalendarRangeIcon,
-    roles: ['admin_parametricas', 'admin_reservas', 'funcionario_control'],
-  },
+type NavGroup = {
+  label: string;
+  items: NavItem[];
+};
 
-  // ─── Paramétricas ───
+// ─── Agrupación por lógica de dominio ───
+// Operación = lo diario · Paramétricas = catálogo/configuración ·
+// Acceso = personas y asignación · Análisis = visión gerencial.
+const navGroups: NavGroup[] = [
   {
-    title: 'Campos',
-    url: '/panel/parametricas/campos',
-    icon: MapPinIcon,
-    permiso: 'gestionar-campos',
+    label: 'Operación',
+    items: [
+      { title: 'Dashboard', url: '/panel', icon: HomeIcon, permiso: null },
+      {
+        title: 'Ocupación',
+        url: '/panel/ocupacion',
+        icon: CalendarCheck,
+        roles: ['admin_parametricas', 'admin_reservas', 'funcionario_control'],
+      },
+      {
+        title: 'Reservas',
+        url: '/panel/reservas',
+        icon: CalendarRangeIcon,
+        roles: ['admin_parametricas', 'admin_reservas', 'funcionario_control'],
+      },
+    ],
   },
   {
-    title: 'Tipos de Campo',
-    url: '/panel/parametricas/tipos-campo',
-    icon: MapIcon,
-    permiso: 'gestionar-tipos-campo',
+    label: 'Paramétricas',
+    items: [
+      {
+        title: 'Campos',
+        url: '/panel/parametricas/campos',
+        icon: MapPinIcon,
+        permiso: 'gestionar-campos',
+      },
+      {
+        title: 'Tipos de Campo',
+        url: '/panel/parametricas/tipos-campo',
+        icon: MapIcon,
+        permiso: 'gestionar-tipos-campo',
+      },
+      {
+        title: 'Asociaciones',
+        url: '/panel/parametricas/asociaciones',
+        icon: Building2Icon,
+        roles: ['admin_parametricas'],
+      },
+    ],
   },
   {
-    title: 'Asociaciones',
-    url: '/panel/parametricas/asociaciones',
-    icon: Building2Icon,
-    roles: ['admin_parametricas'],
-  },
-
-  // ─── Usuarios ───
-  {
-    title: 'Funcionarios',
-    url: '/panel/funcionarios',
-    icon: UsersIcon,
-    permiso: 'gestionar-funcionarios',
-  },
-  {
-    title: 'Asignaciones',
-    url: '/panel/asignaciones',
-    icon: Link2Icon,
-    permiso: 'gestionar-funcionarios',
-  },
-
-  // ─── Gerenciales (solo admin_parametricas + gerencia) ───
-  {
-    title: 'Mapa Global',
-    url: '/panel/ocupacion/mapa',
-    icon: MapIcon,
-    roles: ['admin_parametricas', 'gerencia'],
+    label: 'Acceso',
+    items: [
+      {
+        title: 'Funcionarios',
+        url: '/panel/funcionarios',
+        icon: UsersIcon,
+        permiso: 'gestionar-funcionarios',
+      },
+      {
+        title: 'Asignaciones',
+        url: '/panel/asignaciones',
+        icon: Link2Icon,
+        permiso: 'gestionar-funcionarios',
+      },
+    ],
   },
   {
-    title: 'Reportes',
-    url: '/panel/reportes',
-    icon: LayoutDashboard,
-    roles: ['admin_parametricas', 'gerencia'],
+    label: 'Análisis',
+    items: [
+      {
+        title: 'Mapa Global',
+        url: '/panel/ocupacion/mapa',
+        icon: MapIcon,
+        roles: ['admin_parametricas', 'gerencia'],
+      },
+      {
+        title: 'Reportes',
+        url: '/panel/reportes',
+        icon: LayoutDashboard,
+        roles: ['admin_parametricas', 'gerencia'],
+      },
+    ],
   },
 ];
 
@@ -107,16 +128,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const items = navItems.filter((item) => {
+  const pasaItem = (item: NavItem): boolean => {
     if (item.roles) {
       const rol = (funcionario as any)?.rol?.nombre as string | undefined;
-      // Si el rol es gerencia (permisos '*'), también pasa
       const esGerencia = (funcionario as any)?.rol?.permisos?.includes('*');
       return (!!rol && item.roles.includes(rol)) || esGerencia;
     }
-
     return !item.permiso || tienePermiso(item.permiso);
-  });
+  };
+
+  // Filtro por grupo; los grupos que quedan vacíos no se renderizan.
+  const gruposFiltrados = navGroups
+    .map((grupo) => ({ ...grupo, items: grupo.items.filter(pasaItem) }))
+    .filter((grupo) => grupo.items.length > 0);
 
   const handleLogout = async () => {
     await logout();
@@ -131,19 +155,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     .toUpperCase();
 
   return (
-    <Sidebar collapsible="offcanvas" className="border-r border-sidebar-border" {...props}>
-      {/* ─── Header con branding ─── */}
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border" {...props}>
+      {/* ─── Header con branding (texto oculto en rail) ─── */}
       <SidebarHeader className="border-b border-sidebar-border py-4">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              className="data-[slot=sidebar-menu-button]:p-1.5!"
+              className="data-[slot=sidebar-menu-button]:p-1.5 group-data-[collapsible=icon]:p-0!"
               render={<Link to="/panel" />}
             >
-              <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-teal-400 to-emerald-600 text-white">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-teal-400 to-emerald-600 text-white group-data-[collapsible=icon]:size-5">
                 <MapIcon className="size-4" />
               </div>
-              <div className="flex flex-col text-left leading-tight">
+              <div className="flex flex-col text-left leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="text-sm font-bold">GAD Beni</span>
                 <span className="text-[10px] text-sidebar-foreground/60 uppercase tracking-wider">
                   Canchas deportivas
@@ -155,43 +179,48 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
 
       <SidebarContent className="py-3">
-        <SidebarGroup>
-          <SidebarGroupLabel className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/50">
-            Administración
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1 px-2">
-              {items.map((item) => {
-                const activo =
-                  location.pathname === item.url ||
-                  (item.url !== '/panel' && location.pathname.startsWith(item.url));
-                return (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton
-                      isActive={activo}
-                      tooltip={item.title}
-                      render={<Link to={item.url} />}
-                      className={`rounded-lg px-3 py-2 transition-colors ${
-                        activo
-                          ? 'bg-teal-500/15 text-teal-300 data-[active=true]:bg-teal-500/15 data-[active=true]:text-teal-300'
-                          : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                      }`}
-                    >
-                      <item.icon className={activo ? 'text-teal-400' : ''} />
-                      <span className="font-medium">{item.title}</span>
-                      {activo && (
-                        <span className="ml-auto size-1.5 rounded-full bg-teal-400" />
-                      )}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {gruposFiltrados.map((grupo, i) => (
+          <React.Fragment key={grupo.label}>
+            {i > 0 && <SidebarSeparator />}
+            <SidebarGroup>
+              <SidebarGroupLabel className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/50">
+                {grupo.label}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu className="gap-1 px-2">
+                  {grupo.items.map((item) => {
+                    const activo =
+                      location.pathname === item.url ||
+                      (item.url !== '/panel' && location.pathname.startsWith(item.url));
+                    return (
+                      <SidebarMenuItem key={item.url}>
+                        <SidebarMenuButton
+                          isActive={activo}
+                          tooltip={item.title}
+                          render={<Link to={item.url} />}
+                          className={`rounded-lg px-3 py-2 transition-colors ${
+                            activo
+                              ? 'bg-teal-500/15 text-teal-300 data-[active=true]:bg-teal-500/15 data-[active=true]:text-teal-300'
+                              : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                          }`}
+                        >
+                          <item.icon className={activo ? 'text-teal-400' : ''} />
+                          <span className="font-medium">{item.title}</span>
+                          {activo && (
+                            <span className="ml-auto size-1.5 rounded-full bg-teal-400 group-data-[collapsible=icon]:hidden" />
+                          )}
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </React.Fragment>
+        ))}
       </SidebarContent>
 
-      {/* ─── Footer con usuario ─── */}
+      {/* ─── Footer con usuario (texto oculto en rail) ─── */}
       <SidebarFooter className="border-t border-sidebar-border pt-3">
         <SidebarMenu>
           <SidebarMenuItem>
@@ -199,12 +228,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               size="lg"
               className="rounded-lg px-2 data-[slot=sidebar-menu-button]:p-2"
             >
-              <Avatar className="size-9 rounded-lg bg-gradient-to-br from-teal-400 to-emerald-600">
+              <Avatar className="size-9 rounded-lg bg-gradient-to-br from-teal-400 to-emerald-600 group-data-[collapsible=icon]:size-5">
                 <AvatarFallback className="rounded-lg bg-transparent text-white font-semibold text-xs">
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
+              <div className="grid flex-1 text-left text-sm leading-tight min-w-0 group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-semibold text-sidebar-foreground">
                   {funcionario?.nombre_completo}
                 </span>
@@ -221,7 +250,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="rounded-lg text-sidebar-foreground/70 hover:bg-red-500/10 hover:text-red-300"
             >
               <LogOutIcon className="size-4" />
-              <span>Cerrar sesión</span>
+              <span className="group-data-[collapsible=icon]:hidden">Cerrar sesión</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
