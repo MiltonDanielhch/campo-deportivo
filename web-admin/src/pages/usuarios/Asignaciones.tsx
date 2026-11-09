@@ -15,6 +15,7 @@ import {
   UserCog,
   Users,
   Map as MapIcon,
+  AlertCircle,
   X,
 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -30,6 +31,16 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { asignacionesService } from '@/services/asignacionesService';
 import { camposService } from '@/services/camposService';
 import { funcionariosService } from '@/services/funcionariosService';
@@ -129,6 +140,8 @@ export default function Asignaciones() {
   const [asignadosIds, setAsignadosIds] = useState<Set<string>>(new Set());
   const [cargandoAsignaciones, setCargandoAsignaciones] = useState(false);
   const [operandoCampoId, setOperandoCampoId] = useState<string | null>(null);
+  const [confirmarQuitar, setConfirmarQuitar] = useState(false);
+  const [quitandoTodos, setQuitandoTodos] = useState(false);
 
   // ─── Filtros de la grilla ───
   const [busqueda, setBusqueda] = useState('');
@@ -258,14 +271,19 @@ export default function Asignaciones() {
     }
   };
 
-  const desasignarTodos = async () => {
-    if (!funcionarioId) return;
+  const ejecutarQuitarTodos = async () => {
+    if (!funcionarioId) {
+      setConfirmarQuitar(false);
+      return;
+    }
     const asignados = campos.filter((c) => asignadosIds.has(c.id));
     if (asignados.length === 0) {
       toast.info('No hay campos para desasignar');
+      setConfirmarQuitar(false);
       return;
     }
 
+    setQuitandoTodos(true);
     try {
       await Promise.all(
         asignados.map((c) =>
@@ -274,8 +292,11 @@ export default function Asignaciones() {
       );
       setAsignadosIds(new Set());
       toast.success(`${asignados.length} campos desasignados`);
+      setConfirmarQuitar(false);
     } catch {
-      toast.error('No se pudieron desasignar los campos');
+      toast.error('No se pudieron desasignar todos los campos');
+    } finally {
+      setQuitandoTodos(false);
     }
   };
 
@@ -512,8 +533,8 @@ export default function Asignaciones() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={desasignarTodos}
-                    disabled={operandoCampoId !== null || stats.asignados === 0}
+                    onClick={() => setConfirmarQuitar(true)}
+                    disabled={operandoCampoId !== null || quitandoTodos || stats.asignados === 0}
                   >
                     <X className="mr-1.5 size-3.5" />
                     Quitar todos
@@ -653,6 +674,47 @@ export default function Asignaciones() {
           </CardContent>
         </Card>
       )}
+
+      {/* ─── Confirmación destructiva: Quitar todos ─── */}
+      <AlertDialog
+        open={confirmarQuitar}
+        onOpenChange={(abierto) => {
+          if (!abierto) setConfirmarQuitar(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="size-5 text-destructive" />
+              Quitar todas las asignaciones
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 pt-1">
+                <p>
+                  Se desasignarán <strong>{stats.asignados}</strong>{' '}
+                  {stats.asignados === 1 ? 'campo' : 'campos'} de{' '}
+                  {funcionarioSeleccionado?.nombre_completo}.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Podés volver a asignarlos uno por uno o con «Asignar todos».
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={quitandoTodos}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={ejecutarQuitarTodos}
+              disabled={quitandoTodos}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {quitandoTodos ? 'Quitando…' : 'Confirmar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
