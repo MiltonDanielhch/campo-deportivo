@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Users,
-  ShieldCheck,
   CheckCircle2,
   XCircle,
   Search,
@@ -13,7 +12,6 @@ import {
   Power,
   PowerOff,
   AlertCircle,
-  Calendar,
   UserPlus,
   MapPin,
   Eye,
@@ -68,6 +66,8 @@ import {
 } from '@/components/ui/table';
 import { funcionariosService } from '@/services/funcionariosService';
 import type { Funcionario, Rol } from '@/types/usuarios';
+import { configDeRol } from '@/lib/roles';
+import { fechaRelativa } from '@/lib/fecha';
 
 const TODOS = 'todos';
 
@@ -80,70 +80,6 @@ function iniciales(nombre: string): string {
     .slice(0, 2)
     .join('')
     .toUpperCase();
-}
-
-/** Fecha relativa corta */
-const fechaRelativa = (iso: string): string => {
-  const diff = Date.now() - new Date(iso).getTime();
-  const minutos = Math.floor(diff / 60_000);
-  const horas = Math.floor(minutos / 60);
-  const dias = Math.floor(horas / 24);
-  const meses = Math.floor(dias / 30);
-
-  if (minutos < 1) return 'recién';
-  if (minutos < 60) return `hace ${minutos} min`;
-  if (horas < 24) return `hace ${horas} h`;
-  if (dias < 30) return `hace ${dias} d`;
-  if (meses < 12) return `hace ${meses} mes${meses === 1 ? '' : 'es'}`;
-  return new Date(iso).toLocaleDateString('es-BO', { dateStyle: 'medium' });
-};
-
-// ─── Mapeo de roles a colores semánticos ───
-
-type RolConfig = {
-  bg: string;
-  fg: string;
-  label: string;
-  icon: typeof ShieldCheck;
-};
-
-const ROL_CONFIG: Record<string, RolConfig> = {
-  admin_parametricas: {
-    bg: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30',
-    fg: 'text-emerald-700 dark:text-emerald-400',
-    label: 'Admin. Paramétricas',
-    icon: ShieldCheck,
-  },
-  funcionario_control: {
-    bg: 'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-500/30',
-    fg: 'text-sky-700 dark:text-sky-400',
-    label: 'Control de Canchas',
-    icon: MapPin,
-  },
-  admin_reservas: {
-    bg: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30',
-    fg: 'text-amber-700 dark:text-amber-400',
-    label: 'Admin. Reservas',
-    icon: Calendar,
-  },
-  superadmin: {
-    bg: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-500/30',
-    fg: 'text-violet-700 dark:text-violet-400',
-    label: 'Superadmin',
-    icon: ShieldCheck,
-  },
-};
-
-const ROL_FALLBACK: RolConfig = {
-  bg: 'bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-500/30',
-  fg: 'text-slate-700 dark:text-slate-400',
-  label: 'Funcionario',
-  icon: Users,
-};
-
-function configDeRol(rol: Rol | undefined): RolConfig {
-  if (!rol) return ROL_FALLBACK;
-  return ROL_CONFIG[rol.nombre] ?? { ...ROL_FALLBACK, label: rol.nombre };
 }
 
 // ─── Generador de contraseñas seguras ───

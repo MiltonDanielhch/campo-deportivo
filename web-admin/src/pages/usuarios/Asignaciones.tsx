@@ -46,6 +46,7 @@ import { camposService } from '@/services/camposService';
 import { funcionariosService } from '@/services/funcionariosService';
 import type { CampoDeportivo } from '@/types/parametricas';
 import type { Funcionario, Rol } from '@/types/usuarios';
+import { configDeRol } from '@/lib/roles';
 
 const ROL_CONTROL = 'funcionario_control';
 
@@ -422,7 +423,7 @@ export default function Asignaciones() {
                             {f.nombre_completo}
                           </span>
                           <span className="text-[11px] text-muted-foreground truncate leading-tight">
-                            {f.rol?.nombre ?? '—'} · @{f.usuario}
+                            {configDeRol(f.rol).label} · @{f.usuario}
                           </span>
                         </div>
                       </div>
@@ -454,7 +455,7 @@ export default function Asignaciones() {
                       {funcionarioSeleccionado.nombre_completo}
                     </p>
                     <p className="text-sm text-primary font-medium">
-                      {funcionarioSeleccionado.rol?.nombre ?? '—'}
+                      {configDeRol(funcionarioSeleccionado.rol).label}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       CI {funcionarioSeleccionado.ci} · @{funcionarioSeleccionado.usuario}
