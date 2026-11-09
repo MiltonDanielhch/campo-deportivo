@@ -125,7 +125,7 @@ class ReportesService
                 $hasta->endOfDay(),
             ])
             ->select(
-                DB::raw("COALESCE(ci_nit_pagador, telefono_pagador) as clave_agrupacion"),
+                DB::raw("COALESCE(NULLIF(TRIM(ci_nit_pagador), ''), NULLIF(TRIM(telefono_pagador), '')) as clave_agrupacion"),
                 DB::raw('COUNT(*) as total_reservas'),
                 DB::raw('SUM(monto_total) as monto_total_gastado'),
                 DB::raw('(ARRAY_AGG(nombre_pagador ORDER BY creado_en DESC))[1] as nombre_mas_reciente')
