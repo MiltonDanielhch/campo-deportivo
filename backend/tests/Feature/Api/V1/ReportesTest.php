@@ -249,6 +249,28 @@ class ReportesTest extends TestCase
             ->assertJsonPath('data.0.monto_total_gastado', 100);
     }
 
+    public function test_clientes_frecuentes_usa_telefono_si_no_hay_ci(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $admin = $this->crearFuncionarioAdminParametricas();
+
+        $campo = $this->crearCampo('CAMPO-1', 'Cancha 1');
+
+        // Cliente sin CI/NIT (usa teléfono como clave)
+        $this->crearSolicitudConfirmadaSinCI($campo, '70000000', 'Cliente Sin CI', 100);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/v1/reportes/clientes-frecuentes?desde=2026-10-01&hasta=2026-10-31');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.clave_agrupacion', '70000000')
+            ->assertJsonPath('meta.total_clientes', 1);
+    }
+
     public function test_clientes_frecuentes_usa_telefono_cuando_ci_nit_vacio(): void
     {
         $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
