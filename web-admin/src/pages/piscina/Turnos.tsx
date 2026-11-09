@@ -19,36 +19,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { piscinaService } from '@/services/piscinaService';
 import type { PiscinaTurno } from '@/types/piscina';
+import { dentroNDiasISO, fechaLegible, hoyISO } from '@/lib/fecha';
+import { formatMontoOpcional } from '@/lib/moneda';
 import CrearTurnoDialog from '@/components/piscina/CrearTurnoDialog';
 import CrearTurnosLoteDialog from '@/components/piscina/CrearTurnosLoteDialog';
-
-const iso = (d: Date) => d.toISOString().substring(0, 10);
-const addDays = (base: string, n: number) => {
-  const d = new Date(base + 'T00:00:00');
-  d.setDate(d.getDate() + n);
-  return iso(d);
-};
-const hoy = () => iso(new Date());
-
-// [B101] formatea la fecha del turno SIN tocar ninguna timezone. El backend castea
-// 'fecha' => 'date', así que el ISO que llega tiene el día de BD en la parte previa a
-// la T (con APP_TIMEZONE <= UTC, que es el caso: Bolivia UTC-4 / Docker UTC). Reordenar
-// a dd/mm/aaaa sin new Date() evita el off-by-one que toLocaleDateString(timeZone)
-// introduce cuando APP_TIMEZONE=UTC (00:00Z reinterpretado en Bolivia cae el día anterior).
-const fechaLegible = (iso: string): string => {
-  const [y, m, d] = iso.substring(0, 10).split('-');
-  return `${d}/${m}/${y}`;
-};
-
-/**
- * El backend puede devolver precio_unitario como number o string decimal ("15.00").
- * Si viene null/vacío/no numérico, no mostramos Bs NaN ni Bs 0.00 engañoso.
- */
-function precioPerfilLegible(valor: number | string | null | undefined): string {
-  if (valor === null || valor === undefined || valor === '') return 'Sin precio SIREB';
-  const n = Number(valor);
-  return Number.isFinite(n) ? `Bs ${n.toFixed(2)}` : 'Sin precio SIREB';
-}
 
 export default function TurnosPiscina() {
   const { campoId } = useParams<{ campoId: string }>();
@@ -63,8 +37,8 @@ export default function TurnosPiscina() {
 
   // ⟦LOTE⟧ sin rango, un lote de 60 días × N turnos satura la lista. Filtro por
   // defecto hoy..hoy+30 (el service ya acepta fecha_desde/fecha_hasta).
-  const [desde, setDesde] = useState(hoy());
-  const [hasta, setHasta] = useState(addDays(hoy(), 30));
+  const [desde, setDesde] = useState(hoyISO());
+  const [hasta, setHasta] = useState(dentroNDiasISO(30));
 
   const cargarTurnos = useCallback(async () => {
     if (!campoId) return;
@@ -209,7 +183,7 @@ export default function TurnosPiscina() {
                           </div>
                           <div className="text-sm">
                             <span className="text-slate-600">{perfil.reservado}/{perfil.cupo}</span>
-                            <span className="ml-2 text-slate-400">{precioPerfilLegible(perfil.precio_unitario)}</span>
+                            <span className="ml-2 text-slate-400">{formatMontoOpcional(perfil.precio_unitario, 'Sin precio SIREB')}</span>
                           </div>
                         </div>
                       ))}
