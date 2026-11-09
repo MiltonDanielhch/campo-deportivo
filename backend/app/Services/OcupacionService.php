@@ -27,7 +27,7 @@ class OcupacionService
         EstadoSolicitudReserva::Confirmada->value,
     ];
 
-    private const ROLES_ADMIN = ['admin_parametricas', 'admin_reservas', 'admin_gerencia'];
+    private const ROLES_ADMIN = ['admin_parametricas', 'admin_reservas', 'gerencia'];
 
     public function misCamposYTurnos(Funcionario $funcionario, Carbon $fecha): array
     {
@@ -504,10 +504,8 @@ class OcupacionService
         if ($funcionario->tienePermiso('*')) {
             return true;
         }
-        $nombre = $funcionario->rol?->nombre;
-        $slug   = $funcionario->rol?->slug;
-        return in_array($nombre, self::ROLES_ADMIN, true)
-            || in_array($slug, self::ROLES_ADMIN, true);
+
+        return in_array($funcionario->rol?->nombre, self::ROLES_ADMIN, true);
     }
 
     private function campoAsignado(Funcionario $funcionario, string $campoId): bool
