@@ -371,7 +371,7 @@ export default function Reservas() {
   ];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="min-w-0 w-full space-y-6 p-6">
       {/* Header */}
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -551,7 +551,7 @@ export default function Reservas() {
       </div>
 
       {/* Tabla */}
-      <div className="overflow-hidden rounded-lg border bg-white">
+      <div className="min-w-0 w-full overflow-hidden rounded-lg border bg-white">
         <Table>
           <TableHeader>
             <TableRow>

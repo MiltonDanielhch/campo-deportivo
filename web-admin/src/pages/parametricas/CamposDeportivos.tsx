@@ -477,7 +477,7 @@ export default function CamposDeportivos() {
   });
 
   return (
-    <div className="space-y-6 p-6 max-w-[1600px] mx-auto">
+    <div className="min-w-0 w-full space-y-6 p-6 max-w-[1600px] mx-auto">
       {/* ─── Header  */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -647,7 +647,7 @@ export default function CamposDeportivos() {
 
       {/* ─── Catálogo oficial de SIREB ─── */}
       {vistaSireb && (
-        <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="min-w-0 w-full rounded-xl border bg-card overflow-hidden">
           <div className="overflow-x-auto">
 <Table className="w-full min-w-[1020px] table-fixed">
   <TableHeader>
@@ -853,7 +853,7 @@ export default function CamposDeportivos() {
 
       {/* ─── Tabla de campos locales ─── */}
       {!vistaSireb && (
-      <div className="rounded-xl border bg-card overflow-hidden">
+      <div className="min-w-0 w-full rounded-xl border bg-card overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30 hover:bg-muted/30">
