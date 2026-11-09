@@ -90,13 +90,14 @@ class ReportesController extends Controller
         $limite = min(100, max(1, $request->integer('limite', 50)));
 
         $datos = $this->reportes->clientesFrecuentes($desde, $hasta, $limite);
+        $totalClientes = $this->reportes->totalClientesUnicos($desde, $hasta);
 
         return response()->json([
             'data' => $datos,
             'meta' => [
                 'desde' => $desde->toDateString(),
                 'hasta' => $hasta->toDateString(),
-                'total_clientes' => count($datos),
+                'total_clientes' => $totalClientes,
                 'nota' => ReportesService::NOTA_VISTA_OPERATIVA,
             ],
         ]);

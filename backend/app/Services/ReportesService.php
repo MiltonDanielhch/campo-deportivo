@@ -107,30 +107,31 @@ class ReportesService
     }
 
     /**
-     * Clientes frecuentes: agrupación por COALESCE(ci_nit_pagador, telefono_pagador).
-     *
-     * Usa el índice idx_solicitudes_pagador (compuesto: ci_nit_pagador + telefono_pagador).
+     * Clientes frecuentes: agrupación por CI/NIT normalizado, o teléfono si no hay CI/NIT.
      *
      * Solo cuenta solicitudes CONFIRMADAS. El nombre mostrado es el más reciente
      * para manejar casos donde el mismo CI/NIT tiene nombres escritos distintos.
+     *
+     * Excluye registros sin CI/NIT ni teléfono util: no son un cliente identificable.
      *
      * @return array<int, array<string, mixed>>
      */
     public function clientesFrecuentes(Carbon $desde, Carbon $hasta, int $limite = 50): array
     {
+        $clave = "COALESCE(NULLIF(TRIM(ci_nit_pagador), ''), NULLIF(TRIM(telefono_pagador), ''))";
+
         return SolicitudReserva::query()
             ->where('estado', EstadoSolicitudReserva::Confirmada)
             ->whereBetween('creado_en', [
                 $desde->startOfDay(),
                 $hasta->endOfDay(),
             ])
-            ->select(
-                DB::raw("COALESCE(NULLIF(TRIM(ci_nit_pagador), ''), NULLIF(TRIM(telefono_pagador), '')) as clave_agrupacion"),
-                DB::raw('COUNT(*) as total_reservas'),
-                DB::raw('SUM(monto_total) as monto_total_gastado'),
-                DB::raw('(ARRAY_AGG(nombre_pagador ORDER BY creado_en DESC))[1] as nombre_mas_reciente')
-            )
-            ->groupBy('clave_agrupacion')
+            ->selectRaw("{$clave} as clave_agrupacion")
+            ->selectRaw('COUNT(*) as total_reservas')
+            ->selectRaw('SUM(monto_total) as monto_total_gastado')
+            ->selectRaw('(ARRAY_AGG(nombre_pagador ORDER BY creado_en DESC))[1] as nombre_mas_reciente')
+            ->groupByRaw($clave)
+            ->havingRaw("{$clave} IS NOT NULL")
             ->orderByDesc('total_reservas')
             ->orderByDesc('monto_total_gastado')
             ->limit($limite)
@@ -142,5 +143,28 @@ class ReportesService
                 'monto_total_gastado' => (float) $row->monto_total_gastado,
             ])
             ->all();
+    }
+
+    /**
+     * Total de clientes únicos confirmados en el rango, independientemente del límite del top.
+     *
+     * Usa la misma clave normalizada que clientesFrecuentes(). COUNT(DISTINCT ...)
+     * ignifica NULL automáticamente, así que los registros sin CI/NIT ni teléfono
+     * no entran en el total.
+     */
+    public function totalClientesUnicos(Carbon $desde, Carbon $hasta): int
+    {
+        $clave = "COALESCE(NULLIF(TRIM(ci_nit_pagador), ''), NULLIF(TRIM(telefono_pagador), ''))";
+
+        $total = SolicitudReserva::query()
+            ->where('estado', EstadoSolicitudReserva::Confirmada)
+            ->whereBetween('creado_en', [
+                $desde->startOfDay(),
+                $hasta->endOfDay(),
+            ])
+            ->selectRaw("COUNT(DISTINCT {$clave}) as total")
+            ->value('total');
+
+        return (int) $total;
     }
 }

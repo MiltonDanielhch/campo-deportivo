@@ -249,7 +249,7 @@ class ReportesTest extends TestCase
             ->assertJsonPath('data.0.monto_total_gastado', 100);
     }
 
-    public function test_clientes_frecuentes_usa_telefono_si_no_hay_ci(): void
+    public function test_clientes_frecuentes_usa_telefono_cuando_ci_nit_vacio(): void
     {
         $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
 
@@ -257,8 +257,8 @@ class ReportesTest extends TestCase
 
         $campo = $this->crearCampo('CAMPO-1', 'Cancha 1');
 
-        // Cliente sin CI/NIT (usa teléfono como clave)
-        $this->crearSolicitudConfirmadaSinCI($campo, '70000000', 'Cliente Sin CI', 100);
+        // CI/NIT vacío: debe caer al teléfono, no agrupar por ''.
+        $this->crearSolicitudConfirmada($campo, '', 'Cliente CI vacío', 100, '2026-10-15', '08:00:00', '10:00:00');
 
         Sanctum::actingAs($admin);
 
@@ -267,7 +267,56 @@ class ReportesTest extends TestCase
         $response
             ->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.clave_agrupacion', '70000000');
+            ->assertJsonPath('data.0.clave_agrupacion', '70000000')
+            ->assertJsonPath('meta.total_clientes', 1);
+    }
+
+    public function test_clientes_frecuentes_total_clientes_refleja_todos_aunque_listado_limitado(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $admin = $this->crearFuncionarioAdminParametricas();
+
+        $campo = $this->crearCampo('CAMPO-1', 'Cancha 1');
+
+        // Dos clientes únicos. Con limite=1, data trae solo 1, pero meta.total_clientes debe ser 2.
+        $this->crearSolicitudConfirmada($campo, '1111111', 'Cliente A', 100, '2026-10-15', '08:00:00', '10:00:00');
+        $this->crearSolicitudConfirmada($campo, '2222222', 'Cliente B', 200, '2026-10-15', '10:00:00', '12:00:00');
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/v1/reportes/clientes-frecuentes?desde=2026-10-01&hasta=2026-10-31&limite=1');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.clave_agrupacion', '2222222')
+            ->assertJsonPath('meta.total_clientes', 2);
+    }
+
+    public function test_clientes_frecuentes_ignora_registros_sin_ci_nit_ni_telefono(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-03 10:00:00'));
+
+        $admin = $this->crearFuncionarioAdminParametricas();
+
+        $campo = $this->crearCampo('CAMPO-1', 'Cancha 1');
+
+        // Cliente identificable.
+        $this->crearSolicitudConfirmada($campo, '1234567', 'Cliente válido', 100, '2026-10-15', '08:00:00', '10:00:00');
+
+        // Sin CI/NIT ni teléfono util: no debe aparecer como cliente único.
+        $this->crearSolicitudConfirmadaSinIdentificadores($campo, 'Desconocido', 999, '2026-10-15', '10:00:00', '12:00:00');
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/v1/reportes/clientes-frecuentes?desde=2026-10-01&hasta=2026-10-31');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.clave_agrupacion', '1234567')
+            ->assertJsonPath('meta.total_clientes', 1);
     }
 
     // ─────────────────────────────────────────────
@@ -684,6 +733,53 @@ class ReportesTest extends TestCase
         $detalle->forceFill([
             'estado_solicitud' => EstadoSolicitudReserva::Pendiente->value,
         ])->save();
+    }
+
+    private function crearSolicitudConfirmadaSinIdentificadores(
+        CampoDeportivo $campo,
+        string $nombre,
+        float $monto = 100,
+        string $fecha = '2026-10-15',
+        string $horaInicio = '18:00:00',
+        string $horaFin = '20:00:00'
+    ): void {
+        $solicitud = SolicitudReserva::create([
+            'codigo_seguimiento' => 'RES-'.now()->format('Ymd').'-'.Str::upper(Str::random(10)),
+            'monto_total' => $monto,
+            'monto_confirmado' => $monto,
+            'nombre_pagador' => $nombre,
+            'telefono_pagador' => '',
+            'ci_nit_pagador' => '',
+            'estado' => EstadoSolicitudReserva::Confirmada,
+            'expira_en' => now()->addMinutes(15),
+        ]);
+
+        $solicitud->forceFill(['creado_en' => now()])->save();
+
+        $detalle = SolicitudReservaDetalle::create([
+            'solicitud_reserva_id' => $solicitud->id,
+            'campo_id' => $campo->id,
+            'fecha_reserva' => $fecha,
+            'hora_inicio' => $horaInicio,
+            'hora_fin' => $horaFin,
+            'tarifa_aplicada' => $monto,
+        ]);
+
+        $detalle->forceFill([
+            'estado_solicitud' => EstadoSolicitudReserva::Confirmada->value,
+        ])->save();
+
+        Reserva::create([
+            'solicitud_reserva_id' => $solicitud->id,
+            'solicitud_reserva_detalle_id' => $detalle->id,
+            'codigo_reserva' => 'RSV-'.Str::upper(Str::random(8)),
+            'campo_id' => $campo->id,
+            'fecha_reserva' => $fecha,
+            'hora_inicio' => $horaInicio,
+            'hora_fin' => $horaFin,
+            'monto_pagado' => $monto,
+            'confirmado_en' => now(),
+        ]);
     }
 
     private function crearSolicitudExpirada(
