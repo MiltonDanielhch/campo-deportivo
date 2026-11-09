@@ -28,7 +28,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import { asignacionesService } from '@/services/asignacionesService';
 import { camposService } from '@/services/camposService';
@@ -350,7 +349,27 @@ export default function Asignaciones() {
             </Label>
             <Select value={funcionarioId} onValueChange={seleccionarFuncionario}>
               <SelectTrigger className="w-full md:w-[480px]">
-                <SelectValue placeholder="Elegí un funcionario para gestionar sus asignaciones" />
+                {funcionarioSeleccionado ? (
+                  <span className="flex min-w-0 items-center gap-2.5 text-left">
+                    <Avatar className="size-7 shrink-0">
+                      <AvatarFallback className="text-[10px] font-semibold bg-gradient-to-br from-teal-400 to-emerald-600 text-white">
+                        {iniciales(funcionarioSeleccionado.nombre_completo)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                      <span className="truncate font-medium">
+                        {funcionarioSeleccionado.nombre_completo}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        @{funcionarioSeleccionado.usuario}
+                      </span>
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    Elegí un funcionario para gestionar sus asignaciones
+                  </span>
+                )}
               </SelectTrigger>
               <SelectContent>
                 {funcionariosControl.length === 0 ? (
