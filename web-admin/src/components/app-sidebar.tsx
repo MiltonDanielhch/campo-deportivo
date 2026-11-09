@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Link2Icon,
   Building2 as Building2Icon,
+  Shapes,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -76,7 +77,7 @@ const navGroups: NavGroup[] = [
       {
         title: 'Tipos de Campo',
         url: '/panel/parametricas/tipos-campo',
-        icon: MapIcon,
+        icon: Shapes,
         permiso: 'gestionar-tipos-campo',
       },
       {
