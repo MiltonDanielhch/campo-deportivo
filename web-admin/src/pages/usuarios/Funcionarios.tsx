@@ -68,19 +68,11 @@ import { funcionariosService } from '@/services/funcionariosService';
 import type { Funcionario, Rol } from '@/types/usuarios';
 import { configDeRol } from '@/lib/roles';
 import { fechaRelativa } from '@/lib/fecha';
+import { iniciales } from '@/lib/texto';
 
 const TODOS = 'todos';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
-
-function iniciales(nombre: string): string {
-  return nombre
-    .split(' ')
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-}
 
 // ─── Generador de contraseñas seguras ───
 

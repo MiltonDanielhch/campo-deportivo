@@ -47,6 +47,7 @@ import { funcionariosService } from '@/services/funcionariosService';
 import type { CampoDeportivo } from '@/types/parametricas';
 import type { Funcionario, Rol } from '@/types/usuarios';
 import { configDeRol } from '@/lib/roles';
+import { iniciales } from '@/lib/texto';
 
 const ROL_CONTROL = 'funcionario_control';
 
@@ -120,15 +121,6 @@ function iconoDeTipo(nombre: string | undefined): IconoConfig {
   if (n.includes('paddl') || n.includes('padel')) return ICONOS_DEPORTE.paddle;
   if (n.includes('cicl')) return ICONOS_DEPORTE.ciclismo;
   return FALLBACK_ICONO;
-}
-
-function iniciales(nombre: string): string {
-  return nombre
-    .split(' ')
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 }
 
 export default function Asignaciones() {
