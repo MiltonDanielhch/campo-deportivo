@@ -143,8 +143,16 @@ function iconoDeTipo(nombre: string): IconoConfig {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
-const fechaRelativa = (iso: string): string => {
-  const diff = Date.now() - new Date(iso).getTime();
+const fechaRelativa = (iso?: string | null): string => {
+  if (!iso) return '—';
+
+  const fecha = new Date(iso);
+
+  if (Number.isNaN(fecha.getTime())) {
+    return '—';
+  }
+
+  const diff = Date.now() - fecha.getTime();
   const minutos = Math.floor(diff / 60_000);
   const horas = Math.floor(minutos / 60);
   const dias = Math.floor(horas / 24);
@@ -155,7 +163,8 @@ const fechaRelativa = (iso: string): string => {
   if (horas < 24) return `hace ${horas} h`;
   if (dias < 30) return `hace ${dias} d`;
   if (meses < 12) return `hace ${meses} mes${meses === 1 ? '' : 'es'}`;
-  return new Date(iso).toLocaleDateString('es-BO', { dateStyle: 'medium' });
+
+  return fecha.toLocaleDateString('es-BO', { dateStyle: 'medium' });
 };
 
 const ESTADO_CONFIG: Record<
@@ -319,7 +328,7 @@ export default function TiposCampo() {
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-[1600px] mx-auto">
+    <div className="min-w-0 w-full space-y-6 p-6 max-w-[1600px] mx-auto">
       {/* ─── Header ─── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -397,7 +406,7 @@ export default function TiposCampo() {
       </div>
 
       {/* ─── Tabla ─── */}
-      <div className="rounded-xl border bg-card overflow-hidden">
+      <div className="min-w-0 w-full rounded-xl border bg-card overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30 hover:bg-muted/30">

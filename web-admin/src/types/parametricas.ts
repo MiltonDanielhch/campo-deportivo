@@ -22,7 +22,7 @@ export interface TipoCampo {
   nombre: string;
   descripcion: string | null;
   estado: EstadoTipoCampo;
-  creado_en: string;
+  creado_en?: string | null;
 }
 
 /** Payload para crear/actualizar un tipo de campo. */
