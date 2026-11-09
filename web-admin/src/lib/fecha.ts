@@ -63,6 +63,16 @@ export function fechaLegible(iso: string | null | undefined): string {
 }
 
 /**
+ * Devuelve solo la parte YYYY-MM-DD de un ISO date/datetime.
+ *
+ * No reformatea a dd/mm/yyyy; es para tablas/detalles que muestran fecha corta ISO.
+ */
+export function fechaCortaISO(valor: string | null | undefined): string {
+  if (!valor) return '—';
+  return String(valor).substring(0, 10);
+}
+
+/**
  * Valida formato YYYY-MM-DD y fecha calendárica real.
  */
 export function esFechaISOValida(iso: string): boolean {
@@ -138,30 +148,42 @@ export function fechaMedianaBolivia(iso: string | null | undefined): string {
 }
 
 /**
- * Hora HH:mm para timestamps ISO o strings time.
+ * Hora HH:mm en hora oficial de Bolivia (America/La_Paz).
  *
- * Si llega una fecha sola YYYY-MM-DD, devuelve '—' para no inventar una hora.
+ * - Acepta time-only ("14:30:00" / "14:30").
+ * - Acepta ISO datetime y lo muestra en Bolivia, no en el timezone del browser.
+ * - Date-only o valores inválidos devuelven '--:--' para no inventar hora.
  */
 export function horaLegible(valor: string | null | undefined): string {
-  if (!valor) return '—';
+  if (!valor) return '--:--';
 
   const texto = String(valor);
 
   // Date-only no tiene hora util.
-  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return '—';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return '--:--';
 
   // Time-only: HH:mm o HH:mm:ss.
-  const timeOnly = texto.match(/^(\d{2}:\d{2})/);
-  if (timeOnly) return timeOnly[1];
+  if (/^\d{2}:\d{2}/.test(texto) && !texto.includes('T')) {
+    return texto.slice(0, 5);
+  }
 
   const fecha = new Date(texto);
-  if (Number.isNaN(fecha.getTime())) return texto;
+  if (Number.isNaN(fecha.getTime())) return '--:--';
 
-  return fecha.toLocaleTimeString('es-BO', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
+  try {
+    return fecha.toLocaleTimeString('es-BO', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: TZ_BOLIVIA,
+    });
+  } catch {
+    return fecha.toLocaleTimeString('es-BO', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  }
 }
 
 /**
