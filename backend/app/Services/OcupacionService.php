@@ -508,13 +508,6 @@ class OcupacionService
         return in_array($funcionario->rol?->nombre, self::ROLES_ADMIN, true);
     }
 
-    private function campoAsignado(Funcionario $funcionario, string $campoId): bool
-    {
-        return $funcionario->camposAsignados()
-            ->where('campos_deportivos.id', $campoId)
-            ->exists();
-    }
-
     /**
      * Tolerante a enum backed (ModalidadReservaCampo) o string.
      */
