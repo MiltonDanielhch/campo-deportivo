@@ -58,6 +58,7 @@ import DialogCrearReservaVentanilla from '@/components/reservas/DialogCrearReser
 import RegularizarUsoDialog from '@/components/reservas/RegularizarUsoDialog';
 import { fechaHoraLegible } from '@/lib/fecha';
 import { formatMontoBoB } from '@/lib/moneda';
+import { normalizarNombre } from '@/lib/texto';
 
 const estadoConfig: Record<
   EstadoReserva,
@@ -126,19 +127,6 @@ function resumirCampos(detalles?: DetalleSolicitudAdmin[]): string {
 
 function primeraFecha(detalles?: DetalleSolicitudAdmin[]): string {
   return detalles?.find((detalle) => detalle.fecha_reserva)?.fecha_reserva ?? '—';
-}
-
-/**
- * Normaliza nombre a title case (para datos viejos que vienen en mayúsculas/minúsculas).
- * Los datos nuevos ya vienen normalizados del backend.
- */
-function normalizarNombre(nombre?: string | null): string {
-  if (!nombre) return '—';
-  return nombre
-    .toLowerCase()
-    .split(' ')
-    .map((palabra) => palabra.charAt(0).toUpperCase() + palabra.slice(1))
-    .join(' ');
 }
 
 export default function Reservas() {
