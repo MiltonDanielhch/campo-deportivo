@@ -29,6 +29,7 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/context/AuthContext';
+import { configDeRol } from '@/lib/roles';
 
 type NavItem = {
   title: string;
@@ -239,7 +240,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   {funcionario?.nombre_completo}
                 </span>
                 <span className="truncate text-xs text-sidebar-foreground/60">
-                  {funcionario?.rol?.nombre}
+                  {configDeRol((funcionario as any)?.rol).label}
                 </span>
               </div>
             </SidebarMenuButton>
