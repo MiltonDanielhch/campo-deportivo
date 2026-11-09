@@ -1,11 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Plus, Trash2, Edit, Clock, Users, Copy } from 'lucide-react';
+import { toast } from 'sonner';
+import { Plus, Trash2, Edit, Clock, Users, Copy, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { piscinaService } from '@/services/piscinaService';
 import type { PiscinaTurno } from '@/types/piscina';
 import CrearTurnoDialog from '@/components/piscina/CrearTurnoDialog';
@@ -29,6 +40,16 @@ const fechaLegible = (iso: string): string => {
   return `${d}/${m}/${y}`;
 };
 
+/**
+ * El backend puede devolver precio_unitario como number o string decimal ("15.00").
+ * Si viene null/vacío/no numérico, no mostramos Bs NaN ni Bs 0.00 engañoso.
+ */
+function precioPerfilLegible(valor: number | string | null | undefined): string {
+  if (valor === null || valor === undefined || valor === '') return 'Sin precio SIREB';
+  const n = Number(valor);
+  return Number.isFinite(n) ? `Bs ${n.toFixed(2)}` : 'Sin precio SIREB';
+}
+
 export default function TurnosPiscina() {
   const { campoId } = useParams<{ campoId: string }>();
   const [turnos, setTurnos] = useState<PiscinaTurno[]>([]);
@@ -37,6 +58,8 @@ export default function TurnosPiscina() {
   const [loteAbierto, setLoteAbierto] = useState(false);
   // [editar] turno en edición (null = modo crear).
   const [turnoEditando, setTurnoEditando] = useState<PiscinaTurno | null>(null);
+  const [turnoAEliminar, setTurnoAEliminar] = useState<PiscinaTurno | null>(null);
+  const [eliminando, setEliminando] = useState(false);
 
   // ⟦LOTE⟧ sin rango, un lote de 60 días × N turnos satura la lista. Filtro por
   // defecto hoy..hoy+30 (el service ya acepta fecha_desde/fecha_hasta).
@@ -52,8 +75,8 @@ export default function TurnosPiscina() {
         fecha_hasta: hasta,
       });
       setTurnos(data);
-    } catch (error) {
-      console.error('Error al cargar turnos:', error);
+    } catch {
+      toast.error('No se pudieron cargar los turnos de piscina');
     } finally {
       setCargando(false);
     }
@@ -63,13 +86,20 @@ export default function TurnosPiscina() {
     cargarTurnos();
   }, [cargarTurnos]);
 
-  const handleEliminar = async (turnoId: string) => {
-    if (!confirm('¿Estás seguro de eliminar este turno?')) return;
+  const ejecutarEliminar = async () => {
+    if (!turnoAEliminar) return;
+    setEliminando(true);
     try {
-      await piscinaService.eliminarTurno(turnoId);
+      await piscinaService.eliminarTurno(turnoAEliminar.id);
+      toast.success(
+        `Turno ${String(turnoAEliminar.hora_inicio).slice(0, 5)}–${String(turnoAEliminar.hora_fin).slice(0, 5)} eliminado`,
+      );
+      setTurnoAEliminar(null);
       cargarTurnos();
-    } catch (error) {
-      console.error('Error al eliminar turno:', error);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? 'No se pudo eliminar el turno');
+    } finally {
+      setEliminando(false);
     }
   };
 
@@ -144,12 +174,15 @@ export default function TurnosPiscina() {
                     </Badge>
                   </div>
                   <div className="flex gap-2">
-                    {/* ⟦Fix 3 gate PO⟧ edición de perfiles pendiente: deshabilitado
-                        con título honesto en vez de botón muerto que no hace nada. */}
-                    <Button variant="outline" size="sm" onClick={() => setTurnoEditando(turno)} title="Editar perfiles / estado / observación">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTurnoEditando(turno)}
+                      title="Editar estado, observación y cupos (el intervalo no cambia)"
+                    >
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleEliminar(turno.id)}>
+                    <Button variant="outline" size="sm" onClick={() => setTurnoAEliminar(turno)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -176,7 +209,7 @@ export default function TurnosPiscina() {
                           </div>
                           <div className="text-sm">
                             <span className="text-slate-600">{perfil.reservado}/{perfil.cupo}</span>
-                            <span className="ml-2 text-slate-400">Bs {Number(perfil.precio_unitario).toFixed(2)}</span>
+                            <span className="ml-2 text-slate-400">{precioPerfilLegible(perfil.precio_unitario)}</span>
                           </div>
                         </div>
                       ))}
@@ -188,6 +221,45 @@ export default function TurnosPiscina() {
           ))}
         </div>
       )}
+
+      <AlertDialog
+        open={turnoAEliminar !== null}
+        onOpenChange={(abierto) => {
+          if (!abierto && !eliminando) setTurnoAEliminar(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="size-5 text-destructive" />
+              Eliminar turno{' '}
+              {turnoAEliminar
+                ? `${String(turnoAEliminar.hora_inicio).slice(0, 5)}–${String(turnoAEliminar.hora_fin).slice(0, 5)}`
+                : ''}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 pt-1">
+                <p>
+                  Esta acción no se puede deshacer. Solo se elimina si el turno no tiene reservas asociadas.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Si tiene reservas, el sistema rechazará el borrado; en ese caso usá «Editar» para ponerlo inactivo.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={eliminando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={ejecutarEliminar}
+              disabled={eliminando}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {eliminando ? 'Eliminando…' : 'Confirmar eliminación'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
