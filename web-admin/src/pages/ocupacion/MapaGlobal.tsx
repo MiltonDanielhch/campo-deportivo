@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { MapPin, Calendar, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,27 +21,54 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
+const coordenadasValidas = (campo: CampoMapaGlobal): boolean => {
+  const lat = Number(campo.latitud);
+  const lng = Number(campo.longitud);
+
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat !== 0 &&
+    lng !== 0
+  );
+};
+
 export default function MapaGlobal() {
   const [campos, setCampos] = useState<CampoMapaGlobal[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sinPermisos, setSinPermisos] = useState(false);
   const [fecha, setFecha] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const peticionRef = useRef(0);
 
   const cargarMapa = async () => {
+    const id = ++peticionRef.current;
+
     try {
       setCargando(true);
       setError(null);
+      setSinPermisos(false);
+
       const response = await ocupacionService.mapaGlobal(fecha);
+
+      if (id !== peticionRef.current) return;
+
       setCampos(response.data);
     } catch (err: any) {
-      const mensaje =
-        err.response?.status === 403
-          ? 'No tenés permisos para ver el mapa global'
-          : err.response?.data?.message || 'Error al cargar el mapa';
+      if (id !== peticionRef.current) return;
+
+      const es403 = err.response?.status === 403;
+      const mensaje = es403
+        ? 'No tenés permisos para ver el mapa global'
+        : err.response?.data?.message || 'Error al cargar el mapa';
+
+      setSinPermisos(es403);
       setError(mensaje);
       toast.error(mensaje);
     } finally {
-      setCargando(false);
+      if (id === peticionRef.current) {
+        setCargando(false);
+      }
     }
   };
 
@@ -68,7 +95,10 @@ export default function MapaGlobal() {
   // Centro del mapa: Trinidad, Beni (aproximado)
   const centro = [-14.8333, -64.9];
 
-  if (error && error.includes('permisos')) {
+  const camposConUbicacion = campos.filter(coordenadasValidas);
+  const camposSinCoordenadas = campos.length - camposConUbicacion.length;
+
+  if (sinPermisos) {
     return (
       <div className="p-6">
         <Alert variant="destructive">
@@ -116,6 +146,23 @@ export default function MapaGlobal() {
         </Alert>
       )}
 
+      {!cargando && campos.length === 0 && (
+        <Alert>
+          <AlertDescription>
+            No hay campos activos o en mantenimiento para el {fecha}.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!cargando && camposSinCoordenadas > 0 && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {camposSinCoordenadas} campo(s) no se muestran porque no tienen
+            coordenadas válidas.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Mapa */}
       <Card>
         <CardContent className="p-0">
@@ -134,10 +181,10 @@ export default function MapaGlobal() {
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-                {campos.map((campo) => (
+                {camposConUbicacion.map((campo) => (
                   <Marker
                     key={campo.campo_id}
-                    position={[campo.latitud, campo.longitud]}
+                    position={[Number(campo.latitud), Number(campo.longitud)]}
                     icon={L.divIcon({
                       className: 'custom-marker',
                       html: `<div style="background-color: ${obtenerColorMarcador(campo)}; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
@@ -168,7 +215,7 @@ export default function MapaGlobal() {
 
                           {campo.vinculacion_sireb.vinculado ? (
                             <Badge variant="outline" className="bg-blue-100 text-blue-800">
-                              SIREB: {campo.vinculacion_sireb.servicio_sireb_codigo}
+                              SIREB: {campo.vinculacion_sireb.servicio_sireb_codigo ?? '—'}
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="bg-gray-100 text-gray-800">
