@@ -1,5 +1,20 @@
 const TZ_BOLIVIA = 'America/La_Paz';
 
+const MESES_CORTOS_ES = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+];
+
 function formatearFechaBolivia(timestamp: number): string {
   // en-CA produce YYYY-MM-DD y respetamos America/La_Paz para el día operativo.
   return new Intl.DateTimeFormat('en-CA', {
@@ -88,4 +103,121 @@ export function fechaRelativa(iso: string | null | undefined): string {
   if (meses < 12) return `hace ${meses} mes${meses === 1 ? '' : 'es'}`;
 
   return fecha.toLocaleDateString('es-BO', { dateStyle: 'medium' });
+}
+
+/**
+ * Fecha tipo "10 de nov, 2026" para strings YYYY-MM-DD sin tocar timezone.
+ *
+ * Reemplaza el patrón date-fns:
+ *   format(parseISO(fecha), "d 'de' MMM, yyyy", { locale: es })
+ * evitando el off-by-one de date-only interpretado como UTC.
+ */
+export function fechaMedianaBolivia(iso: string | null | undefined): string {
+  if (!iso) return '—';
+
+  const texto = String(iso);
+  const [anioStr, mesStr, diaStr] = texto.substring(0, 10).split('-');
+
+  const anio = Number(anioStr);
+  const mes = Number(mesStr);
+  const dia = Number(diaStr);
+
+  if (
+    !Number.isFinite(anio) ||
+    !Number.isFinite(mes) ||
+    !Number.isFinite(dia) ||
+    mes < 1 ||
+    mes > 12 ||
+    dia < 1 ||
+    dia > 31
+  ) {
+    return texto;
+  }
+
+  return `${dia} de ${MESES_CORTOS_ES[mes - 1]}, ${anio}`;
+}
+
+/**
+ * Hora HH:mm para timestamps ISO o strings time.
+ *
+ * Si llega una fecha sola YYYY-MM-DD, devuelve '—' para no inventar una hora.
+ */
+export function horaLegible(valor: string | null | undefined): string {
+  if (!valor) return '—';
+
+  const texto = String(valor);
+
+  // Date-only no tiene hora util.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return '—';
+
+  // Time-only: HH:mm o HH:mm:ss.
+  const timeOnly = texto.match(/^(\d{2}:\d{2})/);
+  if (timeOnly) return timeOnly[1];
+
+  const fecha = new Date(texto);
+  if (Number.isNaN(fecha.getTime())) return texto;
+
+  return fecha.toLocaleTimeString('es-BO', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+/**
+ * Fecha + hora legible, equivalente al helper local formatoFecha de Reservas.
+ */
+export function fechaHoraLegible(valor: string | null | undefined): string {
+  if (!valor) return '—';
+
+  const texto = String(valor);
+  const fecha = new Date(texto);
+
+  if (Number.isNaN(fecha.getTime())) return texto;
+
+  return fecha.toLocaleString('es-BO');
+}
+
+/**
+ * Tiempo relativo desde un Date, preservando el wording de MisCampos:
+ * "hace un momento", "hace X segundos", "hace X minutos", "hace X horas".
+ */
+export function tiempoRelativoDesdeDate(fecha: Date | null | undefined): string {
+  if (!fecha) return '—';
+
+  const diff = Math.floor((Date.now() - fecha.getTime()) / 1000);
+
+  if (diff < 10) return 'hace un momento';
+  if (diff < 60) return `hace ${diff} segundos`;
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)} minutos`;
+
+  return `hace ${Math.floor(diff / 3600)} horas`;
+}
+
+/**
+ * Minutos desde medianoche en America/La_Paz.
+ *
+ * Se usa para el pulso de "franja actual" sin depender del timezone del browser.
+ */
+export function minutosDesdeMedianocheBolivia(): number {
+  try {
+    const partes = new Intl.DateTimeFormat('en-GB', {
+      timeZone: TZ_BOLIVIA,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+
+    const hora = Number(partes.find((p) => p.type === 'hour')?.value ?? '0');
+    const minuto = Number(partes.find((p) => p.type === 'minute')?.value ?? '0');
+
+    if (Number.isFinite(hora) && Number.isFinite(minuto)) {
+      return hora * 60 + minuto;
+    }
+  } catch {
+    // Fallback al timezone local del browser si Intl falla en algún entorno raro.
+  }
+
+  const ahora = new Date();
+  return ahora.getHours() * 60 + ahora.getMinutes();
 }
