@@ -71,6 +71,7 @@ import DialogCrearReservaPiscinaVentanilla from '@/components/reservas/DialogCre
 import { SnapshotEtiquetado } from '@/components/reservas/SnapshotAuditoria';
 import { fechaCortaISO, fechaHoraLegible, horaLegible } from '@/lib/fecha';
 import { formatMontoBoB } from '@/lib/moneda';
+import { normalizarNombre } from '@/lib/texto';
 
 const estadoConfig: Record<
   EstadoReserva,
@@ -137,19 +138,6 @@ function resumirCampo(reserva: PiscinaReservaAdmin): string {
 function primeraFechaDetalle(reserva: PiscinaReservaAdmin): string {
   const detalle = reserva.detalles?.[0];
   return detalle?.fecha ? fechaCortaISO(detalle.fecha) : '—';
-}
-
-/**
- * Normaliza nombre a title case (para datos viejos que vienen en mayúsculas/minúsculas).
- * Los datos nuevos ya vienen normalizados del backend.
- */
-function normalizarNombre(nombre?: string | null): string {
-  if (!nombre) return '—';
-  return nombre
-    .toLowerCase()
-    .split(' ')
-    .map((palabra) => palabra.charAt(0).toUpperCase() + palabra.slice(1))
-    .join(' ');
 }
 
 /**
