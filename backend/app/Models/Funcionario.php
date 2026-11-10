@@ -26,6 +26,7 @@ class Funcionario extends Authenticatable
         'rol_id',
         'estado',
         'mamore_id',
+        'puede_login_local',
     ];
 
     protected $hidden = [
@@ -36,6 +37,7 @@ class Funcionario extends Authenticatable
     {
         return [
             'creado_en' => 'datetime',
+            'puede_login_local' => 'boolean',
         ];
     }
 

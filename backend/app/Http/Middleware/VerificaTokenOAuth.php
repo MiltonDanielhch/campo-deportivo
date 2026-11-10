@@ -26,6 +26,12 @@ class VerificaTokenOAuth
         $desdeSesion = false;
 
         if (! $token) {
+            $local = $this->autenticarSesionLocal($request);
+
+            if ($local) {
+                return $next($request);
+            }
+
             $token = $request->session()->get('access_token');
             $desdeSesion = true;
         }
@@ -72,6 +78,44 @@ class VerificaTokenOAuth
         $request->attributes->set('funcionario', $funcionario);
 
         return $next($request);
+    }
+
+    private function autenticarSesionLocal(Request $request): ?Funcionario
+    {
+        $session = $request->session();
+
+        $funcionarioId = $session->get('local_auth_funcionario_id');
+        $expiraEn = $session->get('local_auth_expira_en');
+
+        if (! $funcionarioId || ! $expiraEn || $expiraEn < time()) {
+            $session->forget([
+                'local_auth_funcionario_id',
+                'local_auth_expira_en',
+            ]);
+
+            return null;
+        }
+
+        $funcionario = Funcionario::with('rol:id,nombre,permisos')
+            ->find($funcionarioId);
+
+        if (
+            ! $funcionario ||
+            $funcionario->estado !== 'activo' ||
+            ! $funcionario->puede_login_local
+        ) {
+            $session->forget([
+                'local_auth_funcionario_id',
+                'local_auth_expira_en',
+            ]);
+
+            return null;
+        }
+
+        $request->setUserResolver(fn () => $funcionario);
+        $request->attributes->set('funcionario', $funcionario);
+
+        return $funcionario;
     }
 
     private function estaExpirado(string $token): bool

@@ -7,6 +7,11 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Str;
 
+use App\Models\Funcionario;
+use App\Services\AuditoriaService;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+
 class AuthController extends Controller
 {
     public function loginRedirect()
@@ -148,7 +153,7 @@ class AuthController extends Controller
 
         return redirect(config('services.ibare.spa_url'));
     }
-    
+
     public function me(Request $request)
     {
         $funcionario = $request->attributes->get('funcionario');
@@ -182,7 +187,7 @@ class AuthController extends Controller
 
     public function logout()
     {
-        Session::forget(['access_token', 'refresh_token', 'token_expires_at']);
+        Session::forget(['access_token', 'refresh_token', 'token_expires_at', 'local_auth_funcionario_id', 'local_auth_expira_en',]);
 
         return response()->json(['message' => 'Sesion cerrada']);
     }
@@ -192,5 +197,87 @@ class AuthController extends Controller
         Session::put('access_token', $tokens['access_token']);
         Session::put('refresh_token', $tokens['refresh_token'] ?? null);
         Session::put('token_expires_at', now()->addSeconds($tokens['expires_in'] ?? 600));
+    }
+
+    public function localLogin(Request $request)
+    {
+        $validated = $request->validate([
+            'usuario' => ['required', 'string', 'max:50'],
+            'password' => ['required', 'string'],
+        ]);
+
+        $funcionario = Funcionario::with('rol:id,nombre,permisos')
+            ->where('usuario', $validated['usuario'])
+            ->first();
+
+        $motivo = null;
+
+        if (! $funcionario) {
+            $motivo = 'usuario_inexistente';
+        } elseif (! $funcionario->puede_login_local) {
+            $motivo = 'login_local_no_habilitado';
+        } elseif ($funcionario->estado !== 'activo') {
+            $motivo = 'funcionario_inactivo';
+        } elseif (! Hash::check($validated['password'], $funcionario->password_hash)) {
+            $motivo = 'password_invalida';
+        }
+
+        if ($motivo !== null) {
+            if ($funcionario) {
+                AuditoriaService::registrar(
+                    tabla: 'funcionarios',
+                    registroId: $funcionario->id,
+                    accion: 'login_local_fallido',
+                    usuarioId: $funcionario->id,
+                    datosAnteriores: null,
+                    datosNuevos: [
+                        'motivo' => $motivo,
+                        'ip' => $request->ip(),
+                    ],
+                );
+            }
+
+            Log::warning('Login local fallido', [
+                'usuario' => $validated['usuario'],
+                'motivo' => $motivo,
+                'ip' => $request->ip(),
+            ]);
+
+            return response()->json([
+                'message' => 'Credenciales inválidas o acceso de emergencia no disponible',
+            ], 401);
+        }
+
+        Session::put('local_auth_funcionario_id', $funcionario->id);
+        Session::put('local_auth_expira_en', now()->addMinutes(15)->timestamp);
+
+        AuditoriaService::registrar(
+            tabla: 'funcionarios',
+            registroId: $funcionario->id,
+            accion: 'login_local_exitoso',
+            usuarioId: $funcionario->id,
+            datosAnteriores: null,
+            datosNuevos: [
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'ttl_min' => 15,
+            ],
+        );
+
+        return response()->json([
+            'message' => 'Sesión de emergencia iniciada',
+            'data' => [
+                'id' => $funcionario->id,
+                'nombre_completo' => $funcionario->nombre_completo,
+                'usuario' => $funcionario->usuario,
+                'estado' => $funcionario->estado,
+                'rol' => $funcionario->rol ? [
+                    'id' => $funcionario->rol->id,
+                    'nombre' => $funcionario->rol->nombre,
+                    'descripcion' => $funcionario->rol->descripcion,
+                    'permisos' => $funcionario->rol->permisos ?? [],
+                ] : null,
+            ],
+        ]);
     }
 }
