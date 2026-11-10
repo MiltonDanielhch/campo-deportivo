@@ -24,7 +24,8 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  loginWithIbare: () => void; // Cambiado: ahora es una redirección
+  loginWithIbare: () => void;
+  loginLocal: (usuario: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   tienePermiso: (permiso: string) => boolean;
 }
@@ -55,6 +56,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = 'http://localhost:8000/auth/login-redirect';
   };
 
+  const loginLocal = async (usuario: string, password: string) => {
+    await apiClient.post('/v1/auth/local-login', {
+      usuario,
+      password,
+    });
+
+    const res = await apiClient.get<{ data: Funcionario }>('/v1/auth/me');
+
+    setState({
+      funcionario: res.data.data,
+      cargando: false,
+    });
+  };
+
   const logout = async () => {
     try {
       // Llama al backend para limpiar la sesión
@@ -74,7 +89,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, loginWithIbare, logout, tienePermiso }}>
+    <AuthContext.Provider
+      value={{ ...state, loginWithIbare, loginLocal, logout, tienePermiso }}
+    >
       {children}
     </AuthContext.Provider>
   );
