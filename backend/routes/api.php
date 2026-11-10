@@ -41,6 +41,9 @@ Route::get('/v1/health', [HealthController::class, 'index']);
 // El login local se eliminó: la autenticación humana pasa por Ibare
 // (GET /auth/login-redirect y GET /auth/callback, en routes/web.php).
 
+Route::middleware('throttle:5,1')
+    ->post('/v1/auth/local-login', [AuthController::class, 'localLogin']);
+
 // Webhook servidor-a-servidor del Core de Recaudaciones (HU-D4).
 // Fuera del grupo público (sin throttle: no debe bloquear reintentos
 // del Core) y fuera de auth:sanctum (se autentica por firma HMAC).
