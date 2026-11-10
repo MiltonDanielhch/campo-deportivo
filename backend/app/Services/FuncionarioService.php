@@ -129,6 +129,23 @@ class FuncionarioService
         $estadoAnterior = $funcionario->estado;
         $usuarioId = auth()->id();
 
+        if ($nuevoEstado === 'inactivo' && $estadoAnterior === 'activo') {
+            $rolNombre = Rol::where('id', $funcionario->rol_id)->value('nombre');
+
+            if ($rolNombre === 'admin_parametricas') {
+                $hayOtroAdminActivo = Funcionario::where('rol_id', $funcionario->rol_id)
+                    ->where('estado', 'activo')
+                    ->where('id', '!=', $funcionario->id)
+                    ->exists();
+
+                if (! $hayOtroAdminActivo) {
+                    throw ValidationException::withMessages([
+                        'estado' => 'No se puede inactivar al último administrador activo.',
+                    ]);
+                }
+            }
+        }
+
         $funcionario->update(['estado' => $nuevoEstado]);
 
         AuditoriaService::registrar(

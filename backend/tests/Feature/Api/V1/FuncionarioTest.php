@@ -296,4 +296,44 @@ class FuncionarioTest extends TestCase
         $this->admin->refresh();
         $this->assertEquals($this->rolGerencia->id, $this->admin->rol_id);
     }
+
+    public function test_no_inactivar_al_ultimo_admin_parametricas(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $this->patchJson("/api/v1/funcionarios/{$this->admin->id}/estado", [
+            'estado' => 'inactivo',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('estado');
+
+        $this->admin->refresh();
+        $this->assertSame('activo', $this->admin->estado);
+    }
+
+    public function test_si_puede_inactivar_admin_cuando_hay_otro_admin_activo(): void
+    {
+        $otroAdmin = Funcionario::create([
+            'nombre_completo' => 'Segundo Admin',
+            'ci' => '99999999',
+            'usuario' => 'admin2',
+            'password_hash' => bcrypt('secret'),
+            'rol_id' => $this->rolAdmin->id,
+            'estado' => 'activo',
+        ]);
+
+        Sanctum::actingAs($this->admin);
+
+        $this->patchJson("/api/v1/funcionarios/{$this->admin->id}/estado", [
+            'estado' => 'inactivo',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.estado', 'inactivo');
+
+        $this->admin->refresh();
+        $otroAdmin->refresh();
+
+        $this->assertSame('inactivo', $this->admin->estado);
+        $this->assertSame('activo', $otroAdmin->estado);
+    }
 }
