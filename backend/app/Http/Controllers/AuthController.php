@@ -38,7 +38,7 @@ class AuthController extends Controller
 
     public function callback(Request $request)
     {
-        \Log::info('Callback recibido', [
+        Log::info('Callback recibido', [
             'code' => $request->code ? 'presente' : 'ausente',
             'state' => $request->state,
             'error' => $request->error,
@@ -49,7 +49,7 @@ class AuthController extends Controller
         if ($request->filled('error')) {
             $error = $request->input('error');
             $description = $request->input('error_description', '');
-            \Log::warning("Ibare devolvió error en callback", [
+            Log::warning("Ibare devolvió error en callback", [
                 'error' => $error,
                 'description' => $description,
                 'hint' => $request->input('hint'),
@@ -59,7 +59,7 @@ class AuthController extends Controller
         }
 
         if (! $request->code || $request->state !== Session::get('oauth_state')) {
-            \Log::warning('State no coincide o code ausente', [
+            Log::warning('State no coincide o code ausente', [
                 'request_state' => $request->state,
                 'session_state' => Session::get('oauth_state'),
                 'has_code' => !empty($request->code),
@@ -74,7 +74,7 @@ class AuthController extends Controller
         $redirectUri = config('services.ibare.redirect_uri');
         $codeVerifier = Session::get('oauth_code_verifier');
 
-        \Log::info('=== INICIO diagnóstico OAuth2 Ibare ===', [
+        Log::info('=== INICIO diagnóstico OAuth2 Ibare ===', [
             'token_url' => $tokenUrl,
             'client_id' => $clientId,
             'redirect_uri' => $redirectUri,
@@ -88,33 +88,32 @@ class AuthController extends Controller
         ];
 
         // ─── Variante 1: POST body con client_id y client_secret ───
-        \Log::info('Variante 1: POST body con credenciales');
+        Log::info('Variante 1: POST body con credenciales');
         $response1 = Http::timeout(10)->asForm()->post($tokenUrl, array_merge($payloadBase, [
             'client_id' => $clientId,
             'client_secret' => $clientSecret,
         ]));
-        \Log::info('Respuesta Variante 1', [
+        Log::info('Respuesta Variante 1', [
             'status' => $response1->status(),
-            'body' => $response1->json(),
         ]);
 
         // ─── Variante 2: Basic Auth (credentials en header) ───
-        \Log::info('Variante 2: Basic Auth');
+        Log::info('Variante 2: Basic Auth');
         $response2 = Http::timeout(10)
             ->withBasicAuth($clientId, $clientSecret)
             ->asForm()
             ->post($tokenUrl, $payloadBase);
-        \Log::info('Respuesta Variante 2', [
+        Log::info('Respuesta Variante 2', [
             'status' => $response2->status(),
             'body' => $response2->json(),
         ]);
 
         // ─── Variante 3: Solo client_id en body (cliente público) ───
-        \Log::info('Variante 3: Solo client_id (cliente público)');
+        Log::info('Variante 3: Solo client_id (cliente público)');
         $response3 = Http::timeout(10)->asForm()->post($tokenUrl, array_merge($payloadBase, [
             'client_id' => $clientId,
         ]));
-        \Log::info('Respuesta Variante 3', [
+        Log::info('Respuesta Variante 3', [
             'status' => $response3->status(),
             'body' => $response3->json(),
         ]);
@@ -133,7 +132,7 @@ class AuthController extends Controller
         Session::forget(['oauth_state', 'oauth_code_verifier']);
 
         if (!$response || $response->failed()) {
-            \Log::error('=== FIN diagnóstico: ninguna variante funcionó ===', [
+            Log::error('=== FIN diagnóstico: ninguna variante funcionó ===', [
                 'variante1_status' => $response1->status(),
                 'variante2_status' => $response2->status(),
                 'variante3_status' => $response3->status(),
@@ -142,11 +141,11 @@ class AuthController extends Controller
             return redirect(config('services.ibare.spa_url').'/?auth_error=canje');
         }
 
-        \Log::info("=== FIN diagnóstico: Variante {$varianteGanadora} funcionó ===");
+        Log::info("=== FIN diagnóstico: Variante {$varianteGanadora} funcionó ===");
 
         $this->guardarTokens($response->json());
 
-        \Log::info('Tokens guardados en sesión', [
+        Log::info('Tokens guardados en sesión', [
             'has_access_token' => !empty(Session::get('access_token')),
             'has_refresh_token' => !empty(Session::get('refresh_token')),
         ]);
