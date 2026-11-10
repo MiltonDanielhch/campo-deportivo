@@ -23,6 +23,7 @@ use App\Models\AsociacionAlumno;
 use App\Models\SolicitudDetalleAlumno;
 use App\Services\Sireb\SirebLiquidacionService;
 use App\Services\SolicitudesReserva\SolicitudReservaAdminQueryService;
+use App\Services\SolicitudesReserva\SolicitudReservaPricingService;
 use Carbon\Carbon;
 use Generator;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -84,6 +85,7 @@ class SolicitudReservaService
         private CatalogoSirebService $catalogo,
         private SirebLiquidacionService $liquidaciones,
         private SolicitudReservaAdminQueryService $adminQuery,
+        private SolicitudReservaPricingService $pricing,
     ) {}
 
     /**
@@ -123,7 +125,7 @@ class SolicitudReservaService
         $campos = $this->verificarFranjas($datos->franjas);
 
         // ── P8.2B: resolver variante/tarifa/cantidad ANTES de persistir ──
-        $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin, $puedeUsarNoVisible, $convenioAsociacion);
+        $franjasResueltas = $this->pricing->resolverFranjasParaCrear($datos->franjas, $campos, $esAdmin, $puedeUsarNoVisible, $convenioAsociacion);
 
         // [convenio-guard] variante de convenio solo pa' asociación VIGENTE del mismo tipo.
         $this->validarVariantesConvenio($franjasResueltas, $asociacion);
@@ -134,17 +136,10 @@ class SolicitudReservaService
         // ── P8.4B: hora de inicio más temprana por campo, para resolver
         // servicios con tarifa diurna/nocturna (ej. escenario) según cuándo
         // se usa el espacio. ──
-        $horasPorCampo = [];
-        foreach ($franjasResueltas as $r) {
-            $cid = $r['franja']->campoId;
-            $seg = self::aSegundos($r['franja']->horaInicio);
-            if (! isset($horasPorCampo[$cid]) || $seg < $horasPorCampo[$cid]) {
-                $horasPorCampo[$cid] = $seg;
-            }
-        }
+        $horasPorCampo = $this->pricing->calcularHorasPorCampo($franjasResueltas);
 
         // ── P8.3B / P8.4B: resolver servicios adicionales ANTES de persistir ──
-        $serviciosResueltos = $this->resolverServiciosParaCrear(
+        $serviciosResueltos = $this->pricing->resolverServiciosParaCrear(
             $datos->servicios,
             $campos,
             $esAdmin,
@@ -306,18 +301,11 @@ class SolicitudReservaService
         // Capa 1 con gates de tiempo saltados (regularización).
         $campos = $this->verificarFranjas($datos->franjas, saltarGatesTiempo: true);
 
-        $franjasResueltas = $this->resolverFranjasParaCrear($datos->franjas, $campos, esAdmin: true);
+        $franjasResueltas = $this->pricing->resolverFranjasParaCrear($datos->franjas, $campos, esAdmin: true);
 
-        $horasPorCampo = [];
-        foreach ($franjasResueltas as $r) {
-            $cid = $r['franja']->campoId;
-            $seg = self::aSegundos($r['franja']->horaInicio);
-            if (! isset($horasPorCampo[$cid]) || $seg < $horasPorCampo[$cid]) {
-                $horasPorCampo[$cid] = $seg;
-            }
-        }
+        $horasPorCampo = $this->pricing->calcularHorasPorCampo($franjasResueltas);
 
-        $serviciosResueltos = $this->resolverServiciosParaCrear(
+        $serviciosResueltos = $this->pricing->resolverServiciosParaCrear(
             $datos->servicios,
             $campos,
             true,
@@ -595,7 +583,7 @@ class SolicitudReservaService
                 'campo' => $campo,
                 'tarifas' => $tarifasActivas,
                 'variantes' => $variantes,
-                'inicio_noche' => self::aSegundos($campo->hora_inicio_noche ?? '18:00:00'),
+                'inicio_noche' => SolicitudReservaPricingService::aSegundos($campo->hora_inicio_noche ?? '18:00:00'),
             ];
 
             // [FIX #2 tz] Parsear la fecha pedida en hora Bolivia para que
@@ -638,8 +626,8 @@ class SolicitudReservaService
 
     private function verificarFranjaEnGrilla(FranjaSolicitadaDTO $franja, array $grilla, bool $saltarGatesTiempo = false): void
     {
-        $fInicio = self::aSegundos($franja->horaInicio);
-        $fFin = self::aSegundos($franja->horaFin);
+        $fInicio = SolicitudReservaPricingService::aSegundos($franja->horaInicio);
+        $fFin = SolicitudReservaPricingService::aSegundos($franja->horaFin);
 
         if ($fFin <= $fInicio) {
             throw ValidationException::withMessages([
@@ -648,8 +636,9 @@ class SolicitudReservaService
         }
 
         $solapados = collect($grilla['bloques'])->filter(
-            fn (array $b) => self::aSegundos($b['hora_inicio']) < $fFin
-                && self::aSegundos($b['hora_fin']) > $fInicio,
+            fn (array $b) => SolicitudReservaPricingService::aSegundos($b['hora_inicio']) < $fFin
+                && SolicitudReservaPricingService::aSegundos($b['hora_fin']) > $fInicio,
+
         );
 
         if ($solapados->isEmpty()) {
@@ -721,10 +710,10 @@ class SolicitudReservaService
 
         for ($i = 0; $i < $total; $i++) {
             for ($j = $i + 1; $j < $total; $j++) {
-                $aIni = self::aSegundos($franjas[$i]->horaInicio);
-                $aFin = self::aSegundos($franjas[$i]->horaFin);
-                $bIni = self::aSegundos($franjas[$j]->horaInicio);
-                $bFin = self::aSegundos($franjas[$j]->horaFin);
+                $aIni = SolicitudReservaPricingService::aSegundos($franjas[$i]->horaInicio);
+                $aFin = SolicitudReservaPricingService::aSegundos($franjas[$i]->horaFin);
+                $bIni = SolicitudReservaPricingService::aSegundos($franjas[$j]->horaInicio);
+                $bFin = SolicitudReservaPricingService::aSegundos($franjas[$j]->horaFin);
 
                 if ($aIni < $bFin && $aFin > $bIni) {
                     throw ValidationException::withMessages([
@@ -745,350 +734,6 @@ class SolicitudReservaService
                 'franjas' => 'La fecha debe estar entre hoy y 60 días en el futuro.',
             ]);
         }
-    }
-
-    /**
-     * P8.2B: resuelve variante/tarifa/cantidad para cada franja antes de persistir.
-     *
-     * Esto permite guardar snapshot en solicitud_reserva_detalle y que la
-     * liquidación SIREB use exactamente la tarifa elegida, no una resolución
-     * posterior que podría cambiar con el tiempo.
-     *
-     * @param  FranjaSolicitadaDTO[]  $franjas
-     * @return array<int, array<string, mixed>>
-     */
-    private function resolverFranjasParaCrear(array $franjas, array $campos, bool $esAdmin, bool $puedeUsarNoVisible = false, ?Asociacion $convenioAsociacion = null): array
-    {
-        $resueltas = [];
-
-        foreach ($franjas as $franja) {
-            $resuelta = $this->resolverTarifaParaFranja(
-                $franja,
-                $campos[$franja->campoId],
-                $esAdmin,
-                $puedeUsarNoVisible,
-                $convenioAsociacion
-            );
-
-            $resuelta['franja'] = $franja;
-            $resuelta['subtotal'] = (float) $resuelta['precio_unitario'] * (int) $resuelta['cantidad'];
-
-            $resueltas[] = $resuelta;
-        }
-
-        return $resueltas;
-    }
-
-    /**
-     * Resuelve la tarifa SIREB aplicable a una franja.
-     *
-     * Reglas:
-     * - Si la franja trae variante_id, usa las tarifas de esa variante.
-     * - Si no trae variante_id y el campo tiene variantes activas sin servicio
-     *   base, exige variante.
-     * - Si no trae variante_id y el campo es legacy, mantiene comportamiento actual.
-     * - Público solo puede usar variantes con visible_publico = true.
-     *
-     * @return array{
-     *     variante_id: ?string,
-     *     servicio_sireb_id: ?string,
-     *     tarifa_sireb_id: string,
-     *     etiqueta_sireb: ?string,
-     *     cantidad: int,
-     *     precio_unitario: float
-     * }
-     */
-    private function resolverTarifaParaFranja(FranjaSolicitadaDTO $franja, array $campoInfo, bool $esAdmin, bool $puedeUsarNoVisible = false, ?Asociacion $convenioAsociacion = null): array
-    {
-        $variante = null;
-        $tarifas = $campoInfo['tarifas'];
-
-        if (filled($franja->varianteId)) {
-            $variante = $campoInfo['variantes']->get($franja->varianteId);
-
-            if (! $variante) {
-                throw ValidationException::withMessages([
-                    'franjas' => "La variante seleccionada no pertenece al campo {$campoInfo['campo']->nombre}.",
-                ]);
-            }
-
-            // [Fase 6a] puedeUsarNoVisible abre el gate para el asociado logueado
-            // online SIN flipo la flag visible_publico. El anónimo sigue bloqueado.
-            if (! $esAdmin && ! $puedeUsarNoVisible && ! $variante->visible_publico) {
-                throw ValidationException::withMessages([
-                    'franjas' => "La variante {$variante->nombre} solo está disponible en ventanilla.",
-                ]);
-            }
-
-            if ($variante->unidad_medida !== 'hora') {
-                throw ValidationException::withMessages([
-                    'franjas' => "La variante {$variante->nombre} no es reservable por franja horaria en esta etapa.",
-                ]);
-            }
-
-            if (blank($variante->servicio_sireb_id)) {
-                throw ValidationException::withMessages([
-                    'franjas' => "La variante {$variante->nombre} no está vinculada a SIREB. Ejecutá la sincronización.",
-                ]);
-            }
-
-            $tarifas = $tarifas->where('servicio_sireb_id', $variante->servicio_sireb_id);
-        } else {
-            // [Fase 6b] Auto-resolución de variante de convenio para asociación
-            // logueada que NO mandó variante_id explícito: el token ya validó la
-            // asociación (convenioAsociacion no-null) y su tipo determina cuál
-            // variante le corresponde. Solo se auto-elige si hay EXACTAMENTE UNA
-            // variante horaria activa, vinculada a SIREB, cuyo tipo_asociacion
-            // coincide con el tipo de la asociación. Cero o múltiples coincidencias
-            // -> NO se auto-resuelve: cae al logic original (422 "requiere
-            // seleccionar variante" o legacy), nunca se elige una variante de
-            // precio equivocado.
-            $autoVariante = $this->autoResolverVarianteConvenio(
-                $campoInfo['variantes'],
-                $convenioAsociacion,
-            );
-
-            if ($autoVariante !== null) {
-                $variante = $autoVariante;
-                $tarifas = $tarifas->where('servicio_sireb_id', $variante->servicio_sireb_id);
-            } else {
-                // Si el campo tiene variantes arancelarias y no tiene servicio base,
-                // no se puede adivinar cuál cobrar.
-                if ($campoInfo['variantes']->isNotEmpty() && blank($campoInfo['campo']->servicio_sireb_id)) {
-                    throw ValidationException::withMessages([
-                        'franjas' => "El campo {$campoInfo['campo']->nombre} requiere seleccionar una variante arancelaria.",
-                    ]);
-                }
-
-                // Legacy: si el campo tiene servicio base, priorizamos tarifas de ese
-                // servicio. Si no hay coincidencia (datos viejos sin servicio_sireb_id
-                // en la tarifa), caemos al comportamiento actual.
-                if (filled($campoInfo['campo']->servicio_sireb_id)) {
-                    $filtradas = $tarifas->where('servicio_sireb_id', $campoInfo['campo']->servicio_sireb_id);
-
-                    if ($filtradas->isNotEmpty()) {
-                        $tarifas = $filtradas;
-                    }
-                } elseif ($tarifas->whereNotNull('servicio_sireb_id')->isNotEmpty()) {
-                    // [B92-a] campo desvinculado (sin servicio_sireb_id) y sin variantes,
-                    // pero con tarifas espejadas que apuntan a un servicio (huérfanas de un
-                    // vínculo roto: 305 no las purga al desvincular). El invariante 862
-                    // "reservable ⟺ servicio_sireb_id con tarifa" no se cumple → bloqueo pa'
-                    // que no reserve/cobre la tarifa vieja. Las tarifas legacy (servicio_sireb_id
-                    // null en la fila, :796-797) NO se bloquean: son datos viejos sin servicio,
-                    // no huérfanas de un vínculo roto; caen al comportamiento actual.
-                    throw ValidationException::withMessages([
-                        'franjas' => "El campo {$campoInfo['campo']->nombre} no está vinculado a SIREB pero tiene tarifas espejadas de un servicio. Vinculalo o ejecutá la sincronización.",
-                    ]);
-                }
-            }
-        }
-
-        if ($tarifas->isEmpty()) {
-            throw ValidationException::withMessages([
-                'franjas' => "No hay tarifa SIREB vigente espejada para la selección del campo {$campoInfo['campo']->nombre}.",
-            ]);
-        }
-
-        $unica = $tarifas->firstWhere('clasificacion', 'unica');
-
-        if ($unica) {
-            $tarifa = $unica;
-        } else {
-            $tipo = self::aSegundos($franja->horaInicio) < $campoInfo['inicio_noche']
-                ? 'diurna'
-                : 'nocturna';
-
-            $tarifa = $tarifas->firstWhere('clasificacion', $tipo);
-
-            if (! $tarifa) {
-                throw ValidationException::withMessages([
-                    'franjas' => "No hay tarifa {$tipo} vigente espejada para la franja solicitada.",
-                ]);
-            }
-        }
-
-        // P8.2B: en variantes la tarifa SIREB es obligatoria porque el cobro
-        // depende de la variante elegida. En campos legacy permitimos null y
-        // dejamos que la liquidación caiga al resolvedor viejo: público queda
-        // pendiente con reintento, ventanilla rechaza ruidoso. Así no rompemos
-        // HU-D8 ni los fixtures viejos.
-        if ($variante !== null && blank($tarifa->tarifa_sireb_id)) {
-            throw ValidationException::withMessages([
-                'franjas' => "La variante {$variante->nombre} no tiene tarifa SIREB espejada. Ejecutá la sincronización.",
-            ]);
-        }
-
-        return [
-            'variante_id' => $variante?->id,
-            'servicio_sireb_id' => $tarifa->servicio_sireb_id ?? $variante?->servicio_sireb_id,
-            // Legacy puede quedar null; variantes ya fueron validadas arriba.
-            'tarifa_sireb_id' => $tarifa->tarifa_sireb_id,
-            'etiqueta_sireb' => $tarifa->etiqueta_sireb,
-            'cantidad' => 1,
-            'precio_unitario' => (float) $tarifa->precio_por_hora,
-        ];
-    }
-
-    /**
-     * [Fase 6b] Elige la única variante de convenio que le corresponde a una
-     * asociación logueada cuando el front no mandó variante_id explícito.
-     *
-     * Devuelve null (=> NO se auto-resuelve, cae al logic original) si:
-     *  - no hay convenioAsociacion (anónimo / ventanilla / ciudadano no asociado);
-     *  - la asociación no tiene tipo definido;
-     *  - no hay EXACTAMENTE UNA variante horaria activa, vinculada a SIREB, cuyo
-     *    tipo_asociacion coincida con el tipo de la asociación.
-     *
-     * Nunca devuelve una variante ambigua: ante 0 o >1 coincidencias retorna null,
-     * así que el precio que se cobra es siempre el de LA variante que matchea el
-     * tipo de la asociación, o error ruidoso (422), jamás un precio equivocado.
-     */
-    private function autoResolverVarianteConvenio(Collection $variantes, ?Asociacion $convenioAsociacion): ?ArancelVariante
-    {
-        if ($convenioAsociacion === null) {
-            return null;
-        }
-
-        $tipoAsoc = $convenioAsociacion->tipo?->value;
-        if (blank($tipoAsoc)) {
-            return null;
-        }
-
-        $candidatas = $variantes->filter(
-            fn (ArancelVariante $v) => $v->activo
-                && $v->unidad_medida === 'hora'
-                && $v->tipo_asociacion === $tipoAsoc
-                && filled($v->servicio_sireb_id)
-        );
-
-        return $candidatas->count() === 1 ? $candidatas->first() : null;
-    }
-
-    /**
-     * P8.3B: resuelve servicios adicionales antes de persistir.
-     *
-     * Reglas:
-     * - El servicio debe pertenecer a un campo presente en las franjas.
-     * - La variante debe estar activa.
-     * - No se aceptan variantes horarias como servicio adicional.
-     * - Público solo puede usar servicios visibles públicamente.
-     * - Debe tener servicio_sireb_id y tarifa SIREB espejada.
-     *
-     * @param  ServicioAdicionalDTO[]  $servicios
-     * @return array<int, array<string, mixed>>
-     */
-    private function resolverServiciosParaCrear(
-        array $servicios,
-        array $campos,
-        bool $esAdmin,
-        array $horasPorCampo = [],
-        bool $puedeUsarNoVisible = false,
-    ): array {
-        $resueltos = [];
-
-        foreach ($servicios as $servicio) {
-            if (! isset($campos[$servicio->campoId])) {
-                throw ValidationException::withMessages([
-                    'servicios' => 'Los servicios adicionales deben corresponder a un campo incluido en la reserva.',
-                ]);
-            }
-
-            $campoInfo = $campos[$servicio->campoId];
-
-            $variante = $campoInfo['variantes']->get($servicio->varianteId);
-
-            if (! $variante) {
-                throw ValidationException::withMessages([
-                    'servicios' => "La variante del servicio adicional no pertenece al campo {$campoInfo['campo']->nombre}.",
-                ]);
-            }
-
-            if ($variante->unidad_medida === 'hora') {
-                throw ValidationException::withMessages([
-                    'servicios' => "El servicio {$variante->nombre} no puede agregarse como servicio adicional porque es una variante horaria.",
-                ]);
-            }
-
-            if (! $esAdmin && ! $puedeUsarNoVisible && ! $variante->visible_publico) {
-                throw ValidationException::withMessages([
-                    'servicios' => "El servicio {$variante->nombre} solo está disponible en ventanilla.",
-                ]);
-            }
-
-            if (blank($variante->servicio_sireb_id)) {
-                throw ValidationException::withMessages([
-                    'servicios' => "El servicio {$variante->nombre} no está vinculado a SIREB. Ejecutá la sincronización.",
-                ]);
-            }
-
-            $tarifas = TarifaCampo::query()
-                ->where('campo_id', $variante->campo_id)
-                ->where('servicio_sireb_id', $variante->servicio_sireb_id)
-                ->whereNull('vigente_hasta')
-                ->where('liquidable', true)
-                ->where('tarifario_estado', 'vigente')
-                ->get();
-
-            if ($tarifas->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'servicios' => "No hay tarifa SIREB vigente espejada para el servicio {$variante->nombre}.",
-                ]);
-            }
-
-            $unica = $tarifas->firstWhere('clasificacion', 'unica');
-
-            if ($unica) {
-                $tarifa = $unica;
-            } elseif ($tarifas->count() === 1) {
-                $tarifa = $tarifas->first();
-            } else {
-                // P8.4B: servicios con tarifa diurna/nocturna (ej. escenario)
-                // se resuelven por la hora de la franja del mismo campo, igual
-                // que una franja horaria. Sin franja asociada no se puede
-                // adivinar el tramo: error ruidoso, no silencio.
-                $horaSeg = $horasPorCampo[$servicio->campoId] ?? null;
-
-                if ($horaSeg === null) {
-                    throw ValidationException::withMessages([
-                        'servicios' => "El servicio {$variante->nombre} se cobra por tramo (diurno/nocturno) y no hay franja horaria en el mismo campo para resolverlo.",
-                    ]);
-                }
-
-                $tipo = $horaSeg < $campoInfo['inicio_noche'] ? 'diurna' : 'nocturna';
-                $tarifa = $tarifas->firstWhere('clasificacion', $tipo);
-
-                if (! $tarifa) {
-                    throw ValidationException::withMessages([
-                        'servicios' => "No hay tarifa {$tipo} vigente espejada para el servicio {$variante->nombre}.",
-                    ]);
-                }
-            }
-
-            if (blank($tarifa->tarifa_sireb_id)) {
-                throw ValidationException::withMessages([
-                    'servicios' => "El servicio {$variante->nombre} no tiene tarifa SIREB espejada. Ejecutá la sincronización.",
-                ]);
-            }
-
-            $cantidad = max(1, (int) $servicio->cantidad);
-            $precioUnitario = (float) $tarifa->precio_por_hora;
-            $subtotal = round($precioUnitario * $cantidad, 2);
-
-            $resueltos[] = [
-                'servicio' => $servicio,
-                'campo_id' => $variante->campo_id,
-                'variante_id' => $variante->id,
-                'servicio_sireb_id' => $variante->servicio_sireb_id,
-                'tarifa_sireb_id' => $tarifa->tarifa_sireb_id,
-                'etiqueta_sireb' => $tarifa->etiqueta_sireb,
-                'cantidad' => $cantidad,
-                'precio_unitario' => $precioUnitario,
-                'subtotal' => $subtotal,
-            ];
-        }
-
-        return $resueltos;
     }
 
     private function minutosExpiracion(): int
@@ -1303,13 +948,6 @@ class SolicitudReservaService
         } while (SolicitudReserva::where('codigo_seguimiento', $codigo)->exists());
 
         return $codigo;
-    }
-
-    private static function aSegundos(string $hora): int
-    {
-        $partes = array_map('intval', explode(':', $hora));
-
-        return ($partes[0] * 3600) + ($partes[1] * 60) + ($partes[2] ?? 0);
     }
 
     /**
