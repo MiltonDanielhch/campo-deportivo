@@ -111,6 +111,8 @@ export default function Funcionarios() {
   const [guardando, setGuardando] = useState(false);
   const [errores, setErrores] = useState<Record<string, string[]>>({});
 
+  const [editando, setEditando] = useState<Funcionario | null>(null);
+
   const navigate = useNavigate();
 
   // ─── AlertDialog de inactivación ───
@@ -157,6 +159,7 @@ export default function Funcionarios() {
 
   // ─── Dialog de alta ────────────────────────────────────────────────────
   const abrirNuevo = () => {
+    setEditando(null);
     setErrores({});
     setNombreCompleto('');
     setCi('');
@@ -173,31 +176,45 @@ export default function Funcionarios() {
     setGuardando(true);
     setErrores({});
 
+    const base = {
+      nombre_completo: nombreCompleto.trim(),
+      ci: ci.trim(),
+      usuario: usuario.trim(),
+      rol_id: rolId,
+    };
+
     try {
-      const creado = await funcionariosService.crear({
-        nombre_completo: nombreCompleto.trim(),
-        ci: ci.trim(),
-        usuario: usuario.trim(),
-        password,
-        password_confirmation: passwordConfirmation,
-        rol_id: rolId,
-      });
+      if (editando) {
+        // En edición la password es opcional: si va vacía, no se manda.
+        const payload = password
+          ? { ...base, password, password_confirmation: passwordConfirmation }
+          : base;
 
-      const rolElegido = roles.find((r) => r.id === rolId);
-      const esControl = rolElegido?.nombre === 'funcionario_control';
+        await funcionariosService.actualizar(editando.id, payload);
+        toast.success('Funcionario actualizado exitosamente');
+      } else {
+        const creado = await funcionariosService.crear({
+          ...base,
+          password,
+          password_confirmation: passwordConfirmation,
+        });
 
-      toast.success('Funcionario creado exitosamente', {
-        description: esControl
-          ? 'Asignale las canchas que va a supervisar.'
-          : undefined,
-        action: esControl
-          ? {
-              label: 'Asignar canchas',
-              onClick: () => navigate('/panel/asignaciones', { state: { funcionarioId: creado.id } }),
-            }
-          : undefined,
-        duration: esControl ? 8000 : 4000,
-      });
+        const rolElegido = roles.find((r) => r.id === rolId);
+        const esControl = rolElegido?.nombre === 'funcionario_control';
+
+        toast.success('Funcionario creado exitosamente', {
+          description: esControl
+            ? 'Asignale las canchas que va a supervisar.'
+            : undefined,
+          action: esControl
+            ? {
+                label: 'Asignar canchas',
+                onClick: () => navigate('/panel/asignaciones', { state: { funcionarioId: creado.id } }),
+              }
+            : undefined,
+          duration: esControl ? 8000 : 4000,
+        });
+      }
 
       setDialogAbierto(false);
       cargar();
@@ -205,7 +222,11 @@ export default function Funcionarios() {
       if (error.response?.status === 422) {
         setErrores(error.response.data.errors ?? {});
       } else {
-        toast.error('Ocurrió un error al crear el funcionario');
+        toast.error(
+          editando
+            ? 'Ocurrió un error al actualizar el funcionario'
+            : 'Ocurrió un error al crear el funcionario',
+        );
       }
     } finally {
       setGuardando(false);
@@ -552,15 +573,19 @@ export default function Funcionarios() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem disabled>
+                          <DropdownMenuItem onClick={() => {
+                            setEditando(f);
+                            setNombreCompleto(f.nombre_completo);
+                            setCi(f.ci);
+                            setUsuario(f.usuario);
+                            setRolId(f.rol_id);
+                            setPassword('');
+                            setPasswordConfirmation('');
+                            setErrores({});
+                            setDialogAbierto(true);
+                          }}>
                             <Pencil className="mr-2 size-4" />
                             Editar
-                            <Badge
-                              variant="secondary"
-                              className="ml-auto text-[9px]"
-                            >
-                              pronto
-                            </Badge>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {f.estado === 'activo' ? (
@@ -632,10 +657,11 @@ export default function Funcionarios() {
                 <UserPlus className="size-5" />
               </div>
               <div>
-                <DialogTitle className="text-lg">Nuevo funcionario</DialogTitle>
+          <DialogTitle>{editando ? 'Editar funcionario' : 'Nuevo funcionario'}</DialogTitle>
                 <DialogDescription className="text-xs">
-                  La contraseña se guarda hasheada. El funcionario podrá iniciar
-                  sesión de inmediato.
+                  {editando
+                    ? 'Cambá los datos; la contraseña solo se actualiza si escribís una nueva.'
+                    : 'La contraseña se guarda hasheada. El funcionario podrá iniciar sesión de inmediato.'}
                 </DialogDescription>
               </div>
             </div>
@@ -707,7 +733,7 @@ export default function Funcionarios() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password" className="text-sm font-semibold">
-                  Contraseña inicial <span className="text-destructive">*</span>
+                  {editando ? 'Nueva contraseña (opcional)' : <>Contraseña inicial <span className="text-destructive">*</span></>}
                 </Label>
                 <Button
                   type="button"
@@ -734,8 +760,8 @@ export default function Funcionarios() {
                     setPassword(e.target.value);
                     setPasswordConfirmation('');
                   }}
-                  placeholder="Mínimo 8, con mayúscula, número y símbolo"
-                  required
+                  placeholder={editando ? 'Dejá vacío para mantener la actual' : 'Mínimo 8, con mayúscula, número y símbolo'}
+                  required={!editando}
                   className="pr-20 font-mono text-sm"
                 />
                 <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5">
@@ -791,7 +817,7 @@ export default function Funcionarios() {
                 htmlFor="password_confirmation"
                 className="text-sm font-semibold"
               >
-                Confirmar contraseña <span className="text-destructive">*</span>
+                Confirmar contraseña {!editando && <span className="text-destructive">*</span>}
               </Label>
               <Input
                 id="password_confirmation"
@@ -799,7 +825,7 @@ export default function Funcionarios() {
                 value={passwordConfirmation}
                 onChange={(e) => setPasswordConfirmation(e.target.value)}
                 placeholder="Repetí la contraseña"
-                required
+                required={!editando || password.length > 0}
                 className={
                   passwordConfirmation &&
                   password !== passwordConfirmation &&
@@ -867,11 +893,12 @@ export default function Funcionarios() {
                 disabled={
                   guardando ||
                   (password.length > 0 && password !== passwordConfirmation) ||
-                  !cumplePolitica
+                  (password.length > 0 && !cumplePolitica) ||
+                  (!editando && !cumplePolitica)
                 }
                 className="rounded-full"
               >
-                {guardando ? 'Creando…' : 'Crear funcionario'}
+              {guardando ? (editando ? 'Guardando…' : 'Creando…') : (editando ? 'Guardar cambios' : 'Crear funcionario')}
               </Button>
             </DialogFooter>
           </form>
