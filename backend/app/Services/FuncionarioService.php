@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Rol;
+use Illuminate\Validation\ValidationException;
 use App\Models\Funcionario;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Hash;
@@ -80,6 +82,24 @@ class FuncionarioService
             'usuario' => $data['usuario'] ?? $funcionario->usuario,
             'rol_id' => $data['rol_id'] ?? $funcionario->rol_id,
         ];
+
+        // Guardrail: no degradar al último admin_parametricas activo.
+        $nuevoRolId = $payload['rol_id'];
+        $rolActualEsAdmin = $funcionario->rol?->nombre === 'admin_parametricas';
+        $nuevoRolEsAdmin = Rol::where('id', $nuevoRolId)->value('nombre') === 'admin_parametricas';
+
+        if ($rolActualEsAdmin && ! $nuevoRolEsAdmin) {
+            $hayOtroAdminActivo = Funcionario::where('rol_id', $funcionario->rol_id)
+                ->where('estado', 'activo')
+                ->where('id', '!=', $funcionario->id)
+                ->exists();
+
+            if (! $hayOtroAdminActivo) {
+                throw ValidationException::withMessages([
+                    'rol_id' => 'No se puede quitar el rol de administrador al último admin activo.',
+                ]);
+            }
+        }
 
         // Actualizar contraseña solo si se envió
         if (! empty($data['password'])) {
