@@ -54,7 +54,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import {
   Table,
@@ -78,10 +77,14 @@ const TODOS = 'todos';
 
 function generarPassword(longitud = 12): string {
   const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%';
+  const array = new Uint32Array(longitud);
+  crypto.getRandomValues(array);
+
   let result = '';
   for (let i = 0; i < longitud; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars.charAt(array[i] % chars.length);
   }
+
   return result;
 }
 
@@ -292,6 +295,33 @@ export default function Funcionarios() {
     [password],
   );
 
+  const rolSeleccionado = useMemo(
+    () => roles.find((r) => r.id === rolId) ?? null,
+    [roles, rolId],
+  );
+
+  const rolCfg = rolSeleccionado ? configDeRol(rolSeleccionado) : null;
+  const RolIcono = rolCfg?.icon;
+
+  const filtroRolObjeto = useMemo(
+    () => roles.find((r) => r.id === filtroRol) ?? null,
+    [roles, filtroRol],
+  );
+
+  const filtroRolLabel =
+    filtroRol === TODOS
+      ? 'Todos los roles'
+      : filtroRolObjeto
+        ? configDeRol(filtroRolObjeto).label
+        : 'Rol';
+
+  const filtroEstadoLabel =
+    filtroEstado === TODOS
+      ? 'Todos los estados'
+      : filtroEstado === 'activo'
+        ? 'Activos'
+        : 'Inactivos';
+
   return (
     <div className="space-y-6 p-6 max-w-[1600px] mx-auto">
       {/* ─── Header ─── */}
@@ -370,8 +400,11 @@ export default function Funcionarios() {
             value={filtroRol}
             onValueChange={(v) => cambiarFiltros(v, filtroEstado)}
           >
-            <SelectTrigger className="w-full sm:w-48">
-              <SelectValue placeholder="Rol" />
+            <SelectTrigger
+              className="w-full sm:w-48"
+              aria-label="Filtrar por rol"
+            >
+              <span className="truncate">{filtroRolLabel}</span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={TODOS}>Todos los roles</SelectItem>
@@ -386,8 +419,11 @@ export default function Funcionarios() {
             value={filtroEstado}
             onValueChange={(v) => cambiarFiltros(filtroRol, v)}
           >
-            <SelectTrigger className="w-full sm:w-40">
-              <SelectValue placeholder="Estado" />
+            <SelectTrigger
+              className="w-full sm:w-40"
+              aria-label="Filtrar por estado"
+            >
+              <span className="truncate">{filtroEstadoLabel}</span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={TODOS}>Todos los estados</SelectItem>
@@ -783,12 +819,21 @@ export default function Funcionarios() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">
+              <Label htmlFor="rol_id" className="text-sm font-semibold">
                 Rol <span className="text-destructive">*</span>
               </Label>
               <Select value={rolId} onValueChange={setRolId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un rol" />
+                <SelectTrigger id="rol_id" className="w-full">
+                  <span className="flex min-w-0 items-center gap-2 text-left">
+                    {RolIcono ? (
+                      <RolIcono className={`size-3.5 ${rolCfg?.fg ?? ''}`} />
+                    ) : (
+                      <Users className="size-3.5 text-muted-foreground" />
+                    )}
+                    <span className="truncate">
+                      {rolCfg?.label ?? 'Selecciona un rol'}
+                    </span>
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   {roles.map((rol) => {
