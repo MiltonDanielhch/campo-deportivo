@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Check,
@@ -31,16 +31,13 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import { solicitudesReservaService } from '@/services/solicitudesReservaService';
-import {
-  type VarianteArancelaria,
-  type VarianteArancelariaTarifa,
-} from '@/services/catalogoSirebService';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useVentanillaAsociacion } from './ventanilla/useVentanillaAsociacion';
 import { useVentanillaCampos } from './ventanilla/useVentanillaCampos';
 import { useVentanillaVariantes } from './ventanilla/useVentanillaVariantes';
 import { useVentanillaServicios } from './ventanilla/useVentanillaServicios';
 import { useVentanillaSlots } from './ventanilla/useVentanillaSlots';
+import { useVentanillaPricing } from './ventanilla/useVentanillaPricing';
 
 interface Props {
   open: boolean;
@@ -68,27 +65,6 @@ type ApiError = {
 };
 
 const hhmm = (h: string) => h.substring(0, 5);
-
-// [FIX B79] parsea "HH:MM[:SS]" a segundos, espejo de DisponibilidadService::aSegundos.
-function aSegundosHora(h: string): number {
-  const [hh, mm, ss] = (h || '').split(':').map(Number);
-  return (hh || 0) * 3600 + (mm || 0) * 60 + (ss || 0);
-}
-
-function resolverTarifaServicio(
-  v: VarianteArancelaria,
-  clasif: string | null,
-): VarianteArancelariaTarifa | null {
-  const t = v.tarifas;
-  const unica = t.find((x) => x.clasificacion === 'unica');
-  if (unica) return unica;
-  if (t.length === 1) return t[0];
-  if (clasif) {
-    const por = t.find((x) => x.clasificacion === clasif);
-    if (por) return por;
-  }
-  return null;
-}
 
 const MODAL_MAX_WIDTH = '52rem';
 
@@ -231,58 +207,20 @@ export default function DialogCrearReservaVentanilla({
   const [copiado, setCopiado] = useState<string | null>(null);
 
 
-  // [FIX B79] segundos del corte nocturno, con default 18:00:00 si la grilla no lo manda.
-  const corteNocheSeg = useMemo(
-    () => aSegundosHora(horaInicioNocheGrilla ?? '18:00:00'),
-    [horaInicioNocheGrilla],
-  );
-
-  const clasificacionAplicable = useMemo(() => {
-    if (slots.length === 0) return null;
-    return aSegundosHora(slots[0].inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
-  }, [slots, corteNocheSeg]);
-
-  const totalServicios = useMemo(() => {
-    return Object.entries(serviciosSeleccionados).reduce((acc, [id, cantidad]) => {
-      const variante = serviciosAdicionalesValidos.find((v) => v.id === id);
-      if (!variante) return acc;
-      const tarifa = resolverTarifaServicio(variante, clasificacionAplicable);
-      if (!tarifa) return acc;
-      return acc + Number(tarifa.monto) * Math.max(1, Number(cantidad) || 1);
-    }, 0);
-  }, [serviciosSeleccionados, serviciosAdicionalesValidos, clasificacionAplicable]);
-
-  const subtotalFranja = useMemo(() => {
-    if (slots.length === 0) return 0;
-
-    if (varianteSeleccionada) {
-      const tarifas = varianteSeleccionada.tarifas;
-      const unica = tarifas.find((t) => t.clasificacion === 'unica');
-
-      const precioDe = (inicio: string): number => {
-        if (unica) return Number(unica.monto);
-        const tipo = aSegundosHora(inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
-        const t = tarifas.find((x) => x.clasificacion === tipo);
-        return t ? Number(t.monto) : 0;
-      };
-
-      return slots.reduce((acc, o) => acc + precioDe(o.inicio), 0);
-    }
-
-    const precioTramo = (inicio: string): number => {
-      const enGrilla = bloques.find((b) => b.hora_inicio === inicio);
-      if (enGrilla?.precio != null) return Number(enGrilla.precio);
-      const tipo = aSegundosHora(inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
-      const ref = bloques.find((b) => {
-        const bt = aSegundosHora(b.hora_inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
-        return bt === tipo && b.precio != null;
-      });
-      return ref?.precio != null ? Number(ref.precio) : 0;
-    };
-    return slots.reduce((acc, o) => acc + precioTramo(o.inicio), 0);
-  }, [varianteSeleccionada, slots, clasificacionAplicable, bloques, corteNocheSeg]);
-
-  const totalEstimado = subtotalFranja + totalServicios;
+  const {
+    clasificacionAplicable,
+    totalServicios,
+    subtotalFranja,
+    totalEstimado,
+    resolverTarifaServicio,
+  } = useVentanillaPricing({
+    slots,
+    bloques,
+    horaInicioNocheGrilla,
+    varianteSeleccionada,
+    serviciosSeleccionados,
+    serviciosAdicionalesValidos,
+  });
 
   // Al cambiar de campo, los hooks de variantes/servicios se resetean solos por
   // su efecto [open, campoId]. Acá solo limpiamos franjas/hora a medida, que
