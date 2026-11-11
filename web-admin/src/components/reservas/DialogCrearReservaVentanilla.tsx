@@ -36,8 +36,7 @@ import {
   type VarianteArancelariaTarifa,
 } from '@/services/catalogoSirebService';
 import { QRCodeCanvas } from 'qrcode.react';
-import { asociacionesService, type AlumnoVentanilla } from '@/services/asociacionesService';
-import type { Asociacion } from '@/types/asociaciones';
+import { useVentanillaAsociacion } from './ventanilla/useVentanillaAsociacion';
 import { useVentanillaCampos } from './ventanilla/useVentanillaCampos';
 import { useVentanillaVariantes } from './ventanilla/useVentanillaVariantes';
 import { useVentanillaServicios } from './ventanilla/useVentanillaServicios';
@@ -228,12 +227,14 @@ export default function DialogCrearReservaVentanilla({
   const [ciNit, setCiNit] = useState('');
   const [telefono, setTelefono] = useState('');
 
-  const [asociacionDetectada, setAsociacionDetectada] = useState<Asociacion | null>(null);
-  const [asociacionCargando, setAsociacionCargando] = useState(false);
+  const {
+    asociacionDetectada,
+    asociacionCargando,
+    alumnos,
+    cargandoAlumnos,
+    reset: resetAsociacion,
+  } = useVentanillaAsociacion(open, ciNit);
 
-  // [Fase 3] alumnos de la asociacion detectada + quien-va-a-que-franja.
-  const [alumnos, setAlumnos] = useState<AlumnoVentanilla[]>([]);
-  const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
   const [alumnosPorFranja, setAlumnosPorFranja] = useState<Record<string, string[]>>({});
 
   const [enviando, setEnviando] = useState(false);
@@ -319,46 +320,12 @@ export default function DialogCrearReservaVentanilla({
       setNombre('');
       setCiNit('');
       setTelefono('');
-      setAsociacionDetectada(null);
-      setAsociacionCargando(false);
-      setAlumnos([]);
-      setCargandoAlumnos(false);
+      resetAsociacion();
       setAlumnosPorFranja({});
       setResultado(null);
     }, 200);
   };
 
-  // P2b: al tipear el CI, preguntar si es asociación vigente (debounce 400ms).
-  useEffect(() => {
-    if (!open) {
-      setAsociacionDetectada(null);
-      return;
-    }
-    const ci = ciNit.trim();
-    if (ci.length < 5) {
-      setAsociacionDetectada(null);
-      return;
-    }
-    let activo = true;
-    setAsociacionCargando(true);
-    const t = setTimeout(() => {
-      asociacionesService
-        .porResponsable(ci)
-        .then(({ asociacion }) => {
-          if (activo) setAsociacionDetectada(asociacion);
-        })
-        .catch(() => {
-          if (activo) setAsociacionDetectada(null);
-        })
-        .finally(() => {
-          if (activo) setAsociacionCargando(false);
-        });
-    }, 400);
-    return () => {
-      activo = false;
-      clearTimeout(t);
-    };
-  }, [ciNit, open]);
 
   // P2b: si hay asociación vigente con tipo, preseleccionar la variante de convenio
   // que matchee. Declarado DESPUES del hook de variantes para que gane sobre la
@@ -373,32 +340,6 @@ export default function DialogCrearReservaVentanilla({
       setVarianteConvenio(match.id, match.nombre);
     }
   }, [asociacionDetectada, variantesHorarias, setVarianteConvenio]);
-
-  // [Fase 3] al detectar asociacion VIGENTE, cargar su lista de alumnos pa' el
-  // multi-select. Depende de la asociacion, no de la variante: los alumnos
-  // pertenecen a la asociacion del GAD, paguen convenio o full (P4).
-  useEffect(() => {
-    if (!open || !asociacionDetectada?.vigente || !asociacionDetectada.id) {
-      setAlumnos([]);
-      return;
-    }
-    let activo = true;
-    setCargandoAlumnos(true);
-    asociacionesService
-      .listarAlumnos(asociacionDetectada.id)
-      .then((lista) => {
-        if (activo) setAlumnos(lista);
-      })
-      .catch(() => {
-        if (activo) setAlumnos([]);
-      })
-      .finally(() => {
-        if (activo) setCargandoAlumnos(false);
-      });
-    return () => {
-      activo = false;
-    };
-  }, [open, asociacionDetectada]);
 
   useEffect(() => {
     if (!campoAbierto) return;
