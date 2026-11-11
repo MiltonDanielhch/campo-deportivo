@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -31,8 +30,11 @@ import { useVentanillaServicios } from './ventanilla/useVentanillaServicios';
 import { useVentanillaSlots } from './ventanilla/useVentanillaSlots';
 import { useVentanillaPricing } from './ventanilla/useVentanillaPricing';
 import { useVentanillaEnvioResultado } from './ventanilla/useVentanillaEnvioResultado';
-import { StepperCantidad } from './ventanilla/StepperCantidad';
 import { VentanillaResultado } from './ventanilla/VentanillaResultado';
+import { hoyBoliviaISO } from './ventanilla/utils';
+import { VentanillaFranjasSelector } from './ventanilla/VentanillaFranjasSelector';
+import { VentanillaServiciosSelector } from './ventanilla/VentanillaServiciosSelector';
+import { VentanillaAlumnosSelector } from './ventanilla/VentanillaAlumnosSelector';
 
 interface Props {
   open: boolean;
@@ -40,22 +42,7 @@ interface Props {
   onCreada: () => void;
 }
 
-const hhmm = (h: string) => h.substring(0, 5);
-
 const MODAL_MAX_WIDTH = '52rem';
-
-function hoyBoliviaISO(): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/La_Paz',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-  } catch {
-    return new Date().toISOString().substring(0, 10);
-  }
-}
 
 export default function DialogCrearReservaVentanilla({
   open,
@@ -432,253 +419,38 @@ export default function DialogCrearReservaVentanilla({
               </div>
             )}
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label>Franjas libres *</Label>
-                {cargandoSlots && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
-              </div>
+            <VentanillaFranjasSelector
+              campoId={campoId}
+              fecha={fecha}
+              bloques={bloques}
+              cargandoSlots={cargandoSlots}
+              slots={slots}
+              toggleSlot={toggleSlot}
+              horaAmedida={horaAmedida}
+              setHoraAmedida={setHoraAmedida}
+              toggleAmedida={toggleAmedida}
+              slotsAmedida={slotsAmedida}
+            />
 
-              {!campoId || !fecha ? (
-                <p className="text-sm text-muted-foreground">Elegí campo y fecha para ver horarios.</p>
-              ) : (
-                <>
-                  {bloques.length === 0 && !cargandoSlots && (
-                    <p className="text-sm text-muted-foreground">Sin franjas libres ese día.</p>
-                  )}
+            <VentanillaAlumnosSelector
+              asociacionDetectada={asociacionDetectada}
+              slots={slots}
+              cargandoAlumnos={cargandoAlumnos}
+              alumnos={alumnos}
+              alumnosPorFranja={alumnosPorFranja}
+              toggleAlumnoFranja={toggleAlumnoFranja}
+            />
 
-                  {bloques.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {bloques.map((b) => {
-                        const activo = slots.some((s) => s.inicio === b.hora_inicio);
-                        const seleccionable = b.estado === 'libre';
-                        const etiqueta =
-                          b.estado === 'ocupada'
-                            ? 'Ocupada'
-                            : b.estado === 'bloqueada_temporal'
-                              ? 'En cobro'
-                              : b.estado === 'pasada'
-                                ? 'Pasada'
-                                : b.estado;
-                        return (
-                          <Button
-                            key={b.hora_inicio}
-                            type="button"
-                            variant={activo ? 'default' : seleccionable ? 'outline' : 'ghost'}
-                            size="sm"
-                            disabled={!seleccionable}
-                            title={
-                              seleccionable
-                                ? undefined
-                                : `${etiqueta} — no disponible para vender`
-                            }
-                            className={
-                              seleccionable
-                                ? ''
-                                : 'pointer-events-none opacity-50 line-through decoration-muted-foreground/40'
-                            }
-                            onClick={() => toggleSlot(b)}
-                          >
-                            {hhmm(b.hora_inicio)}–{hhmm(b.hora_fin)}
-                            {!seleccionable && (
-                              <span className="ml-1.5 text-[10px] font-normal">
-                                {etiqueta}
-                              </span>
-                            )}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* ── Opción B: franja a medida (inicio libre + 1 hora) ── */}
-                  <div className="space-y-2 rounded-lg border border-dashed bg-muted/30 p-3">
-                    <Label className="text-xs font-semibold text-muted-foreground">
-                      Otra franja a medida (inicio + 1 hora)
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="time"
-                        step={1800}
-                        value={horaAmedida}
-                        onChange={(e) => setHoraAmedida(e.target.value)}
-                        className="w-32"
-                        disabled={!campoId || !fecha}
-                        aria-label="Hora de inicio a medida"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={!horaAmedida || !campoId || !fecha}
-                        onClick={() => {
-                          toggleAmedida(horaAmedida);
-                          setHoraAmedida('');
-                        }}
-                      >
-                        <Plus className="mr-1 size-4" /> Agregar
-                      </Button>
-                    </div>
-
-                    {slotsAmedida.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {slotsAmedida.map((o) => (
-                          <Button
-                            key={o.inicio}
-                            type="button"
-                            variant="default"
-                            size="sm"
-                            onClick={() => toggleAmedida(o.inicio.slice(0, 5))}
-                          >
-                            {hhmm(o.inicio)}–{hhmm(o.fin)}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-
-                    <p className="text-[11px] leading-snug text-muted-foreground">
-                      Para horarios que no están en la grilla (ej. 08:30). Se cobra como 1 hora,
-                      con el tramo (diurno/nocturno) de su hora de inicio.
-                      El solape con otras franjas lo valida el sistema al crear.
-                    </p>
-                    {/* [D42] el funcionario no busca el botón de cobro atrasado acá. */}
-                    <p className="text-[11px] leading-snug text-amber-700 dark:text-amber-400">
-                      Las franjas ya pasadas no se venden desde acá. Si alguien usó la cancha y no
-                      pudo pagar (caída del sistema), cobralo desde <strong>Regularizar uso</strong>{' '}
-                      en el listado de Reservas.
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {asociacionDetectada?.vigente && slots.length > 0 && (cargandoAlumnos || alumnos.length > 0) && (
-              <div className="space-y-3 rounded-xl border bg-muted/30 p-3">
-                <Label className="text-sm font-semibold">Alumnos por franja</Label>
-                {cargandoAlumnos ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
-                    Cargando alumnos de la asociación…
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-xs text-muted-foreground">
-                      Marcá quiénes asisten a cada franja. La lista la cargó el presidente de la asociación.
-                    </p>
-                    {slots.map((o) => (
-                      <div key={o.inicio} className="space-y-1.5">
-                        <p className="text-xs font-medium tabular-nums">
-                          {hhmm(o.inicio)}–{hhmm(o.fin)}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {alumnos.map((al) => {
-                            const activo = (alumnosPorFranja[o.inicio] ?? []).includes(al.id);
-                            return (
-                              <Button
-                                key={al.id}
-                                type="button"
-                                variant={activo ? 'default' : 'outline'}
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => toggleAlumnoFranja(o.inicio, al.id)}
-                                title={`CI ${al.ci}`}
-                              >
-                                {al.nombre_completo}
-                              </Button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-
-            {(cargandoServicios || serviciosAdicionales.length > 0) && (
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Servicios adicionales</Label>
-
-                {cargandoServicios ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
-                    Cargando servicios del campo…
-                  </div>
-                ) : serviciosAdicionalesValidos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    {serviciosAdicionales.length === 0
-                      ? 'Este campo no tiene servicios adicionales disponibles.'
-                      : 'Los servicios disponibles no tienen una tarifa única vigente.'}
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {serviciosAdicionalesValidos.map((v) => {
-                      const cantidad = serviciosSeleccionados[v.id] ?? 0;
-                      const seleccionado = cantidad > 0;
-                      const tarifa = resolverTarifaServicio(v, clasificacionAplicable);
-                      if (!tarifa) return null;
-                      const codigo = v.servicio_sireb_codigo ?? v.codigo;
-                      const esTramo = v.tarifas.length > 1;
-
-                      return (
-                        <div
-                          key={v.id}
-                          className={`flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors ${
-                            seleccionado ? 'border-primary/40 bg-primary/5' : 'hover:border-primary/30'
-                          }`}
-                        >
-                          <div className="flex min-w-0 flex-1 items-start gap-3">
-                            <Checkbox
-                              id={v.id}
-                              checked={seleccionado}
-                              onCheckedChange={(checked) => toggleServicio(v.id, checked)}
-                              className="mt-0.5 shrink-0"
-                            />
-                            <Label htmlFor={v.id} className="min-w-0 flex-1 cursor-pointer">
-                              <span className="block truncate text-sm font-medium" title={v.nombre}>
-                                {v.nombre}
-                              </span>
-                              <span
-                                className="block truncate text-xs text-muted-foreground"
-                                title={codigo}
-                              >
-                                {codigo}
-                              </span>
-                            </Label>
-                          </div>
-
-                          <div className="flex shrink-0 items-center gap-3">
-                            <div className="w-28 text-right">
-                              <span className="block text-sm font-semibold tabular-nums">
-                                Bs {Number(tarifa.monto).toFixed(2)}
-                              </span>
-                              {esTramo && (
-                                <span className="block text-[10px] leading-tight text-muted-foreground">
-                                  Diurno Bs{' '}
-                                  {Number(
-                                    v.tarifas.find((t) => t.clasificacion === 'diurna')?.monto ?? 0,
-                                  ).toFixed(2)}{' '}
-                                  · Nocturno Bs{' '}
-                                  {Number(
-                                    v.tarifas.find((t) => t.clasificacion === 'nocturna')?.monto ?? 0,
-                                  ).toFixed(2)}
-                                </span>
-                              )}
-                            </div>
-                            {seleccionado && (
-                              <StepperCantidad
-                                valor={cantidad}
-                                onChange={(val) => setCantidadServicio(v.id, val)}
-                                ariaLabel={v.nombre}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+            <VentanillaServiciosSelector
+              serviciosAdicionales={serviciosAdicionales}
+              cargandoServicios={cargandoServicios}
+              serviciosAdicionalesValidos={serviciosAdicionalesValidos}
+              serviciosSeleccionados={serviciosSeleccionados}
+              clasificacionAplicable={clasificacionAplicable}
+              resolverTarifaServicio={resolverTarifaServicio}
+              toggleServicio={toggleServicio}
+              setCantidadServicio={setCantidadServicio}
+            />
 
             <div className="space-y-3 rounded-xl border bg-muted/50 p-4">
               <p className="text-sm font-semibold">Datos del pagador</p>
