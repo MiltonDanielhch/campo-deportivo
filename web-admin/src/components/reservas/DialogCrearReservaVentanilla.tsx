@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Check,
@@ -40,24 +40,12 @@ import { useVentanillaAsociacion } from './ventanilla/useVentanillaAsociacion';
 import { useVentanillaCampos } from './ventanilla/useVentanillaCampos';
 import { useVentanillaVariantes } from './ventanilla/useVentanillaVariantes';
 import { useVentanillaServicios } from './ventanilla/useVentanillaServicios';
+import { useVentanillaSlots } from './ventanilla/useVentanillaSlots';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreada: () => void;
-}
-
-interface Bloque {
-  hora_inicio: string;
-  hora_fin: string;
-  estado: string;
-  precio?: number | null;
-}
-
-interface SlotSel {
-  inicio: string;
-  fin: string;
-  origen: 'grilla' | 'amedida';
 }
 
 interface Resultado {
@@ -80,14 +68,6 @@ type ApiError = {
 };
 
 const hhmm = (h: string) => h.substring(0, 5);
-
-function sumarHora(hhmmStr: string): string {
-  const [h, m] = hhmmStr.split(':').map(Number);
-  const total = (h || 0) * 60 + (m || 0) + 60;
-  const nh = Math.floor(total / 60) % 24;
-  const nm = total % 60;
-  return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
-}
 
 // [FIX B79] parsea "HH:MM[:SS]" a segundos, espejo de DisponibilidadService::aSegundos.
 function aSegundosHora(h: string): number {
@@ -215,12 +195,21 @@ export default function DialogCrearReservaVentanilla({
     reset: resetServicios,
   } = useVentanillaServicios(campoId, open);
 
-  // ── Estado de fecha/franjas ──
-  const [fecha, setFecha] = useState<string>('');
-  const [bloques, setBloques] = useState<Bloque[]>([]);
-  const [cargandoSlots, setCargandoSlots] = useState(false);
-  const [slots, setSlots] = useState<SlotSel[]>([]);
-  const [horaAmedida, setHoraAmedida] = useState<string>('');
+  const {
+    fecha,
+    setFecha,
+    bloques,
+    cargandoSlots,
+    slots,
+    toggleSlot,
+    horaAmedida,
+    setHoraAmedida,
+    toggleAmedida,
+    slotsAmedida,
+    horaInicioNocheGrilla,
+    limpiarSlots,
+    reset: resetSlots,
+  } = useVentanillaSlots(open, campoId);
 
   // ── Estado del pagador ──
   const [nombre, setNombre] = useState('');
@@ -241,8 +230,6 @@ export default function DialogCrearReservaVentanilla({
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
 
-  // [FIX B79] corte nocturno REAL del campo, llega de la grilla (data.hora_inicio_noche).
-  const [horaInicioNocheGrilla, setHoraInicioNocheGrilla] = useState<string | null>(null);
 
   // [FIX B79] segundos del corte nocturno, con default 18:00:00 si la grilla no lo manda.
   const corteNocheSeg = useMemo(
@@ -302,8 +289,7 @@ export default function DialogCrearReservaVentanilla({
   // viven en este componente.
   const handleCampoChangeCompuesto = (nuevoId: string) => {
     handleCampoChange(nuevoId);
-    setSlots([]);
-    setHoraAmedida('');
+    limpiarSlots();
   };
 
   const cerrar = () => {
@@ -312,11 +298,7 @@ export default function DialogCrearReservaVentanilla({
       resetCampos();
       resetVariantes();
       resetServicios();
-      setHoraInicioNocheGrilla(null); // [FIX B79]
-      setFecha('');
-      setBloques([]);
-      setSlots([]);
-      setHoraAmedida('');
+      resetSlots();
       setNombre('');
       setCiNit('');
       setTelefono('');
@@ -362,51 +344,6 @@ export default function DialogCrearReservaVentanilla({
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [campoAbierto, campoInputRef, campoWrapRef, setCampoAbierto]);
-
-  const cargarSlots = useCallback(async () => {
-    if (!campoId || !fecha) return;
-    setCargandoSlots(true);
-    setSlots([]);
-    try {
-      const disp = await solicitudesReservaService.disponibilidad(campoId, fecha);
-      // [FIX B79] leo el corte real de la grilla. Cast local hasta que el type de
-      // disponibilidad declare hora_inicio_noche; si no llega, null → default 18:00:00.
-      setHoraInicioNocheGrilla((disp as any).hora_inicio_noche ?? null);
-      setBloques(disp.abierto ? disp.bloques : []);
-    } catch {
-      setBloques([]);
-      setHoraInicioNocheGrilla(null); // [FIX B79]
-      toast.error('No se pudo consultar la disponibilidad del campo.');
-    } finally {
-      setCargandoSlots(false);
-    }
-  }, [campoId, fecha]);
-
-  useEffect(() => {
-    cargarSlots();
-  }, [cargarSlots]);
-
-  const toggleSlot = (b: Bloque) =>
-    setSlots((prev) =>
-      prev.some((s) => s.inicio === b.hora_inicio)
-        ? prev.filter((s) => s.inicio !== b.hora_inicio)
-        : [...prev, { inicio: b.hora_inicio, fin: b.hora_fin, origen: 'grilla' as const }].sort(
-            (a, z) => a.inicio.localeCompare(z.inicio),
-          ),
-    );
-
-  const toggleAmedida = (hora: string) => {
-    const inicio = `${hora}:00`;
-    setSlots((prev) => {
-      if (prev.some((s) => s.inicio === inicio)) {
-        return prev.filter((s) => s.inicio !== inicio);
-      }
-      const fin = `${sumarHora(hora)}:00`;
-      return [...prev, { inicio, fin, origen: 'amedida' as const }].sort(
-        (a, z) => a.inicio.localeCompare(z.inicio),
-      );
-    });
-  };
 
   const copiar = async (texto: string, clave: string) => {
     await navigator.clipboard.writeText(texto);
@@ -509,8 +446,6 @@ export default function DialogCrearReservaVentanilla({
       setEnviando(false);
     }
   };
-
-  const slotsAmedida = slots.filter((s) => s.origen === 'amedida');
 
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(v) : cerrar())}>
