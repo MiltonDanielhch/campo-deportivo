@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Check,
@@ -32,14 +32,15 @@ import {
 } from '@/components/ui/select';
 import { solicitudesReservaService } from '@/services/solicitudesReservaService';
 import {
-  catalogoSirebService,
   type VarianteArancelaria,
   type VarianteArancelariaTarifa,
 } from '@/services/catalogoSirebService';
-import type { CampoOption } from '@/types/reservas';
 import { QRCodeCanvas } from 'qrcode.react';
 import { asociacionesService, type AlumnoVentanilla } from '@/services/asociacionesService';
 import type { Asociacion } from '@/types/asociaciones';
+import { useVentanillaCampos } from './ventanilla/useVentanillaCampos';
+import { useVentanillaVariantes } from './ventanilla/useVentanillaVariantes';
+import { useVentanillaServicios } from './ventanilla/useVentanillaServicios';
 
 interface Props {
   open: boolean;
@@ -79,8 +80,6 @@ type ApiError = {
   };
 };
 
-type CampoConModalidad = CampoOption & { modalidad_reserva?: string };
-
 const hhmm = (h: string) => h.substring(0, 5);
 
 function sumarHora(hhmmStr: string): string {
@@ -92,8 +91,6 @@ function sumarHora(hhmmStr: string): string {
 }
 
 // [FIX B79] parsea "HH:MM[:SS]" a segundos, espejo de DisponibilidadService::aSegundos.
-// Reemplaza la comparación de hora entera contra el 18 hardcodeado, que fallaba con
-// cortes en :30 (ej. 18:30) tanto en el camino legacy como en el de variante/servicios.
 function aSegundosHora(h: string): number {
   const [hh, mm, ss] = (h || '').split(':').map(Number);
   return (hh || 0) * 3600 + (mm || 0) * 60 + (ss || 0);
@@ -113,10 +110,6 @@ function resolverTarifaServicio(
   }
   return null;
 }
-
-// [FIX B79] eliminada HORA_INICIO_NOCHE_ESTIMADA = 18: el corte real llega de la grilla
-// (data.hora_inicio_noche) y se deriva en corteNocheSeg abajo. Default 18:00:00 solo si
-// el backend no manda la señal (versión vieja / abierto=false).
 
 const MODAL_MAX_WIDTH = '52rem';
 
@@ -184,25 +177,53 @@ export default function DialogCrearReservaVentanilla({
   onOpenChange,
   onCreada,
 }: Props) {
-  const [campos, setCampos] = useState<CampoOption[]>([]);
-  const [campoId, setCampoId] = useState<string>('');
-  const [campoNombre, setCampoNombre] = useState<string>('');
+  // ── Hooks de carga (PR #61a) ──
+  const {
+    campoId,
+    campoNombre,
+    busquedaCampo,
+    setBusquedaCampo,
+    campoAbierto,
+    setCampoAbierto,
+    campoWrapRef,
+    campoInputRef,
+    camposFiltrados,
+    handleCampoChange,
+    reset: resetCampos,
+  } = useVentanillaCampos(open);
 
-  const [variantes, setVariantes] = useState<VarianteArancelaria[]>([]);
-  const [cargandoVariantes, setCargandoVariantes] = useState(false);
-  const [varianteId, setVarianteId] = useState<string>('');
-  const [varianteNombre, setVarianteNombre] = useState<string>('');
+  const {
+    cargandoVariantes,
+    varianteId,
+    varianteNombre,
+    variantesHorarias,
+    tieneVariantes,
+    requiereVariante,
+    bloqueadoPorVariantesNoHorarias,
+    varianteSeleccionada,
+    handleVarianteChange,
+    setVarianteConvenio,
+    reset: resetVariantes,
+  } = useVentanillaVariantes(campoId, open);
 
-  const [serviciosAdicionales, setServiciosAdicionales] = useState<VarianteArancelaria[]>([]);
-  const [cargandoServicios, setCargandoServicios] = useState(false);
-  const [serviciosSeleccionados, setServiciosSeleccionados] = useState<Record<string, number>>({});
+  const {
+    serviciosAdicionales,
+    cargandoServicios,
+    serviciosSeleccionados,
+    serviciosAdicionalesValidos,
+    toggleServicio,
+    setCantidadServicio,
+    reset: resetServicios,
+  } = useVentanillaServicios(campoId, open);
 
+  // ── Estado de fecha/franjas ──
   const [fecha, setFecha] = useState<string>('');
   const [bloques, setBloques] = useState<Bloque[]>([]);
   const [cargandoSlots, setCargandoSlots] = useState(false);
   const [slots, setSlots] = useState<SlotSel[]>([]);
   const [horaAmedida, setHoraAmedida] = useState<string>('');
 
+  // ── Estado del pagador ──
   const [nombre, setNombre] = useState('');
   const [ciNit, setCiNit] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -219,43 +240,8 @@ export default function DialogCrearReservaVentanilla({
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
 
-  const [campoAbierto, setCampoAbierto] = useState(false);
-  const [busquedaCampo, setBusquedaCampo] = useState('');
   // [FIX B79] corte nocturno REAL del campo, llega de la grilla (data.hora_inicio_noche).
   const [horaInicioNocheGrilla, setHoraInicioNocheGrilla] = useState<string | null>(null);
-  const campoWrapRef = useRef<HTMLDivElement>(null);
-  const campoInputRef = useRef<HTMLInputElement>(null);
-
-  const camposCancha = useMemo(
-    () =>
-      (campos as CampoConModalidad[]).filter(
-        (c) => c.modalidad_reserva !== 'turno_por_perfil',
-      ),
-    [campos],
-  );
-
-  const camposFiltrados = useMemo(
-    () =>
-      camposCancha.filter((c) =>
-        (c.nombre || c.id).toLowerCase().includes(busquedaCampo.toLowerCase().trim()),
-      ),
-    [camposCancha, busquedaCampo],
-  );
-
-  const variantesHorarias = useMemo(
-    () => variantes.filter((v) => v.unidad_medida === 'hora'),
-    [variantes],
-  );
-
-  const tieneVariantes = variantes.length > 0;
-  const requiereVariante = tieneVariantes;
-  const bloqueadoPorVariantesNoHorarias =
-    tieneVariantes && variantesHorarias.length === 0;
-
-  const varianteSeleccionada = useMemo(
-    () => variantesHorarias.find((v) => v.id === varianteId) ?? null,
-    [variantesHorarias, varianteId],
-  );
 
   // [FIX B79] segundos del corte nocturno, con default 18:00:00 si la grilla no lo manda.
   const corteNocheSeg = useMemo(
@@ -265,26 +251,8 @@ export default function DialogCrearReservaVentanilla({
 
   const clasificacionAplicable = useMemo(() => {
     if (slots.length === 0) return null;
-    // [FIX B79] compara en segundos contra el corte real (antes: hora entera vs 18).
     return aSegundosHora(slots[0].inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
   }, [slots, corteNocheSeg]);
-
-  const serviciosAdicionalesValidos = useMemo(
-    () =>
-      serviciosAdicionales.filter((v) => {
-        if (!v.servicio_sireb_id) return false;
-        const t = v.tarifas;
-        if (t.length === 0) return false;
-        if (t.length === 1) return true;
-        return t.some(
-          (x) =>
-            x.clasificacion === 'unica' ||
-            x.clasificacion === 'diurna' ||
-            x.clasificacion === 'nocturna',
-        );
-      }),
-    [serviciosAdicionales],
-  );
 
   const totalServicios = useMemo(() => {
     return Object.entries(serviciosSeleccionados).reduce((acc, [id, cantidad]) => {
@@ -305,7 +273,6 @@ export default function DialogCrearReservaVentanilla({
 
       const precioDe = (inicio: string): number => {
         if (unica) return Number(unica.monto);
-        // [FIX B79] corte real en segundos (antes hora entera vs 18).
         const tipo = aSegundosHora(inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
         const t = tarifas.find((x) => x.clasificacion === tipo);
         return t ? Number(t.monto) : 0;
@@ -317,7 +284,6 @@ export default function DialogCrearReservaVentanilla({
     const precioTramo = (inicio: string): number => {
       const enGrilla = bloques.find((b) => b.hora_inicio === inicio);
       if (enGrilla?.precio != null) return Number(enGrilla.precio);
-      // [FIX B79] a-medida: tramo según corte real, no 18 hardcodeado.
       const tipo = aSegundosHora(inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
       const ref = bloques.find((b) => {
         const bt = aSegundosHora(b.hora_inicio) < corteNocheSeg ? 'diurna' : 'nocturna';
@@ -330,19 +296,22 @@ export default function DialogCrearReservaVentanilla({
 
   const totalEstimado = subtotalFranja + totalServicios;
 
+  // Al cambiar de campo, los hooks de variantes/servicios se resetean solos por
+  // su efecto [open, campoId]. Acá solo limpiamos franjas/hora a medida, que
+  // viven en este componente.
+  const handleCampoChangeCompuesto = (nuevoId: string) => {
+    handleCampoChange(nuevoId);
+    setSlots([]);
+    setHoraAmedida('');
+  };
+
   const cerrar = () => {
     onOpenChange(false);
     setTimeout(() => {
-      setCampoId('');
-      setCampoNombre('');
-      setBusquedaCampo('');
-      setCampoAbierto(false);
+      resetCampos();
+      resetVariantes();
+      resetServicios();
       setHoraInicioNocheGrilla(null); // [FIX B79]
-      setVariantes([]);
-      setVarianteId('');
-      setVarianteNombre('');
-      setServiciosAdicionales([]);
-      setServiciosSeleccionados({});
       setFecha('');
       setBloques([]);
       setSlots([]);
@@ -358,95 +327,6 @@ export default function DialogCrearReservaVentanilla({
       setResultado(null);
     }, 200);
   };
-
-  useEffect(() => {
-    if (!open) return;
-    solicitudesReservaService
-      .listarCampos({ estado: 'activo' })
-      .then((lista) => {
-        setCampos(lista);
-        const sinNombre = lista.filter((c) => !c.nombre || c.nombre === c.id);
-        if (sinNombre.length > 0) {
-          console.warn('[ventanilla] campos sin nombre legible:', sinNombre);
-        }
-      })
-      .catch(() => setCampos([]));
-  }, [open]);
-
-  useEffect(() => {
-    if (!open || !campoId) {
-      setVariantes([]);
-      setVarianteId('');
-      setVarianteNombre('');
-      return;
-    }
-    let activo = true;
-    setCargandoVariantes(true);
-    setVarianteId('');
-    setVarianteNombre('');
-    catalogoSirebService
-      .listarVariantesPorCampo(campoId)
-      .then((lista) => {
-        if (!activo) return;
-        setVariantes(lista);
-        const horarias = lista.filter((v) => v.unidad_medida === 'hora');
-        if (horarias.length === 1) {
-          setVarianteId(horarias[0].id);
-          setVarianteNombre(horarias[0].nombre);
-        }
-      })
-      .catch(() => {
-        if (!activo) return;
-        setVariantes([]);
-        toast.error('No se pudieron cargar las variantes arancelarias.');
-      })
-      .finally(() => {
-        if (activo) setCargandoVariantes(false);
-      });
-    return () => {
-      activo = false;
-    };
-  }, [open, campoId]);
-
-  useEffect(() => {
-    if (!open || !campoId) {
-      setServiciosAdicionales([]);
-      setServiciosSeleccionados({});
-      return;
-    }
-    let activo = true;
-    setCargandoServicios(true);
-    catalogoSirebService
-      .listarServiciosAdicionalesPorCampo(campoId)
-      .then((lista) => {
-        if (!activo) return;
-        setServiciosAdicionales(lista);
-        setServiciosSeleccionados((prev) => {
-          const validos = new Set(
-            lista
-              .filter((v) => Boolean(v.servicio_sireb_id) && v.tarifas.length === 1)
-              .map((v) => v.id),
-          );
-          const next: Record<string, number> = {};
-          for (const [id, cantidad] of Object.entries(prev)) {
-            if (validos.has(id)) next[id] = cantidad;
-          }
-          return next;
-        });
-      })
-      .catch(() => {
-        if (!activo) return;
-        setServiciosAdicionales([]);
-        setServiciosSeleccionados({});
-        toast.error('No se pudieron cargar los servicios adicionales.');
-      })
-      .finally(() => {
-        if (activo) setCargandoServicios(false);
-      });
-    return () => {
-      activo = false;
-    };
-  }, [open, campoId]);
 
   // P2b: al tipear el CI, preguntar si es asociación vigente (debounce 400ms).
   useEffect(() => {
@@ -481,19 +361,18 @@ export default function DialogCrearReservaVentanilla({
   }, [ciNit, open]);
 
   // P2b: si hay asociación vigente con tipo, preseleccionar la variante de convenio
-  // que matchee. Declarado DESPUES del efecto de carga de variantes para que gane
-  // sobre la preseleccion "unica horaria". Sugerencia, no bloqueo: el backend
-  // (guardia 5.6-5.8) sigue siendo la ultima linea.
+  // que matchee. Declarado DESPUES del hook de variantes para que gane sobre la
+  // preselección "única horaria". Sugerencia, no bloqueo: el backend (guardia
+  // 5.6-5.8) sigue siendo la última línea.
   useEffect(() => {
     if (!asociacionDetectada?.vigente || !asociacionDetectada.tipo) return;
     const match = variantesHorarias.find(
       (v) => v.tipo_asociacion === asociacionDetectada.tipo,
     );
     if (match) {
-      setVarianteId(match.id);
-      setVarianteNombre(match.nombre);
+      setVarianteConvenio(match.id, match.nombre);
     }
-  }, [asociacionDetectada, variantesHorarias]);
+  }, [asociacionDetectada, variantesHorarias, setVarianteConvenio]);
 
   // [Fase 3] al detectar asociacion VIGENTE, cargar su lista de alumnos pa' el
   // multi-select. Depende de la asociacion, no de la variante: los alumnos
@@ -541,28 +420,7 @@ export default function DialogCrearReservaVentanilla({
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [campoAbierto]);
-
-  const handleCampoChange = (nuevoId: string) => {
-    setCampoId(nuevoId);
-    const campo = campos.find((c) => c.id === nuevoId);
-    setCampoNombre(campo?.nombre && campo.nombre !== campo.id ? campo.nombre : '');
-    setBusquedaCampo('');
-    setCampoAbierto(false);
-    setVarianteId('');
-    setVarianteNombre('');
-    setVariantes([]);
-    setServiciosAdicionales([]);
-    setServiciosSeleccionados({});
-    setSlots([]);
-    setHoraAmedida('');
-  };
-
-  const handleVarianteChange = (nuevoId: string) => {
-    setVarianteId(nuevoId);
-    const variante = variantesHorarias.find((v) => v.id === nuevoId);
-    setVarianteNombre(variante?.nombre ?? '');
-  };
+  }, [campoAbierto, campoInputRef, campoWrapRef, setCampoAbierto]);
 
   const cargarSlots = useCallback(async () => {
     if (!campoId || !fecha) return;
@@ -632,25 +490,6 @@ export default function DialogCrearReservaVentanilla({
         `Pagá con el código en ventanilla de cualquier banco (presentá tu CI/NIT) o escaneá el QR para pagar por Síntesis.`,
     );
     window.open(`https://wa.me/?text=${texto}`, '_blank');
-  };
-
-  const toggleServicio = (vid: string, checked: boolean | 'indeterminate') => {
-    if (checked === true) {
-      setServiciosSeleccionados((prev) => ({ ...prev, [vid]: prev[vid] ?? 1 }));
-    } else {
-      setServiciosSeleccionados((prev) => {
-        const next = { ...prev };
-        delete next[vid];
-        return next;
-      });
-    }
-  };
-
-  const setCantidadServicio = (vid: string, valor: number) => {
-    const cantidad = Number.isFinite(valor)
-      ? Math.max(1, Math.min(100, Math.floor(valor)))
-      : 1;
-    setServiciosSeleccionados((prev) => ({ ...prev, [vid]: cantidad }));
   };
 
   // [Fase 3] toggle alumno<->franja, keyed por slot.inicio (identificador
@@ -893,7 +732,7 @@ export default function DialogCrearReservaVentanilla({
                             <button
                               key={c.id}
                               type="button"
-                              onClick={() => handleCampoChange(c.id)}
+                              onClick={() => handleCampoChangeCompuesto(c.id)}
                               className={`flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted ${
                                 activo ? 'bg-muted font-medium' : ''
                               }`}
