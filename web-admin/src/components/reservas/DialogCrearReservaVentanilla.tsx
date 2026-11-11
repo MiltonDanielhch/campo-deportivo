@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -24,7 +23,8 @@ import { VentanillaServiciosSelector } from './ventanilla/VentanillaServiciosSel
 import { VentanillaAlumnosSelector } from './ventanilla/VentanillaAlumnosSelector';
 import { VentanillaCampoCombobox } from './ventanilla/VentanillaCampoCombobox';
 import { VentanillaVarianteSelector } from './ventanilla/VentanillaVarianteSelector';
-
+import { VentanillaPagadorForm } from './ventanilla/VentanillaPagadorForm';
+import { VentanillaEstimadoFooter } from './ventanilla/VentanillaEstimadoFooter';
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -299,71 +299,28 @@ export default function DialogCrearReservaVentanilla({
               setCantidadServicio={setCantidadServicio}
             />
 
-            <div className="space-y-3 rounded-xl border bg-muted/50 p-4">
-              <p className="text-sm font-semibold">Datos del pagador</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>Nombre completo *</Label>
-                  <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>CI / NIT *</Label>
-                  <div className="relative">
-                    <Input value={ciNit} onChange={(e) => setCiNit(e.target.value)} />
-                    {asociacionCargando && (
-                      <Loader2 className="absolute right-2 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                    )}
-                  </div>
-                  {asociacionDetectada?.vigente && (
-                    <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                      Asociación vigente: {asociacionDetectada.nombre}
-                    </p>
-                  )}
-                  {!asociacionDetectada && !asociacionCargando && (
-                    <p className="text-xs text-muted-foreground">
-                      Tipeá el CI de un responsable con convenio: la variante se elige sola.
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Teléfono (opcional)</Label>
-                  <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
-                </div>
-              </div>
-            </div>
+            <VentanillaPagadorForm
+              nombre={nombre}
+              onNombreChange={setNombre}
+              ciNit={ciNit}
+              onCiNitChange={setCiNit}
+              telefono={telefono}
+              onTelefonoChange={setTelefono}
+              asociacionCargando={asociacionCargando}
+              asociacionDetectada={asociacionDetectada}
+            />
 
-            <div className="rounded-xl border bg-card p-3">
-              <div className="flex items-center justify-between gap-3">
-                <span className="min-w-0 truncate text-xs text-muted-foreground">
-                  Estimado · el monto final lo confirma SIREB
-                </span>
-                <span className="shrink-0 text-lg font-bold tabular-nums">
-                  Bs {totalEstimado.toFixed(2)}
-                </span>
-              </div>
-              <p className="mt-1 truncate text-xs text-muted-foreground">
-                {slots.length > 0
-                  ? `${slots.length} franja${slots.length === 1 ? '' : 's'} · Bs ${subtotalFranja.toFixed(2)}`
-                  : 'Sin franja'}
-                {' · '}
-                Servicios Bs {totalServicios.toFixed(2)}
-              </p>
-              {!puedeEnviar && motivoDeshabilitado && (
-                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                  {motivoDeshabilitado}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={cerrar} disabled={enviando}>
-                Cancelar
-              </Button>
-              <Button onClick={enviar} disabled={!puedeEnviar || enviando}>
-                {enviando && <Loader2 className="mr-2 size-4 animate-spin" />}
-                Crear reserva y código de pago
-              </Button>
-            </div>
+            <VentanillaEstimadoFooter
+              totalEstimado={totalEstimado}
+              cantidadFranjas={slots.length}
+              subtotalFranja={subtotalFranja}
+              totalServicios={totalServicios}
+              puedeEnviar={puedeEnviar}
+              motivoDeshabilitado={motivoDeshabilitado}
+              enviando={enviando}
+              onCancel={cerrar}
+              onSubmit={enviar}
+            />
           </div>
         )}
       </DialogContent>
