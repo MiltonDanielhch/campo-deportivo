@@ -73,7 +73,7 @@ web-public/.vite/
 /.env.*
 !/.env.example
 !/.env.docker.example
-AUDITORIA_MASTER.md
+start-dev.ps1
 # ==========================================================
 # IDEs Y ENTORNO LOCAL
 # ==========================================================
@@ -86,5 +86,13 @@ desktop.ini
 .local/
 .mise/
 
-/storage/framework/views/*.php
 AUDITORIA_MASTER.md
+
+# ==========================================================
+# NODE / TYPESCRIPT / BUILD ARTIFACTS
+# ==========================================================
+*.tsbuildinfo
+.eslintcache
+coverage/
+web-admin/coverage/
+backend/storage/app/public/campos/*
