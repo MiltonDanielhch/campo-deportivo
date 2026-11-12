@@ -157,10 +157,10 @@ class AuthController extends Controller
     {
         $funcionario = $request->attributes->get('funcionario');
 
-        // El middleware auth.oauth siempre setea el funcionario; si llegó null
-        // es que la ruta quedó sin proteger. Mejor 401 que un 500.
+        // Probe de sesión: si no hay funcionario resuelto, devolvemos 200 + null.
+        // Esto evita el 401 en consola al montar AuthContext sin sesión.
         if (! $funcionario) {
-            return response()->json(['error' => 'Token no proporcionado'], 401);
+            return response()->json(['data' => null]);
         }
 
         // Cargar relación 'rol' para evitar N+1 y obtener todos sus campos

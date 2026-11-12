@@ -102,13 +102,17 @@ Route::prefix('v1/public')->middleware('throttle:60,1')->group(function () {
     Route::get('/piscina/reservas/{codigo}/estado', [PiscinaController::class, 'estado']);
 });
 
-// ─── Endpoints protegidos ───────────────────────────────────────────────
-Route::middleware('auth.oauth')->group(function () {
-    // Auth
-    Route::get('/v1/auth/me', [AuthController::class, 'me']);
-    Route::post('/v1/auth/logout', [AuthController::class, 'logout']);
+    // ─── Auth "aware" (no aborta si no hay sesión) ─────────────────────────
+    // /auth/me es un probe: devuelve 200 + data:null si no hay sesión, para que
+    // AuthContext no reciba 401 al montar. /auth/logout es idempotente.
+    Route::middleware('resolve.optional')->group(function () {
+        Route::get('/v1/auth/me', [AuthController::class, 'me']);
+        Route::post('/v1/auth/logout', [AuthController::class, 'logout']);
+    });
 
-    // ─── Dashboard principal (resumen del día) ───
+    // ─── Endpoints protegidos (exigen sesión válida) ────────────────────────
+    Route::middleware('auth.oauth')->group(function () {
+        // ─── Dashboard principal (resumen del día) ───
     // Accesible para todos los roles autenticados.
     Route::prefix('v1/dashboard')->group(function () {
         Route::get('/resumen', [DashboardController::class, 'resumen']);
