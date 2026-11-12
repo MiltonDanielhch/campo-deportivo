@@ -69,7 +69,13 @@ class AuthLocalBreakglassTest extends TestCase
             ->assertStatus(401)
             ->assertJsonPath('message', 'Credenciales inválidas o acceso de emergencia no disponible');
 
+        // /auth/me es un probe: sin sesión válida responde 200 + data:null.
         $this->getJson('/api/v1/auth/me')
+            ->assertStatus(200)
+            ->assertJson(['data' => null]);
+
+        // Y una ruta protegida real sigue exigiendo sesión.
+        $this->getJson('/api/v1/dashboard/resumen')
             ->assertStatus(401);
     }
 

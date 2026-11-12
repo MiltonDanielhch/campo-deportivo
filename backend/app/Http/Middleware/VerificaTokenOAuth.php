@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
-
+use Illuminate\Http\JsonResponse;
 /**
  * Resource Server OAuth2: valida JWT emitidos por Ibare contra su JWKS.
  * Ibare certifica identidad (sub = mamore_id); la autorización
@@ -199,5 +199,75 @@ class VerificaTokenOAuth
         });
 
         return JWK::parseKeySet($jwks);
+    }
+
+    /**
+     * Resuelve el funcionario logueado (sesión local break-glass o JWT Ibare)
+     * SIN abortar. Devuelve null si no hay sesión válida.
+     *
+     * Usado por ResolveSesionOptional para endpoints "auth-aware" como /auth/me,
+     * que deben devolver 200 + data:null en vez de 401 cuando no hay sesión.
+     */
+    /**
+     * Resuelve el funcionario logueado (sesión local break-glass o JWT Ibare).
+     *
+     * - Devuelve Funcionario si hay sesión válida.
+     * - Devuelve null SOLO si no hay token ni sesión (probe anónimo).
+     * - Devuelve JsonResponse 401/403 si hay token presente pero inválido,
+     *   expirado, o el funcionario no está habilitado. Mismo formato de
+     *   error que auth.oauth, para no romper clientes.
+     *
+     * Usado por ResolveSesionOptional en endpoints "auth-aware" como /auth/me.
+     */
+    public function resolverFuncionarioOpcional(Request $request): Funcionario|JsonResponse|null
+    {
+        // 1. Sesión local break-glass
+        $local = $this->autenticarSesionLocal($request);
+        if ($local) {
+            return $local;
+        }
+
+        // 2. ¿Hay token presente?
+        $token = $request->bearerToken() ?: $request->session()->get('access_token');
+
+        // Sin token ni sesión → probe anónimo: null (me() responde 200 + data:null)
+        if (! $token) {
+            return null;
+        }
+
+        // Hay token → validarlo estrictamente. Si es inválido, 401 con el
+        // mismo formato que auth.oauth (no abort, que cambiaría el body a message).
+        try {
+            $payload = $this->validarToken($token);
+        } catch (\Throwable $e) {
+            if ($request->session()->get('refresh_token') && $this->estaExpirado($token)) {
+                $nuevo = $this->refrescarSesion();
+                if (! $nuevo) {
+                    return response()->json(['error' => 'Sesion expirada'], 401);
+                }
+                try {
+                    $payload = $this->validarToken($nuevo);
+                } catch (\Throwable) {
+                    return response()->json(['error' => 'Token inválido o expirado'], 401);
+                }
+            } else {
+                Log::warning('Token OAuth inválido: '.$e->getMessage());
+                return response()->json(['error' => 'Token inválido o expirado'], 401);
+            }
+        }
+
+        $funcionario = Funcionario::where('mamore_id', $payload->sub)->first();
+
+        if (! $funcionario || $funcionario->estado !== 'activo') {
+            return response()->json([
+                'error' => 'FUNCIONARIO_NO_HABILITADO',
+                'mensaje' => 'Tu cuenta no tiene asignación en este sistema.',
+            ], 403);
+        }
+
+        $request->setUserResolver(fn () => $funcionario);
+        $request->attributes->set('funcionario', $funcionario);
+
+        return $funcionario;
     }
 }

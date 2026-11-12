@@ -99,9 +99,13 @@ class AuthOAuthIbareTest extends TestCase
         $response->assertOk()->assertJsonPath('data.id', $funcionario->id);
     }
 
-    public function test_sin_token_devuelve_401(): void
+    public function test_sin_token_devuelve_200_con_data_null(): void
     {
-        $this->getJson('/api/v1/auth/me')->assertStatus(401);
+        // /auth/me es un probe: sin sesión responde 200 + data:null,
+        // no 401. Así AuthContext no recibe 401 al montar sin sesión.
+        $this->getJson('/api/v1/auth/me')
+            ->assertStatus(200)
+            ->assertJsonPath('data', null);
     }
 
     public function test_token_con_firma_de_otra_clave_devuelve_401(): void

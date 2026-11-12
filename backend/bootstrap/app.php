@@ -12,6 +12,12 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withMiddleware(function (Middleware $middleware) {
+        $middleware->alias([
+            'auth.oauth' => \App\Http\Middleware\VerificaTokenOAuth::class,
+            'resolve.optional' => \App\Http\Middleware\ResolveSesionOptional::class,
+        ]);
+    })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->api(prepend: [
             \Illuminate\Cookie\Middleware\EncryptCookies::class,
