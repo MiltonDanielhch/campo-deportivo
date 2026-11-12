@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Database,
+  Globe,
   Loader2,
   Lock,
   Pencil,
@@ -36,6 +37,7 @@ import {
   type VarianteArancelaria,
   type VariantePayload,
 } from '@/services/camposService';
+import { calcularVisibilidad } from '@/lib/visibilidad';
 import type { CampoDeportivo } from '@/types/parametricas';
 
 interface Props {
@@ -267,6 +269,51 @@ export default function GestionarVariantesDialog({ open, onOpenChange, campo, on
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {modo === 'lista' ? (
             <div className="space-y-3">
+              {(() => {
+                const vis = calcularVisibilidad(campo, variantes);
+                const tiposTxt = vis.tiposConvenio.join(' / ');
+                return (
+                  <div className="rounded-xl border bg-muted/30 p-3 text-xs">
+                    <p className="mb-2 font-semibold text-foreground">
+                      Resumen de visibilidad
+                      <span className="ml-2 font-normal text-muted-foreground">
+                        (configuración; el precio real depende de Sincronizar tarifas)
+                      </span>
+                    </p>
+                    <div className="space-y-1.5">
+                      <p className="flex items-start gap-2 text-muted-foreground">
+                        <Globe className="mt-0.5 size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <span>
+                          <strong className="text-foreground">Público:</strong>{' '}
+                          {vis.publicoVeFranja
+                            ? 've el precio oficial de franja.'
+                            : 've “Consultar precio” (no hay norma pública activa).'}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2 text-muted-foreground">
+                        <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+                        <span>
+                          <strong className="text-foreground">Asociados:</strong>{' '}
+                          {vis.totalConvenios === 0
+                            ? 'sin convenios activos.'
+                            : vis.publicoVeFranja
+                              ? `ven precio oficial + convenio (${tiposTxt}).`
+                              : `ven SOLO el convenio (${tiposTxt}).`}
+                        </span>
+                      </p>
+                      {vis.totalAdicionales > 0 && (
+                        <p className="flex items-start gap-2 text-muted-foreground">
+                          <Database className="mt-0.5 size-3.5 shrink-0 text-violet-600 dark:text-violet-400" />
+                          <span>
+                            + {vis.totalAdicionales} servicio(s) adicional(es) visible(s)
+                            (no ocupan franja horaria).
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">
                   {variantes.length} variante{variantes.length === 1 ? '' : 's'}

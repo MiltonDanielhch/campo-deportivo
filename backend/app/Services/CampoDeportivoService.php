@@ -18,7 +18,13 @@ class CampoDeportivoService
         ?string $estado = null,
         int $perPage = 15
     ): LengthAwarePaginator {
-        $query = CampoDeportivo::with('tipoCampo');
+        // [visibilidad] eager-load de variantes ACTIVAS pa' el chip de
+        // config de precios del listado. Filtramos activo=true igual que el
+        // presenter (una variante inactiva no afecta a quién ve qué).
+        $query = CampoDeportivo::with([
+            'tipoCampo',
+            'variantes' => fn ($q) => $q->where('activo', true)->orderBy('orden'),
+        ]);
 
         if ($tipoCampoId) {
             $query->where('tipo_campo_id', $tipoCampoId);
