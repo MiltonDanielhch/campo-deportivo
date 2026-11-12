@@ -1,112 +1,86 @@
 import { Link } from 'react-router-dom';
-import { Mail } from 'lucide-react';
+import { MapPin, Phone, Clock, ShieldCheck } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer className="bg-slate-900 text-slate-300">
-      <div className="container mx-auto px-4 py-16 max-w-6xl">
-        <div className="grid md:grid-cols-4 gap-10 mb-12">
-          {/* Marca */}
-          <div className="md:col-span-2">
-            <div className="flex items-center gap-2 font-bold text-white mb-4">
-            <div className="w-9 h-9 rounded-lg bg-white p-1 flex items-center justify-center">
+    <footer className="bg-slate-950 text-slate-300 print:hidden">
+      <div className="container mx-auto max-w-6xl px-4 py-14">
+        <div className="grid gap-10 md:grid-cols-3">
+          <div>
+            <div className="flex items-center gap-2.5">
               <img
                 src="/img/logo-gad-beni.png"
                 alt="Logo GAD Beni"
-                className="h-18 w-auto object-contain"
+                className="h-10 w-auto object-contain"
               />
+              <span className="text-base font-bold text-white">Canchas GAD Beni</span>
             </div>
-              <span className="text-lg">Canchas GAD Beni</span>
-            </div>
-            <p className="text-sm leading-relaxed max-w-sm text-slate-400">
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-400">
               Sistema oficial de reserva de campos deportivos del Gobierno
-              Autónomo Departamental del Beni. Pagá con QR o en ventanilla del
-              Banco Unión con tu CI; tu comprobante digital queda guardado y lo
-              consultás con tu código.
+              Autónomo Departamental del Beni. Pagá con QR o en ventanilla
+              bancaria; tu comprobante digital queda guardado.
             </p>
-            <div className="flex gap-3 mt-6">
-              <a
-                href="mailto:canchas@gadbeni.bo"
-                className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-teal-600 flex items-center justify-center transition-colors"
-                aria-label="Email de contacto"
-              >
-                <Mail className="w-4 h-4" />
-              </a>
-              {/* SVG de Facebook inline (lucide no provee íconos de marca) */}
-              <a
-                href="#"
-                className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-teal-600 flex items-center justify-center transition-colors"
-                aria-label="Facebook GAD Beni"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z" />
-                </svg>
-              </a>
-            </div>
+            <p className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              Cobros gestionados por Paitití · SIREB
+            </p>
           </div>
 
-          {/* Enlaces */}
           <div>
-            <h3 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">
-              Sistema
+            <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Explorar
             </h3>
-            <ul className="space-y-3 text-sm">
+            <ul className="mt-4 space-y-2.5 text-sm">
               <li>
-                <Link to="/campos" className="hover:text-teal-400 transition-colors">
-                  Campos disponibles
+                <Link to="/campos" className="transition-colors hover:text-emerald-400">
+                  Canchas disponibles
                 </Link>
               </li>
               <li>
-                <Link to="/estado" className="hover:text-teal-400 transition-colors">
+                <Link to="/estado" className="transition-colors hover:text-emerald-400">
                   Consultar mi reserva
+                </Link>
+              </li>
+              <li>
+                <Link to="/registro" className="transition-colors hover:text-emerald-400">
+                  Crear cuenta
+                </Link>
+              </li>
+              <li>
+                <Link to="/login" className="transition-colors hover:text-emerald-400">
+                  Ingresar
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Legal */}
           <div>
-            <h3 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">
-              Legal
+            <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Contacto
             </h3>
-            <ul className="space-y-3 text-sm">
-              <li>
-                <a href="#" className="hover:text-teal-400 transition-colors">
-                  Términos y condiciones
-                </a>
+            <ul className="mt-4 space-y-3 text-sm text-slate-400">
+              <li className="flex items-start gap-2.5">
+                <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-500" />
+                Av. Ganadera, Trinidad — Beni, Bolivia
               </li>
-              <li>
-                <a href="#" className="hover:text-teal-400 transition-colors">
-                  Política de privacidad
-                </a>
+              <li className="flex items-start gap-2.5">
+                <Phone className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-500" />
+                +591 3 462-XXXX
               </li>
-              <li>
-                <a href="#" className="hover:text-teal-400 transition-colors">
-                  Accesibilidad
-                </a>
+              <li className="flex items-start gap-2.5">
+                <Clock className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-500" />
+                Lunes a viernes · 08:00 — 18:00
               </li>
             </ul>
           </div>
         </div>
 
-        {/* Copyright */}
-        <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-3 text-sm text-slate-500">
+        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-slate-800 pt-6 text-xs text-slate-500 sm:flex-row">
           <p>
-            © {new Date().getFullYear()} Gobierno Autónomo Departamental del
-            Beni. Todos los derechos reservados.
+            © 2026 Gobierno Autónomo Departamental del Beni. Todos los derechos
+            reservados.
           </p>
-          <p className="flex items-center gap-2">
-            Hecho con
-            <span className="text-teal-500">●</span>
-            en Trinidad, Bolivia
-          </p>
+          <p>Hecho en Trinidad, Bolivia</p>
         </div>
       </div>
     </footer>

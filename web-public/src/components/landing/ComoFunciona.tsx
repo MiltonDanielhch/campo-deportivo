@@ -1,74 +1,71 @@
-import { MapPin, CreditCard, CheckCircle2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CalendarDays, QrCode, Trophy, ArrowRight } from 'lucide-react';
 
-const pasos = [
+const PASOS = [
   {
-    num: '01',
-    icon: MapPin,
-    titulo: 'Elegí tu cancha',
-    descripcion:
-      'Explorá las canchas disponibles por tipo de deporte, ubicación y horario. Compará el precio diurno y nocturno antes de reservar. Necesitás tu CI o NIT para reservar.',
+    icon: CalendarDays,
+    titulo: 'Elegí cancha y horario',
+    detalle:
+      'Mirá la disponibilidad en tiempo real y seleccioná una o varias franjas. Quedan bloqueadas 15 minutos para vos.',
   },
   {
-    num: '02',
-    icon: CreditCard,
-    titulo: 'Pagá con QR',
-    descripcion:
-      'Agregá las franjas al carrito y pagá con QR bancario. Tenés unos minutos para completar el pago; si no, la franja vuelve a estar disponible. El proceso toma menos de 2 minutos.',
+    icon: QrCode,
+    titulo: 'Pagá con QR o en banco',
+    detalle:
+      'Recibís un código de pago oficial. Escaneá el QR para pagar por Síntesis, o presentá el código y tu CI en cualquier banco.',
   },
   {
-    num: '03',
-    icon: CheckCircle2,
+    icon: Trophy,
     titulo: '¡A jugar!',
-    descripcion:
-      'Guardá tu comprobante digital: lo ves en pantalla al confirmar y en "Mis comprobantes". Presentalo al llegar a la cancha el día de tu reserva.',
+    detalle:
+      'Al confirmarse el pago se genera tu comprobante digital. Presentalo el día de tu reserva y listo.',
   },
 ];
 
 export default function ComoFunciona() {
   return (
-    <section id="como-funciona" className="py-20 md:py-28 bg-white">
-      <div className="container mx-auto px-4 max-w-6xl">
-        {/* Encabezado de sección */}
-        <div className="text-center mb-16 max-w-2xl mx-auto">
-          <p className="text-teal-600 font-semibold uppercase tracking-widest text-xs mb-3">
+    <section id="como-funciona" className="bg-white pb-20 pt-32 md:pb-28 md:pt-40">
+      <div className="container mx-auto max-w-6xl px-4">
+        <div className="mx-auto mb-14 max-w-2xl text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
             Proceso simple
           </p>
-          <h2 className="text-3xl md:text-5xl font-bold mb-4 tracking-tight">
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">
             ¿Cómo funciona?
           </h2>
-          <p className="text-slate-600 text-lg">
+          <p className="mt-4 text-lg text-slate-600">
             Tres pasos desde que entrás a la web hasta que pisás la cancha.
           </p>
         </div>
 
-        {/* Pasos numerados con conector visual */}
-        <div className="grid md:grid-cols-3 gap-8 md:gap-6 relative">
-          {/* Línea conectora (solo en desktop) */}
-          <div className="hidden md:block absolute top-10 left-[20%] right-[20%] h-0.5 bg-gradient-to-r from-teal-200 via-teal-400 to-teal-200 -z-0" />
+        <div className="relative grid gap-10 md:grid-cols-3 md:gap-8">
+          {/* Línea conectora desktop */}
+          <div className="absolute left-[16%] right-[16%] top-8 hidden border-t-2 border-dashed border-emerald-200 md:block" />
 
-          {pasos.map((paso) => (
-            <div
-              key={paso.num}
-              className="relative bg-white rounded-2xl p-8 text-center border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
-            >
-              {/* Número grande de fondo */}
-              <div className="absolute top-4 right-4 text-6xl font-black text-slate-100 group-hover:text-teal-100 transition-colors">
-                {paso.num}
+          {PASOS.map((paso, i) => (
+            <div key={paso.titulo} className="relative text-center">
+              <div className="relative mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25">
+                <paso.icon className="h-7 w-7" />
+                <span className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-emerald-950 text-xs font-bold text-white">
+                  {i + 1}
+                </span>
               </div>
-
-              {/* Icono circular */}
-              <div className="relative z-10 w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 group-hover:scale-110 transition-transform">
-                <paso.icon className="w-9 h-9" strokeWidth={2} />
-              </div>
-
-              <h3 className="relative z-10 text-xl font-bold mb-3 tracking-tight">
-                {paso.titulo}
-              </h3>
-              <p className="relative z-10 text-slate-600 leading-relaxed text-sm">
-                {paso.descripcion}
+              <h3 className="text-lg font-bold text-slate-900">{paso.titulo}</h3>
+              <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-slate-600">
+                {paso.detalle}
               </p>
             </div>
           ))}
+        </div>
+
+        <div className="mt-14 text-center">
+          <Link
+            to="/campos"
+            className="inline-flex items-center gap-2 font-semibold text-emerald-700 transition-colors hover:text-emerald-800"
+          >
+            Empezar ahora
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </div>
     </section>

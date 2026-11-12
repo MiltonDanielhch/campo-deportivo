@@ -1,4 +1,4 @@
-﻿import { Lock, Lightbulb, Sun, AlertCircle, Clock } from 'lucide-react';
+﻿import { Lock, Lightbulb, Sun, AlertCircle, Clock, Hourglass } from 'lucide-react';
 import { useCarritoStore, type FranjaCarrito } from '@/store/carritoStore';
 
 interface InfoTarifa {
@@ -78,6 +78,13 @@ function clasesLibre(): string {
   return 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-sm';
 }
 
+const LABEL_ESTADO: Record<Bloque['estado'], string> = {
+  libre: 'Disponible',
+  ocupada: 'Ocupada',
+  bloqueada_temporal: 'En cobro',
+  pasada: 'Pasada',
+};
+
 export default function GrillaDisponibilidad({
   bloques,
   campoId,
@@ -124,10 +131,7 @@ export default function GrillaDisponibilidad({
     }
   };
 
-  const getClase = (
-    bloque: Bloque,
-    tarifa: InfoTarifa | null,
-  ) => {
+  const getClase = (bloque: Bloque, tarifa: InfoTarifa | null) => {
     // 'pasada' tiene prioridad: gris neutro, no rojo/amarillo.
     if (bloque.estado === 'pasada') {
       return 'bg-slate-100 border-slate-200 cursor-not-allowed opacity-60';
@@ -151,8 +155,23 @@ export default function GrillaDisponibilidad({
     return clasesLibre();
   };
 
+  const getTitle = (bloque: Bloque, tarifa: InfoTarifa | null, tipo: TipoTarifaVisible) => {
+    if (bloque.estado === 'pasada') return 'Esta franja ya comenzó';
+    if (bloque.estado === 'ocupada') return 'Esta franja ya está reservada';
+    if (bloque.estado === 'bloqueada_temporal')
+      return 'Alguien está completando el pago de esta franja. Si no confirma en unos minutos, vuelve a estar disponible.';
+    if (!tarifa && bloque.estado === 'libre') {
+      return tipo === 'nocturna'
+        ? 'Sin tarifa con iluminación definida'
+        : tipo === 'unica'
+          ? 'Sin tarifa única definida'
+          : 'Sin tarifa regular definida';
+    }
+    return undefined;
+  };
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
       {bloques.map((bloque) => {
         const { tarifa, tipo } = tarifaParaBloque(
           tarifas,
@@ -164,27 +183,24 @@ export default function GrillaDisponibilidad({
           tipo === 'nocturna' ? Lightbulb : tipo === 'unica' ? Clock : Sun;
 
         const seleccionado = estaSeleccionada(bloque);
+        const horario = `${bloque.hora_inicio.slice(0, 5)} a ${bloque.hora_fin.slice(0, 5)}`;
+        const ariaLabel = seleccionado
+          ? `${horario}, seleccionada, Bs ${tarifa?.precio_por_hora.toFixed(0) ?? ''}. Tocá para quitar.`
+          : `${horario}, ${LABEL_ESTADO[bloque.estado]}${tarifa ? `, Bs ${tarifa.precio_por_hora.toFixed(0)}` : ''}`;
 
         return (
           <button
             key={`${bloque.hora_inicio}-${bloque.hora_fin}`}
+            type="button"
             onClick={() => toggleBloque(bloque)}
             disabled={bloque.estado !== 'libre' || !tarifa}
+            aria-pressed={seleccionado}
+            aria-label={ariaLabel}
             className={`relative p-3 border-2 rounded-xl text-center transition-all duration-200 ${getClase(
               bloque,
               tarifa,
             )}`}
-            title={
-              bloque.estado === 'pasada'
-                ? 'Esta franja ya comenzó'
-                : !tarifa && bloque.estado === 'libre'
-                  ? tipo === 'nocturna'
-                    ? 'Sin tarifa con iluminación definida'
-                    : tipo === 'unica'
-                      ? 'Sin tarifa única definida'
-                      : 'Sin tarifa regular definida'
-                  : undefined
-            }
+            title={getTitle(bloque, tarifa, tipo)}
           >
             {/* Franja lateral de color: verde = disponible (el tipo ya no pinta color) */}
             {bloque.estado === 'libre' && tarifa && !seleccionado && (
@@ -218,7 +234,8 @@ export default function GrillaDisponibilidad({
                 </span>
               )}
               {bloque.estado === 'bloqueada_temporal' && (
-                <span className="text-yellow-800 font-medium">
+                <span className="flex items-center justify-center gap-1 text-yellow-800 font-medium">
+                  <Hourglass className="w-3 h-3" />
                   En cobro
                 </span>
               )}

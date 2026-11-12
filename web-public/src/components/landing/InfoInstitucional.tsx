@@ -1,118 +1,57 @@
-import { MapPin, Phone, Clock, MessageCircle } from 'lucide-react';
+import { MapPin, Phone, Clock } from 'lucide-react';
 
-/**
- * Datos institucionales del GAD Beni.
- * TODO: completar con los datos REALES del GAD antes de publicar.
- * Mantener todos los strings aquí para que sea fácil actualizarlos sin
- * tocar el JSX.
- */
-const datosInstitucionales = {
-  direccion: {
-    principal: 'Gobierno Autónomo Departamental del Beni',
-    detalle: 'Av. Ganadera, Trinidad', // TODO: verificar dirección oficial
-    enlace_maps: 'https://maps.google.com/?q=GAD+Beni+Trinidad',
-  },
-  telefono: {
-    numero: '+591 3 462-XXXX', // TODO: reemplazar con número real
-    whatsapp: '+591 3 462-XXXX', // TODO: reemplazar con número real de WhatsApp
-    whatsapp_disponible: false, // activar cuando haya número real
-  },
-  horarios: {
-    dias: 'Lunes a Viernes', // TODO: confirmar si incluye sábados
-    horario: '08:00 — 18:00',
-  },
-};
-
-const datos = [
+const CANALES = [
   {
     icon: MapPin,
     titulo: 'Dirección',
-    lineas: [datosInstitucionales.direccion.principal, datosInstitucionales.direccion.detalle],
-    enlace: datosInstitucionales.direccion.enlace_maps,
-    color: 'from-teal-500 to-emerald-600',
+    lineas: ['Gobierno Autónomo Departamental del Beni', 'Av. Ganadera, Trinidad'],
   },
   {
     icon: Phone,
     titulo: 'Teléfono',
-    lineas: [
-      datosInstitucionales.telefono.numero,
-      datosInstitucionales.telefono.whatsapp_disponible ? 'WhatsApp disponible' : 'Llamadas',
-    ],
-    enlace: `tel:${datosInstitucionales.telefono.numero.replace(/\s/g, '')}`,
-    color: 'from-sky-500 to-teal-600',
+    lineas: ['+591 3 462-XXXX', 'Llamadas en horario de oficina'],
   },
   {
     icon: Clock,
     titulo: 'Horarios de atención',
-    lineas: [datosInstitucionales.horarios.dias, datosInstitucionales.horarios.horario],
-    color: 'from-indigo-500 to-teal-600',
+    lineas: ['Lunes a viernes', '08:00 — 18:00'],
   },
 ];
 
 export default function InfoInstitucional() {
   return (
-    <section className="py-20 md:py-28 bg-white">
-      <div className="container mx-auto px-4 max-w-6xl">
-        {/* Encabezado */}
-        <div className="text-center mb-16 max-w-2xl mx-auto">
-          <p className="text-teal-600 font-semibold uppercase tracking-widest text-xs mb-3">
+    <section id="contacto" className="bg-white py-20 md:py-28">
+      <div className="container mx-auto max-w-6xl px-4">
+        <div className="mx-auto mb-12 max-w-2xl text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
             Información institucional
           </p>
-          <h2 className="text-3xl md:text-5xl font-bold mb-4 tracking-tight">
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
             ¿Dónde estamos?
           </h2>
-          <p className="text-slate-600 text-lg">
-            Canales oficiales de contacto del GAD Beni para consultas sobre el
-            sistema.
+          <p className="mt-4 text-lg text-slate-600">
+            Canales oficiales del GAD Beni para consultas sobre el sistema.
           </p>
         </div>
 
-        {/* Cards */}
-        <div className="grid md:grid-cols-3 gap-6">
-          {datos.map((dato) => (
-            <a
-              key={dato.titulo}
-              href={dato.enlace || '#'}
-              target={dato.enlace?.startsWith('http') ? '_blank' : undefined}
-              rel={dato.enlace?.startsWith('http') ? 'noopener noreferrer' : undefined}
-              className="block bg-slate-50 rounded-2xl p-8 border border-slate-100 hover:bg-white hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
+        <div className="grid gap-6 md:grid-cols-3">
+          {CANALES.map((canal) => (
+            <div
+              key={canal.titulo}
+              className="rounded-3xl border border-slate-100 bg-slate-50/50 p-7 transition-colors hover:border-emerald-200 hover:bg-emerald-50/40"
             >
-              <div
-                className={`w-14 h-14 rounded-xl bg-gradient-to-br ${dato.color} text-white flex items-center justify-center mb-5 shadow-md`}
-              >
-                <dato.icon className="w-6 h-6" strokeWidth={2} />
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20">
+                <canal.icon className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-bold mb-3 tracking-tight">
-                {dato.titulo}
-              </h3>
-              {dato.lineas.map((linea, i) => (
-                <p
-                  key={i}
-                  className={`text-sm ${
-                    i === 0 ? 'text-slate-900 font-medium' : 'text-slate-500'
-                  }`}
-                >
+              <h3 className="text-base font-bold text-slate-900">{canal.titulo}</h3>
+              {canal.lineas.map((linea) => (
+                <p key={linea} className="mt-1 text-sm text-slate-600">
                   {linea}
                 </p>
               ))}
-            </a>
+            </div>
           ))}
         </div>
-
-        {/* Botón WhatsApp destacado — solo visible cuando hay número real */}
-        {datosInstitucionales.telefono.whatsapp_disponible && (
-          <div className="mt-10 text-center">
-            <a
-              href={`https://wa.me/${datosInstitucionales.telefono.whatsapp.replace(/[\s+]/g, '')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20 transition-colors"
-            >
-              <MessageCircle className="w-5 h-5" />
-              Escribinos por WhatsApp
-            </a>
-          </div>
-        )}
       </div>
     </section>
   );
