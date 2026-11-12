@@ -20,12 +20,13 @@ const CONFIANZA = [
 
 export default function Hero() {
   return (
-    <section className="relative overflow-hidden bg-emerald-950 text-white">
-      {/* Glows decorativos */}
-      <div className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-emerald-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-40 right-0 h-[28rem] w-[28rem] rounded-full bg-teal-400/15 blur-3xl" />
-      {/* Líneas de cancha sutiles */}
-      <div className="pointer-events-none absolute inset-0 opacity-[0.04] bg-[linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] bg-[size:56px_56px]" />
+    <section className="relative bg-emerald-950 text-white">
+      {/* Wrapper SOLO para glows: contiene el desborde sin recortar el strip */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-emerald-500/20 blur-3xl" />
+        <div className="absolute -bottom-40 right-0 h-[28rem] w-[28rem] rounded-full bg-teal-400/15 blur-3xl" />
+        <div className="absolute inset-0 opacity-[0.04] bg-[linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] bg-[size:56px_56px]" />
+      </div>
 
       <div className="container relative mx-auto max-w-6xl px-4 pb-28 pt-16 md:pb-36 md:pt-24">
         <div className="grid items-center gap-12 lg:grid-cols-2">
@@ -84,7 +85,6 @@ export default function Hero() {
           {/* Visual: ticket de reserva */}
           <div className="relative mx-auto w-full max-w-md animate-in fade-in slide-in-from-bottom-6 duration-1000 lg:mx-0">
             <div className="relative rounded-3xl border border-white/15 bg-white/10 p-6 shadow-2xl backdrop-blur-xl">
-              {/* Mini cancha */}
               <div className="relative mb-5 flex h-40 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700">
                 <div className="relative h-24 w-44 rounded-sm border-2 border-white/60">
                   <div className="absolute inset-x-0 top-1/2 h-0.5 bg-white/60" />
@@ -117,7 +117,6 @@ export default function Hero() {
               </div>
             </div>
 
-            {/* Chips flotantes */}
             <div className="absolute -left-4 -top-4 hidden items-center gap-2 rounded-full border border-white/20 bg-emerald-900/90 px-4 py-2 text-xs font-semibold shadow-lg backdrop-blur sm:flex">
               <BadgeCheck className="h-4 w-4 text-emerald-300" />
               Tarifa oficial SIREB
@@ -130,9 +129,9 @@ export default function Hero() {
         </div>
       </div>
 
-      {/* Strip de confianza superpuesto */}
-      <div className="container relative mx-auto max-w-6xl px-4">
-        <div className="absolute inset-x-4 bottom-0 translate-y-1/2 rounded-2xl border border-slate-100 bg-white p-6 shadow-xl shadow-emerald-950/10">
+      {/* Strip: bloque normal con margen negativo, ya no lo recorta overflow-hidden */}
+      <div className="container relative z-10 mx-auto max-w-6xl px-4">
+        <div className="-mb-16 rounded-2xl border border-slate-100 bg-white p-6 shadow-xl shadow-emerald-950/10 md:-mb-20">
           <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
             {CONFIANZA.map((item) => (
               <div key={item.titulo} className="flex items-start gap-3">

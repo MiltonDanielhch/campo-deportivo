@@ -5,7 +5,6 @@ import BandaPiscina from '@/components/landing/BandaPiscina';
 import Faq from '@/components/landing/Faq';
 import BandaCTA from '@/components/landing/BandaCTA';
 import InfoInstitucional from '@/components/landing/InfoInstitucional';
-import Footer from '@/components/landing/Footer';
 
 export default function Landing() {
   return (
@@ -17,7 +16,6 @@ export default function Landing() {
       <Faq />
       <BandaCTA />
       <InfoInstitucional />
-      {/* <Footer /> */}
     </>
   );
 }
