@@ -21,6 +21,8 @@ import {
   Unlink,
   Database,
   Clock,
+  Globe,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -64,6 +66,7 @@ import { camposService } from '@/services/camposService';
 import { catalogoSirebService } from '@/services/catalogoSirebService';
 import type { CampoDeportivo, EstadoCampo } from '@/types/parametricas';
 import type { CatalogoSirebItem } from '@/services/catalogoSirebService';
+import { calcularVisibilidad } from '@/lib/visibilidad';
 
 // ── Invariante de catálogo (decisión de arquitectura) ──────────────────────
 // SIREB/Paitití es la FUENTE DE VERDAD de servicios. La única vía legítima de
@@ -178,6 +181,50 @@ const MODALIDAD_CONFIG: Record<
     icon: AlertTriangle,
   },
 };
+
+/**
+ * Chip compacto de config de visibilidad para el listado. Auto-oculto si el
+ * campo no está configurado (sin base link y sin variantes), pa' no redundar
+ * con el badge "Sin vincular". Mismo cálculo que el resumen del dialog.
+ */
+function ChipVisibilidad({ campo }: { campo: CampoDeportivo }) {
+  const vis = calcularVisibilidad(campo, campo.variantes ?? []);
+  const mostrar =
+    Boolean(campo.servicio_sireb_id) || (campo.variantes?.length ?? 0) > 0;
+  if (!mostrar) return null;
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+      <Badge
+        variant="outline"
+        className={`gap-1 px-2 py-0.5 text-[11px] ${
+          vis.publicoVeFranja
+            ? 'border-emerald-200 bg-emerald-500/10 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400'
+            : 'border-amber-200 bg-amber-500/10 text-amber-700 dark:border-amber-500/30 dark:text-amber-400'
+        }`}
+        title="Configuración de visibilidad. El precio real depende de la sincronización SIREB."
+      >
+        <Globe className="size-3" />
+        {vis.publicoVeFranja ? 'Precio público' : 'Sin precio público'}
+      </Badge>
+      {vis.totalConvenios > 0 && (
+        <Badge
+          variant="outline"
+          className="gap-1 border-sky-200 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-700 dark:border-sky-500/30 dark:text-sky-400"
+          title={`Convenio solo para asociaciones: ${vis.tiposConvenio.join(', ')}`}
+        >
+          <ShieldCheck className="size-3" />
+          Convenio ({vis.tiposConvenio.join(' / ')})
+        </Badge>
+      )}
+      {vis.totalAdicionales > 0 && (
+        <span className="text-[11px] text-muted-foreground">
+          +{vis.totalAdicionales} adicional(es)
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function CamposDeportivos() {
   const navigate = useNavigate();
@@ -1020,6 +1067,7 @@ export default function CamposDeportivos() {
                           </div>
                         );
                       })()}
+                      <ChipVisibilidad campo={campo} />
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -1156,7 +1204,7 @@ export default function CamposDeportivos() {
       {/* ─── Dialog de vinculación con el catálogo de SIREB ─── */}
       <VincularSirebDialog
         open={campoVinculando !== null}
-        onOpenChange={(abierto) => {
+        onOpenChange={(abierto: boolean) => {
           if (!abierto) setCampoVinculando(null);
         }}
         campo={campoVinculando}
@@ -1168,7 +1216,7 @@ export default function CamposDeportivos() {
 
       <GestionarVariantesDialog
         open={campoVariantes !== null}
-        onOpenChange={(abierto) => {
+        onOpenChange={(abierto: boolean) => {
           if (!abierto) setCampoVariantes(null);
         }}
         campo={campoVariantes}

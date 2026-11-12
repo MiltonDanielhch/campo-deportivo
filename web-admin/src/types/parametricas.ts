@@ -51,6 +51,19 @@ export interface HorarioAtencionPayload {
   hora_cierre: string;
 }
 
+/** Proyección liviana de variante que trae el listado admin (sin tarifas). */
+export interface VarianteResumen {
+  id: string;
+  codigo: string;
+  nombre: string;
+  visible_publico: boolean;
+  activo: boolean;
+  unidad_medida: string | null;
+  tipo_asociacion: string | null;
+  servicio_sireb_id: string | null;
+  servicio_sireb_codigo: string | null;
+}
+
 // ─── CampoDeportivo ──────────────────────────────────────────────────────
 
 export interface CampoDeportivo {
@@ -73,6 +86,8 @@ export interface CampoDeportivo {
   servicio_sireb_codigo: string | null;
   /** Modalidad de reserva: franja_horaria (canchas), turno_por_perfil (piscina), sin_reserva_online */
   modalidad_reserva?: 'franja_horaria' | 'turno_por_perfil' | 'sin_reserva_online';
+  /** Variantes activas (config de visibilidad). Solo en el listado admin. */
+  variantes?: VarianteResumen[];
   creado_en: string;
   tipo_campo?: TipoCampo;
   horarios_atencion?: HorarioAtencion[];
