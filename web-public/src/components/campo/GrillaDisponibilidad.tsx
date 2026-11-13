@@ -85,6 +85,16 @@ const LABEL_ESTADO: Record<Bloque['estado'], string> = {
   pasada: 'Pasada',
 };
 
+// [etiqueta-estado] el tipo de tarifa sale del TEXTO de la celda (donde colisionaba
+// con el estado) y vive solo en el ICONO + este tooltip. Así la línea inferior de la
+// celda comunica ESTADO (alineada 1:1 con la leyenda y con el ariaLabel), y el tipo
+// se descubre al hover sin ruido visual.
+const LABEL_TIPO: Record<TipoTarifaVisible, string> = {
+  diurna: 'Tarifa regular (sin iluminación)',
+  nocturna: 'Tarifa con iluminación',
+  unica: 'Tarifa única',
+};
+
 export default function GrillaDisponibilidad({
   bloques,
   campoId,
@@ -155,11 +165,20 @@ export default function GrillaDisponibilidad({
     return clasesLibre();
   };
 
-  const getTitle = (bloque: Bloque, tarifa: InfoTarifa | null, tipo: TipoTarifaVisible) => {
+  const getTitle = (
+    bloque: Bloque,
+    tarifa: InfoTarifa | null,
+    tipo: TipoTarifaVisible,
+    seleccionado: boolean,
+  ) => {
     if (bloque.estado === 'pasada') return 'Esta franja ya comenzó';
     if (bloque.estado === 'ocupada') return 'Esta franja ya está reservada';
     if (bloque.estado === 'bloqueada_temporal')
       return 'Alguien está completando el pago de esta franja. Si no confirma en unos minutos, vuelve a estar disponible.';
+    // Libre CON tarifa: el tipo (que ya no ocupa texto en la celda) se descubre acá.
+    if (bloque.estado === 'libre' && tarifa) {
+      return `${LABEL_TIPO[tipo]} · ${seleccionado ? 'Seleccionada' : LABEL_ESTADO[bloque.estado]}`;
+    }
     if (!tarifa && bloque.estado === 'libre') {
       return tipo === 'nocturna'
         ? 'Sin tarifa con iluminación definida'
@@ -200,7 +219,7 @@ export default function GrillaDisponibilidad({
               bloque,
               tarifa,
             )}`}
-            title={getTitle(bloque, tarifa, tipo)}
+            title={getTitle(bloque, tarifa, tipo, seleccionado)}
           >
             {/* Franja lateral de color: verde = disponible (el tipo ya no pinta color) */}
             {bloque.estado === 'libre' && tarifa && !seleccionado && (
@@ -246,16 +265,10 @@ export default function GrillaDisponibilidad({
                   </span>
                   <span
                     className={`block text-[10px] uppercase tracking-wider font-semibold ${
-                      seleccionado ? 'text-white/80' : 'opacity-70'
+                      seleccionado ? 'text-white/80' : 'text-emerald-700'
                     }`}
                   >
-                    {seleccionado
-                      ? 'Seleccionada'
-                      : tipo === 'nocturna'
-                        ? 'Con luces'
-                        : tipo === 'unica'
-                          ? 'Única'
-                          : 'Regular'}
+                    {seleccionado ? 'Seleccionada' : LABEL_ESTADO[bloque.estado]}
                   </span>
                 </>
               )}
