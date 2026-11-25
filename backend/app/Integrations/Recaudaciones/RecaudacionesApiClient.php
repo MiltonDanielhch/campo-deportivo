@@ -20,11 +20,14 @@ use Illuminate\Http\Client\RequestException;
  * Autenticación: OAuth2 client_credentials contra Ibare (Authorization Server).
  * El token JWT se cachea en Redis con TTL = expires_in - 60 segundos.
  *
- * Contrato v1 de SIREB (2026-09-29):
- * - NO hay webhooks (polling vía GET /liquidaciones/{codigoPublico})
- * - NO hay QR/pago electrónico (solo pago manual con boleta bancaria)
+ * Contrato v2 de SIREB (verificado 2026-11-25 contra el repo del Core):
  * - Catálogo consultable vía GET /catalogo/servicios
  * - Idempotency-Key obligatorio en POST /liquidaciones
+ * - QR de pago REAL vía POST /liquidaciones/{id}/qr (HU-090): imagen PNG
+ *   base64 + contenido. El front ya NO fabrica el QR localmente.
+ * - Pago manual con boleta sigue disponible (legado de ventanilla).
+ * - Webhooks firmados (HU-098) existen en el Core; hasta que se activen,
+ *   la confirmación sigue llegando por polling (verificarFirma = stub).
  */
 class RecaudacionesApiClient implements RecaudacionesApiClientInterface
 {
@@ -384,6 +387,26 @@ class RecaudacionesApiClient implements RecaudacionesApiClientInterface
         $response = $this->request('patch', "{$path}/{$liquidacionId}/anular", [
             'motivo' => $motivo,
         ]);
+
+        return $response['data'] ?? [];
+    }
+
+    /**
+     * Solicita el QR de pago de una liquidación al Core (HU-090).
+     *
+     * POST /api/v1/liquidaciones/{liquidacionId}/qr
+     * Devuelve: { data: { transaccion_id, codigo_publico, monto, imagen (PNG base64), contenido, vence_en, simulado } }
+     *
+     * @throws RecaudacionesApiException
+     */
+    public function solicitarQr(string $liquidacionId): array
+    {
+        $path = (string) config(
+            'services.recaudaciones.paths.liquidaciones',
+            '/api/v1/liquidaciones'
+        );
+
+        $response = $this->request('post', "{$path}/{$liquidacionId}/qr");
 
         return $response['data'] ?? [];
     }

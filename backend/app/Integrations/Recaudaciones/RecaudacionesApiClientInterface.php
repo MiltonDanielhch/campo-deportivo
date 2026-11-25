@@ -74,4 +74,11 @@ interface RecaudacionesApiClientInterface
         string $numeroBoleta,
         string $entidadBancaria
     ): array;
+
+    /**
+     * Solicita el QR de pago de una liquidación al Core (HU-090).
+     * Devuelve: transaccion_id, codigo_publico, monto, imagen (PNG base64),
+     * contenido, vence_en, simulado.
+     */
+    public function solicitarQr(string $liquidacionId): array;
 }

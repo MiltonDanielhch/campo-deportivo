@@ -256,6 +256,23 @@ class RecaudacionesApiClientSimulado implements RecaudacionesApiClientInterface
         ];
     }
 
+    public function solicitarQr(string $liquidacionId): array
+    {
+        // Devuelve el mismo shape que el Core (HU-090) para que el flujo
+        // completo (service -> resource -> front) se ejercite en dev/tests.
+        // La imagen es un PNG 1x1 en base64: placeholder visual, el front
+        // la renderiza igual que una real.
+        return [
+            'transaccion_id' => 'SIM-QR-'.strtoupper(substr(md5($liquidacionId), 0, 8)),
+            'codigo_publico' => null,
+            'monto' => '0.00',
+            'imagen' => 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+            'contenido' => 'SIREB:SIMULADO-'.substr($liquidacionId, 0, 8),
+            'vence_en' => now()->addMinutes(20)->toIso8601String(),
+            'simulado' => true,
+        ];
+    }
+
     private function buscarTarifaFake(string $tarifaId): ?array
     {
         foreach (self::CATALOGO_FAKE as $servicio) {
