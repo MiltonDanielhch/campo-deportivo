@@ -7,6 +7,7 @@ use App\Models\PiscinaReserva;
 use App\Models\SolicitudReserva;
 use App\Services\AuditoriaService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Helper central de liquidación SIREB.
@@ -109,6 +110,19 @@ class SirebLiquidacionService
 
         $montoAutoritativo = (float) $montoAutoritativo;
 
+        // 5. Solicitar QR al Core (HU-090) y guardar en datos_cobro_pendiente.
+        // Esto va FUERA de la transacción (igual que crearLiquidacion): si falla,
+        // la liquidación ya existe en el Core y el reintento la re-usa.
+        $qr = [];
+        try {
+            $qr = $this->recaudaciones->solicitarQr($liquidacionId);
+        } catch (\Throwable $e) {
+            Log::channel('sireb')->warning('Fallo al solicitar QR, continuando sin QR', [
+                'liquidacion_id' => $liquidacionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         // 3+4. Persistir referencias + auditoría ATÓMICAMENTE. [25P02-fix]
         // SIREB es la fuente de verdad del monto: sobrescribimos el estimado
         // local con el autoritativo devuelto por el gateway (ya validado > 0).
@@ -142,6 +156,7 @@ class SirebLiquidacionService
             $tablaAuditoria,
             $accionAuditoria,
             $antesAuditoria,
+            $qr,
         ) {
             $reserva->update([
                 'referencia_recaudaciones' => $codigoPublico,
@@ -149,8 +164,8 @@ class SirebLiquidacionService
                 'monto_total' => $montoAutoritativo,
                 'datos_cobro_pendiente' => [
                     'codigo_publico' => $codigoPublico,
-                    'qr_string' => 'SIREB:' . $codigoPublico,
-                    'qr_image_base64' => null,
+                    'qr_string' => $qr['contenido'] ?? 'SIREB:' . $codigoPublico,
+                    'qr_image_base64' => $qr['imagen'] ?? null,
                     'monto' => $montoAutoritativo,
                     'fecha_vencimiento' => $liquidacion['fecha_vencimiento'] ?? null,
                     'items' => $liquidacion['items'] ?? [],

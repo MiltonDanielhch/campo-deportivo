@@ -40,7 +40,8 @@ class SolicitudEstadoResource extends JsonResource
             'datos_cobro_pendiente' => $this->when(
                 $this->estado->value === 'pendiente' && $this->referencia_recaudaciones,
                 fn () => [
-                    'qr_string' => "SIREB:{$this->referencia_recaudaciones}",
+                    'qr_string' => $this->datos_cobro_pendiente['qr_string'] ?? "SIREB:{$this->referencia_recaudaciones}",
+                    'qr_image_base64' => $this->datos_cobro_pendiente['qr_image_base64'] ?? null,
                     'codigo_publico' => $this->referencia_recaudaciones,
                     'checkout_url' => null, // SIREB v1 no usa checkout
                 ],

@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { construirWhatsappUrl, type CobroNormalizado } from '@/lib/cobro';
 
 interface BloqueCobroQRProps {
-  cobro: CobroNormalizado;
+  cobro: CobroNormalizado & { qrImageBase64?: string | null };
   codigo: string;
   monto: number;
   codigoSeguimiento: string;
@@ -90,7 +90,15 @@ export default function BloqueCobroQR({
           <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-teal-600 rounded-tr-xl" />
           <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-teal-600 rounded-bl-xl" />
           <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-teal-600 rounded-br-xl" />
-          <QRCodeSVG value={cobro.qrString} size={220} level="H" />
+          {cobro.qrImageBase64 ? (
+            <img
+              src={`data:image/png;base64,${cobro.qrImageBase64}`}
+              alt="QR de pago"
+              className="w-[220px] h-[220px]"
+            />
+          ) : (
+            <QRCodeSVG value={cobro.qrString} size={220} level="H" />
+          )}
         </div>
       </div>
 
