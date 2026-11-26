@@ -74,74 +74,24 @@ class AuthController extends Controller
         $redirectUri = config('services.ibare.redirect_uri');
         $codeVerifier = Session::get('oauth_code_verifier');
 
-        Log::info('=== INICIO diagnóstico OAuth2 Ibare ===', [
-            'token_url' => $tokenUrl,
-            'client_id' => $clientId,
-            'redirect_uri' => $redirectUri,
-        ]);
-
-        $payloadBase = [
+        $response = Http::timeout(10)->asForm()->post($tokenUrl, [
             'grant_type' => 'authorization_code',
             'redirect_uri' => $redirectUri,
             'code' => $request->code,
             'code_verifier' => $codeVerifier,
-        ];
-
-        // ─── Variante 1: POST body con client_id y client_secret ───
-        Log::info('Variante 1: POST body con credenciales');
-        $response1 = Http::timeout(10)->asForm()->post($tokenUrl, array_merge($payloadBase, [
             'client_id' => $clientId,
             'client_secret' => $clientSecret,
-        ]));
-        Log::info('Respuesta Variante 1', [
-            'status' => $response1->status(),
         ]);
-
-        // ─── Variante 2: Basic Auth (credentials en header) ───
-        Log::info('Variante 2: Basic Auth');
-        $response2 = Http::timeout(10)
-            ->withBasicAuth($clientId, $clientSecret)
-            ->asForm()
-            ->post($tokenUrl, $payloadBase);
-        Log::info('Respuesta Variante 2', [
-            'status' => $response2->status(),
-            'body' => $response2->json(),
-        ]);
-
-        // ─── Variante 3: Solo client_id en body (cliente público) ───
-        Log::info('Variante 3: Solo client_id (cliente público)');
-        $response3 = Http::timeout(10)->asForm()->post($tokenUrl, array_merge($payloadBase, [
-            'client_id' => $clientId,
-        ]));
-        Log::info('Respuesta Variante 3', [
-            'status' => $response3->status(),
-            'body' => $response3->json(),
-        ]);
-
-        // Tomar la primera que funcione
-        $response = null;
-        $varianteGanadora = null;
-        foreach ([$response1, $response2, $response3] as $i => $r) {
-            if ($r->successful()) {
-                $response = $r;
-                $varianteGanadora = $i + 1;
-                break;
-            }
-        }
 
         Session::forget(['oauth_state', 'oauth_code_verifier']);
 
-        if (!$response || $response->failed()) {
-            Log::error('=== FIN diagnóstico: ninguna variante funcionó ===', [
-                'variante1_status' => $response1->status(),
-                'variante2_status' => $response2->status(),
-                'variante3_status' => $response3->status(),
+        if ($response->failed()) {
+            Log::error('Intercambio de code por token falló en Ibare', [
+                'status' => $response->status(),
+                'body' => $response->json(),
             ]);
-
             return redirect(config('services.ibare.spa_url').'/?auth_error=canje');
         }
-
-        Log::info("=== FIN diagnóstico: Variante {$varianteGanadora} funcionó ===");
 
         $this->guardarTokens($response->json());
 

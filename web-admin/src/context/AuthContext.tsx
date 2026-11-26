@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Redirige al backend de Laravel, que a su vez redirige a Ibare
   const loginWithIbare = () => {
-    window.location.href = 'http://localhost:8000/auth/login-redirect';
+    window.location.href = `${import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '')}/auth/login-redirect`;
   };
 
   const loginLocal = async (usuario: string, password: string) => {
