@@ -17,6 +17,9 @@ class StoreFuncionarioRequest extends FormRequest
     public function rules(): array
     {
         $funcionarioId = $this->route('funcionario')?->id;
+        $funcionarioActual = $this->route('funcionario');
+        $requierePassword = $this->boolean('puede_login_local')
+            && (! $funcionarioActual || ! $funcionarioActual->puede_login_local);
 
         return [
             'nombre_completo' => ['required', 'string', 'max:150'],
@@ -38,9 +41,10 @@ class StoreFuncionarioRequest extends FormRequest
                     ? Rule::unique('funcionarios', 'usuario')->ignore($funcionarioId)
                     : Rule::unique('funcionarios', 'usuario'),
             ],
-            // La contraseña solo es obligatoria al crear; en update es opcional
+            'mamore_id' => ['nullable', 'string', 'max:100'],
+            'puede_login_local' => ['nullable', 'boolean'],
             'password' => [
-                $funcionarioId ? 'nullable' : 'required',
+                $requierePassword ? 'required' : 'nullable',
                 'string',
                 'min:8',
                 'confirmed',
@@ -60,7 +64,9 @@ class StoreFuncionarioRequest extends FormRequest
             'usuario.required' => 'El usuario es obligatorio.',
             'usuario.unique' => 'Ya existe un funcionario con ese usuario.',
             'usuario.regex' => 'El usuario solo permite minúsculas, números, punto y guión bajo.',
-            'password.required' => 'La contraseña es obligatoria.',
+            'mamore_id.max' => 'El ID de Mamoré no puede superar los 100 caracteres.',
+            'puede_login_local.boolean' => 'El campo de login local debe ser verdadero o falso.',
+            'password.required' => 'La contraseña es obligatoria para cuentas con login local.',
             'password.min' => 'La contraseña debe tener al menos 8 caracteres.',
             'password.confirmed' => 'Las contraseñas no coinciden.',
             'password.regex' => 'La contraseña debe incluir al menos una minúscula, una mayúscula, un número y un símbolo.',

@@ -27,7 +27,7 @@ class AuthController extends Controller
             'response_type' => 'code',
             'client_id' => config('services.ibare.client_id'),
             'redirect_uri' => config('services.ibare.redirect_uri'),
-            'scope' => 'canchas:admin',
+            'scope' => 'openid',
             'state' => $state,
             'code_challenge' => $codeChallenge,
             'code_challenge_method' => 'S256',
@@ -38,14 +38,6 @@ class AuthController extends Controller
 
     public function callback(Request $request)
     {
-        Log::info('Callback recibido', [
-            'code' => $request->code ? 'presente' : 'ausente',
-            'state' => $request->state,
-            'error' => $request->error,
-            'error_description' => $request->error_description,
-            'session_state' => Session::get('oauth_state'),
-        ]);
-
         if ($request->filled('error')) {
             $error = $request->input('error');
             $description = $request->input('error_description', '');
@@ -94,11 +86,6 @@ class AuthController extends Controller
         }
 
         $this->guardarTokens($response->json());
-
-        Log::info('Tokens guardados en sesión', [
-            'has_access_token' => !empty(Session::get('access_token')),
-            'has_refresh_token' => !empty(Session::get('refresh_token')),
-        ]);
 
         return redirect(config('services.ibare.spa_url'));
     }

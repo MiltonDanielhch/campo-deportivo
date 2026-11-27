@@ -2,24 +2,15 @@
 
 namespace App\Services;
 
-use App\Models\Rol;
-use Illuminate\Validation\ValidationException;
 use App\Models\Funcionario;
+use App\Models\Rol;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
-/**
- * Servicio de gestión de funcionarios (HU-B1).
- *
- * Los funcionarios nunca se eliminan físicamente: se inactivan.
- * Esto preserva la trazabilidad de las tarifas que hayan creado
- * (columna tarifas_campo.creado_por) y de las auditorías.
- */
 class FuncionarioService
 {
-    /**
-     * Lista funcionarios con filtros opcionales por rol y estado.
-     */
     public function listar(
         ?string $rolId = null,
         ?string $estado = null,
@@ -38,19 +29,18 @@ class FuncionarioService
         return $query->orderBy('nombre_completo')->paginate($perPage);
     }
 
-    /**
-     * Crea un funcionario nuevo.
-     * Registra el evento en la bitácora de auditoría.
-     */
     public function crear(array $data): Funcionario
     {
-        $usuarioId = auth()->id();
+        $usuarioId = request()->attributes->get('funcionario')?->id;
+        $passwordPlano = ! empty($data['password']) ? $data['password'] : Str::random(32);
 
         $funcionario = Funcionario::create([
             'nombre_completo' => $data['nombre_completo'],
             'ci' => $data['ci'],
             'usuario' => $data['usuario'],
-            'password_hash' => Hash::make($data['password']),
+            'password_hash' => Hash::make($passwordPlano),
+            'mamore_id' => $data['mamore_id'] ?? null,
+            'puede_login_local' => (bool) ($data['puede_login_local'] ?? false),
             'rol_id' => $data['rol_id'],
             'estado' => 'activo',
         ]);
@@ -61,20 +51,31 @@ class FuncionarioService
             accion: 'crear',
             usuarioId: $usuarioId,
             datosAnteriores: null,
-            datosNuevos: $funcionario->only(['nombre_completo', 'ci', 'usuario', 'rol_id', 'estado']),
+            datosNuevos: $funcionario->only([
+                'nombre_completo',
+                'ci',
+                'usuario',
+                'mamore_id',
+                'puede_login_local',
+                'rol_id',
+                'estado',
+            ]),
         );
 
         return $funcionario->load('rol:id,nombre');
     }
 
-    /**
-     * Actualiza los datos generales de un funcionario (NO el estado).
-     * Si se proporciona password, se actualiza el hash.
-     */
     public function actualizar(Funcionario $funcionario, array $data): Funcionario
     {
-        $usuarioId = auth()->id();
-        $datosAnteriores = $funcionario->only(['nombre_completo', 'ci', 'usuario', 'rol_id']);
+        $usuarioId = request()->attributes->get('funcionario')?->id;
+        $datosAnteriores = $funcionario->only([
+            'nombre_completo',
+            'ci',
+            'usuario',
+            'mamore_id',
+            'puede_login_local',
+            'rol_id',
+        ]);
 
         $payload = [
             'nombre_completo' => $data['nombre_completo'] ?? $funcionario->nombre_completo,
@@ -83,7 +84,14 @@ class FuncionarioService
             'rol_id' => $data['rol_id'] ?? $funcionario->rol_id,
         ];
 
-        // Guardrail: no degradar al último admin_parametricas activo.
+        if (array_key_exists('mamore_id', $data)) {
+            $payload['mamore_id'] = $data['mamore_id'];
+        }
+
+        if (array_key_exists('puede_login_local', $data)) {
+            $payload['puede_login_local'] = (bool) $data['puede_login_local'];
+        }
+
         $nuevoRolId = $payload['rol_id'];
         $rolActualEsAdmin = $funcionario->rol?->nombre === 'admin_parametricas';
         $nuevoRolEsAdmin = Rol::where('id', $nuevoRolId)->value('nombre') === 'admin_parametricas';
@@ -101,7 +109,6 @@ class FuncionarioService
             }
         }
 
-        // Actualizar contraseña solo si se envió
         if (! empty($data['password'])) {
             $payload['password_hash'] = Hash::make($data['password']);
         }
@@ -114,20 +121,23 @@ class FuncionarioService
             accion: 'actualizar',
             usuarioId: $usuarioId,
             datosAnteriores: $datosAnteriores,
-            datosNuevos: $funcionario->fresh()->only(['nombre_completo', 'ci', 'usuario', 'rol_id']),
+            datosNuevos: $funcionario->fresh()->only([
+                'nombre_completo',
+                'ci',
+                'usuario',
+                'mamore_id',
+                'puede_login_local',
+                'rol_id',
+            ]),
         );
 
         return $funcionario->fresh()->load('rol:id,nombre');
     }
 
-    /**
-     * Activa o inactiva un funcionario (HU-B1).
-     * No se elimina físicamente para preservar trazabilidad.
-     */
     public function cambiarEstado(Funcionario $funcionario, string $nuevoEstado): Funcionario
     {
         $estadoAnterior = $funcionario->estado;
-        $usuarioId = auth()->id();
+        $usuarioId = request()->attributes->get('funcionario')?->id;
 
         if ($nuevoEstado === 'inactivo' && $estadoAnterior === 'activo') {
             $rolNombre = Rol::where('id', $funcionario->rol_id)->value('nombre');

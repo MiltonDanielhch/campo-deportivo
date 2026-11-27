@@ -158,8 +158,9 @@ class VerificaTokenOAuth
         return $tokens['access_token'];
     }
 
-    private function validarToken(string $token): object
+private function validarToken(string $token): object
     {
+        JWT::$leeway = 60;
         $payload = JWT::decode($token, $this->obtenerKeySet());
 
         // Convertimos a array para evitar "Undefined property" en PHP 8+
@@ -172,14 +173,14 @@ class VerificaTokenOAuth
             if ($payloadArray['iss'] !== $expectedIssuer) {
                 Log::error('Issuer inválido', [
                     'payload_iss' => $payloadArray['iss'],
-                    'expected' => $expectedIssuer
+                    'expected' => $expectedIssuer,
                 ]);
                 throw new \Exception('Issuer inválido');
             }
         }
 
         // Validamos que exista el 'sub' (mamore_id), que es crítico para la autorización local
-        if (!isset($payloadArray['sub'])) {
+        if (! isset($payloadArray['sub'])) {
             throw new \Exception('Token sin claim "sub" (mamore_id)');
         }
 

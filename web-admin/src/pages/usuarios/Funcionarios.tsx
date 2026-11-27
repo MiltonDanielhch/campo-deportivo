@@ -22,6 +22,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -71,8 +72,6 @@ import { iniciales } from '@/lib/texto';
 
 const TODOS = 'todos';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────
-
 // ─── Generador de contraseñas seguras ───
 
 function generarPassword(longitud = 12): string {
@@ -99,11 +98,13 @@ export default function Funcionarios() {
   const [pagina, setPagina] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState(1);
 
-  // ─── Dialog de alta ────────────────────────────────────────────────────
+  // ─── Dialog de alta / edición ──────────────────────────────────────────
   const [dialogAbierto, setDialogAbierto] = useState(false);
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [ci, setCi] = useState('');
   const [usuario, setUsuario] = useState('');
+  const [mamoreId, setMamoreId] = useState('');
+  const [puedeLoginLocal, setPuedeLoginLocal] = useState(false);
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [mostrarPassword, setMostrarPassword] = useState(false);
@@ -164,10 +165,27 @@ export default function Funcionarios() {
     setNombreCompleto('');
     setCi('');
     setUsuario('');
+    setMamoreId('');
+    setPuedeLoginLocal(false);
     setPassword('');
     setPasswordConfirmation('');
     setMostrarPassword(false);
     setRolId('');
+    setDialogAbierto(true);
+  };
+
+  const abrirEditar = (f: Funcionario) => {
+    setEditando(f);
+    setNombreCompleto(f.nombre_completo);
+    setCi(f.ci);
+    setUsuario(f.usuario);
+    setMamoreId(f.mamore_id ?? '');
+    setPuedeLoginLocal(Boolean(f.puede_login_local));
+    setRolId(f.rol_id);
+    setPassword('');
+    setPasswordConfirmation('');
+    setMostrarPassword(false);
+    setErrores({});
     setDialogAbierto(true);
   };
 
@@ -180,12 +198,13 @@ export default function Funcionarios() {
       nombre_completo: nombreCompleto.trim(),
       ci: ci.trim(),
       usuario: usuario.trim(),
+      mamore_id: mamoreId.trim() ? mamoreId.trim() : null,
+      puede_login_local: puedeLoginLocal,
       rol_id: rolId,
     };
 
     try {
       if (editando) {
-        // En edición la password es opcional: si va vacía, no se manda.
         const payload = password
           ? { ...base, password, password_confirmation: passwordConfirmation }
           : base;
@@ -193,11 +212,11 @@ export default function Funcionarios() {
         await funcionariosService.actualizar(editando.id, payload);
         toast.success('Funcionario actualizado exitosamente');
       } else {
-        const creado = await funcionariosService.crear({
-          ...base,
-          password,
-          password_confirmation: passwordConfirmation,
-        });
+        const payload = password
+          ? { ...base, password, password_confirmation: passwordConfirmation }
+          : base;
+
+        const creado = await funcionariosService.crear(payload);
 
         const rolElegido = roles.find((r) => r.id === rolId);
         const esControl = rolElegido?.nombre === 'funcionario_control';
@@ -209,7 +228,10 @@ export default function Funcionarios() {
           action: esControl
             ? {
                 label: 'Asignar canchas',
-                onClick: () => navigate('/panel/asignaciones', { state: { funcionarioId: creado.id } }),
+                onClick: () =>
+                  navigate('/panel/asignaciones', {
+                    state: { funcionarioId: creado.id },
+                  }),
               }
             : undefined,
           duration: esControl ? 8000 : 4000,
@@ -280,6 +302,7 @@ export default function Funcionarios() {
         f.nombre_completo.toLowerCase().includes(q) ||
         f.usuario.toLowerCase().includes(q) ||
         f.ci.toLowerCase().includes(q) ||
+        (f.mamore_id ?? '').toLowerCase().includes(q) ||
         (f.rol?.nombre ?? '').toLowerCase().includes(q),
     );
   }, [funcionarios, busqueda]);
@@ -315,6 +338,12 @@ export default function Funcionarios() {
     () => CRITERIOS_PASSWORD.every((c) => c.test(password)),
     [password],
   );
+
+  const requierePasswordNueva = !editando && puedeLoginLocal;
+  const passwordInvalida =
+    (requierePasswordNueva && !cumplePolitica) ||
+    (password.length > 0 && !cumplePolitica) ||
+    (password.length > 0 && password !== passwordConfirmation);
 
   const rolSeleccionado = useMemo(
     () => roles.find((r) => r.id === rolId) ?? null,
@@ -355,7 +384,7 @@ export default function Funcionarios() {
             Funcionarios
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Alta y control de estado de los usuarios del sistema
+            Alta, vinculación Mamoré (Ibare) y control de estado de funcionarios
           </p>
         </div>
         <Button onClick={abrirNuevo} className="rounded-full shadow-md">
@@ -409,7 +438,7 @@ export default function Funcionarios() {
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nombre, usuario, CI o rol..."
+            placeholder="Buscar por nombre, usuario, CI, Mamoré ID o rol..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="pl-9 bg-muted/50"
@@ -464,6 +493,7 @@ export default function Funcionarios() {
               <TableHead>Nombre</TableHead>
               <TableHead className="hidden md:table-cell">CI</TableHead>
               <TableHead className="hidden md:table-cell">Usuario</TableHead>
+              <TableHead className="hidden lg:table-cell">Mamoré ID</TableHead>
               <TableHead>Rol</TableHead>
               <TableHead className="w-32">Estado</TableHead>
               <TableHead className="w-32 hidden lg:table-cell">Alta</TableHead>
@@ -474,7 +504,7 @@ export default function Funcionarios() {
             {cargando ? (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="h-32 text-center text-muted-foreground"
                 >
                   Cargando…
@@ -482,7 +512,7 @@ export default function Funcionarios() {
               </TableRow>
             ) : funcionariosFiltrados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-40 text-center">
+                <TableCell colSpan={9} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <Users className="size-8" />
                     <p className="font-medium">
@@ -531,6 +561,15 @@ export default function Funcionarios() {
                       <span className="text-primary">@</span>
                       <span className="font-medium">{f.usuario}</span>
                     </TableCell>
+                    <TableCell className="font-mono text-xs hidden lg:table-cell">
+                      {f.mamore_id ? (
+                        <Badge variant="secondary" className="font-mono">
+                          {f.mamore_id}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
@@ -573,17 +612,7 @@ export default function Funcionarios() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => {
-                            setEditando(f);
-                            setNombreCompleto(f.nombre_completo);
-                            setCi(f.ci);
-                            setUsuario(f.usuario);
-                            setRolId(f.rol_id);
-                            setPassword('');
-                            setPasswordConfirmation('');
-                            setErrores({});
-                            setDialogAbierto(true);
-                          }}>
+                          <DropdownMenuItem onClick={() => abrirEditar(f)}>
                             <Pencil className="mr-2 size-4" />
                             Editar
                           </DropdownMenuItem>
@@ -639,7 +668,7 @@ export default function Funcionarios() {
         </div>
       )}
 
-      {/* ─── Dialog de alta ─── */}
+      {/* ─── Dialog de alta / edición ──────────────────────────────────────── */}
       <Dialog
         open={dialogAbierto}
         onOpenChange={(abierto) => {
@@ -657,11 +686,13 @@ export default function Funcionarios() {
                 <UserPlus className="size-5" />
               </div>
               <div>
-          <DialogTitle>{editando ? 'Editar funcionario' : 'Nuevo funcionario'}</DialogTitle>
+                <DialogTitle>
+                  {editando ? 'Editar funcionario' : 'Nuevo funcionario'}
+                </DialogTitle>
                 <DialogDescription className="text-xs">
                   {editando
-                    ? 'Cambá los datos; la contraseña solo se actualiza si escribís una nueva.'
-                    : 'La contraseña se guarda hasheada. El funcionario podrá iniciar sesión de inmediato.'}
+                    ? 'Actualizá datos, Mamoré ID o acceso de emergencia.'
+                    : 'Vinculá su ID de Mamoré (claim sub de Ibare) para habilitar su ingreso.'}
                 </DialogDescription>
               </div>
             </div>
@@ -682,6 +713,7 @@ export default function Funcionarios() {
                 <p className="text-xs text-muted-foreground truncate">
                   {usuario ? `@${usuario}` : '@usuario'} · CI{' '}
                   {ci || '0000000'}
+                  {mamoreId ? ` · Mamoré #${mamoreId}` : ''}
                 </p>
               </div>
             </div>
@@ -730,154 +762,210 @@ export default function Funcionarios() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-semibold">
-                  {editando ? 'Nueva contraseña (opcional)' : <>Contraseña inicial <span className="text-destructive">*</span></>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="mamore_id" className="text-sm font-semibold">
+                  Mamoré ID (Ibare)
                 </Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    const nueva = generarPassword();
-                    setPassword(nueva);
-                    setPasswordConfirmation(nueva);
-                    toast.success('Contraseña generada');
-                  }}
-                  className="h-7 text-xs gap-1"
-                >
-                  <Dices className="size-3" />
-                  Generar
-                </Button>
-              </div>
-              <div className="relative">
                 <Input
-                  id="password"
-                  type={mostrarPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setPasswordConfirmation('');
-                  }}
-                  placeholder={editando ? 'Dejá vacío para mantener la actual' : 'Mínimo 8, con mayúscula, número y símbolo'}
-                  required={!editando}
-                  className="pr-20 font-mono text-sm"
+                  id="mamore_id"
+                  value={mamoreId}
+                  onChange={(e) => setMamoreId(e.target.value)}
+                  placeholder="Ej: 82"
+                  className="font-mono"
                 />
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(password)}
-                    disabled={!password}
-                    className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
-                    title="Copiar"
-                  >
-                    <Copy className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMostrarPassword((v) => !v)}
-                    className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
-                    title={mostrarPassword ? 'Ocultar' : 'Mostrar'}
-                  >
-                    {mostrarPassword ? (
-                      <EyeOff className="size-3.5" />
-                    ) : (
-                      <Eye className="size-3.5" />
-                    )}
-                  </button>
-                </div>
+                {errorDe('mamore_id')}
               </div>
 
-              {/* Indicador de fuerza */}
-              {password && (
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-0.5 flex-1">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div
-                        key={i}
-                        className={`h-1 flex-1 rounded-full transition-colors ${
-                          i <= fuerzaPassword.nivel
-                            ? fuerzaPassword.color
-                            : 'bg-muted'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-xs text-muted-foreground w-16 text-right">
-                    {fuerzaPassword.label}
-                  </span>
-                </div>
-              )}
-              {errorDe('password')}
-            </div>
-
-            <div className="space-y-2">
-              <Label
-                htmlFor="password_confirmation"
-                className="text-sm font-semibold"
-              >
-                Confirmar contraseña {!editando && <span className="text-destructive">*</span>}
-              </Label>
-              <Input
-                id="password_confirmation"
-                type={mostrarPassword ? 'text' : 'password'}
-                value={passwordConfirmation}
-                onChange={(e) => setPasswordConfirmation(e.target.value)}
-                placeholder="Repetí la contraseña"
-                required={!editando || password.length > 0}
-                className={
-                  passwordConfirmation &&
-                  password !== passwordConfirmation &&
-                  passwordConfirmation.length > 0
-                    ? 'border-destructive focus-visible:ring-destructive'
-                    : ''
-                }
-              />
-              {passwordConfirmation &&
-                password !== passwordConfirmation &&
-                passwordConfirmation.length > 0 && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
-                    <AlertCircle className="size-3" />
-                    Las contraseñas no coinciden
-                  </p>
-                )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="rol_id" className="text-sm font-semibold">
-                Rol <span className="text-destructive">*</span>
-              </Label>
-              <Select value={rolId} onValueChange={setRolId}>
-                <SelectTrigger id="rol_id" className="w-full">
-                  <span className="flex min-w-0 items-center gap-2 text-left">
-                    {RolIcono ? (
-                      <RolIcono className={`size-3.5 ${rolCfg?.fg ?? ''}`} />
-                    ) : (
-                      <Users className="size-3.5 text-muted-foreground" />
-                    )}
-                    <span className="truncate">
-                      {rolCfg?.label ?? 'Selecciona un rol'}
+              <div className="space-y-2">
+                <Label htmlFor="rol_id" className="text-sm font-semibold">
+                  Rol <span className="text-destructive">*</span>
+                </Label>
+                <Select value={rolId} onValueChange={setRolId}>
+                  <SelectTrigger id="rol_id" className="w-full">
+                    <span className="flex min-w-0 items-center gap-2 text-left">
+                      {RolIcono ? (
+                        <RolIcono className={`size-3.5 ${rolCfg?.fg ?? ''}`} />
+                      ) : (
+                        <Users className="size-3.5 text-muted-foreground" />
+                      )}
+                      <span className="truncate">
+                        {rolCfg?.label ?? 'Selecciona un rol'}
+                      </span>
                     </span>
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((rol) => {
-                    const cfg = configDeRol(rol);
-                    const Icono = cfg.icon;
-                    return (
-                      <SelectItem key={rol.id} value={rol.id}>
-                        <div className="flex items-center gap-2">
-                          <Icono className={`size-3.5 ${cfg.fg}`} />
-                          <span>{cfg.label}</span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              {errorDe('rol_id')}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((rol) => {
+                      const cfg = configDeRol(rol);
+                      const Icono = cfg.icon;
+                      return (
+                        <SelectItem key={rol.id} value={rol.id}>
+                          <div className="flex items-center gap-2">
+                            <Icono className={`size-3.5 ${cfg.fg}`} />
+                            <span>{cfg.label}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {errorDe('rol_id')}
+              </div>
             </div>
+
+            <div className="flex items-start gap-3 rounded-lg border p-3 bg-muted/20">
+              <Checkbox
+                id="puede_login_local"
+                checked={puedeLoginLocal}
+                onCheckedChange={(checked) =>
+                  setPuedeLoginLocal(Boolean(checked))
+                }
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="puede_login_local"
+                  className="text-sm font-medium cursor-pointer"
+                >
+                  Habilitar login local de emergencia
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Dejalo desactivado para ingreso exclusivo por Ibare. Activálo
+                  solo en cuentas de contingencia.
+                </p>
+              </div>
+            </div>
+
+            {(puedeLoginLocal || editando) && (
+              <>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password" className="text-sm font-semibold">
+                      {editando
+                        ? 'Nueva contraseña (opcional)'
+                        : (
+                            <>
+                              Contraseña de emergencia{' '}
+                              <span className="text-destructive">*</span>
+                            </>
+                          )}
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const nueva = generarPassword();
+                        setPassword(nueva);
+                        setPasswordConfirmation(nueva);
+                        toast.success('Contraseña generada');
+                      }}
+                      className="h-7 text-xs gap-1"
+                    >
+                      <Dices className="size-3" />
+                      Generar
+                    </Button>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={mostrarPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setPasswordConfirmation('');
+                      }}
+                      placeholder={
+                        editando
+                          ? 'Dejá vacío para mantener la actual'
+                          : 'Mínimo 8, con mayúscula, número y símbolo'
+                      }
+                      required={requierePasswordNueva}
+                      className="pr-20 font-mono text-sm"
+                    />
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(password)}
+                        disabled={!password}
+                        className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
+                        title="Copiar"
+                      >
+                        <Copy className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMostrarPassword((v) => !v)}
+                        className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+                        title={mostrarPassword ? 'Ocultar' : 'Mostrar'}
+                      >
+                        {mostrarPassword ? (
+                          <EyeOff className="size-3.5" />
+                        ) : (
+                          <Eye className="size-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {password && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-0.5 flex-1">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <div
+                            key={i}
+                            className={`h-1 flex-1 rounded-full transition-colors ${
+                              i <= fuerzaPassword.nivel
+                                ? fuerzaPassword.color
+                                : 'bg-muted'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-xs text-muted-foreground w-16 text-right">
+                        {fuerzaPassword.label}
+                      </span>
+                    </div>
+                  )}
+                  {errorDe('password')}
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="password_confirmation"
+                    className="text-sm font-semibold"
+                  >
+                    Confirmar contraseña{' '}
+                    {requierePasswordNueva && (
+                      <span className="text-destructive">*</span>
+                    )}
+                  </Label>
+                  <Input
+                    id="password_confirmation"
+                    type={mostrarPassword ? 'text' : 'password'}
+                    value={passwordConfirmation}
+                    onChange={(e) => setPasswordConfirmation(e.target.value)}
+                    placeholder="Repetí la contraseña"
+                    required={requierePasswordNueva || password.length > 0}
+                    className={
+                      passwordConfirmation &&
+                      password !== passwordConfirmation &&
+                      passwordConfirmation.length > 0
+                        ? 'border-destructive focus-visible:ring-destructive'
+                        : ''
+                    }
+                  />
+                  {passwordConfirmation &&
+                    password !== passwordConfirmation &&
+                    passwordConfirmation.length > 0 && (
+                      <p className="text-xs text-destructive flex items-center gap-1">
+                        <AlertCircle className="size-3" />
+                        Las contraseñas no coinciden
+                      </p>
+                    )}
+                </div>
+              </>
+            )}
 
             <DialogFooter>
               <Button
@@ -890,15 +978,16 @@ export default function Funcionarios() {
               </Button>
               <Button
                 type="submit"
-                disabled={
-                  guardando ||
-                  (password.length > 0 && password !== passwordConfirmation) ||
-                  (password.length > 0 && !cumplePolitica) ||
-                  (!editando && !cumplePolitica)
-                }
+                disabled={guardando || passwordInvalida}
                 className="rounded-full"
               >
-              {guardando ? (editando ? 'Guardando…' : 'Creando…') : (editando ? 'Guardar cambios' : 'Crear funcionario')}
+                {guardando
+                  ? editando
+                    ? 'Guardando…'
+                    : 'Creando…'
+                  : editando
+                    ? 'Guardar cambios'
+                    : 'Crear funcionario'}
               </Button>
             </DialogFooter>
           </form>

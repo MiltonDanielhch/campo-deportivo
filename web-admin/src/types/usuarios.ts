@@ -30,6 +30,8 @@ export interface Funcionario {
   nombre_completo: string;
   ci: string;
   usuario: string;
+  mamore_id?: string | null;
+  puede_login_local?: boolean;
   rol_id: string;
   estado: EstadoFuncionario;
   creado_en: string;
@@ -44,9 +46,11 @@ export interface FuncionarioPayload {
   nombre_completo: string;
   ci: string;
   usuario: string;
-  /** Contraseña inicial en texto plano; el backend la hashea */
-  password: string;
-  password_confirmation: string;
+  mamore_id?: string | null;
+  puede_login_local?: boolean;
+  /** Obligatoria si puede_login_local es true; opcional si entra solo por Ibare */
+  password?: string;
+  password_confirmation?: string;
   rol_id: string;
 }
 
@@ -55,6 +59,8 @@ export interface FuncionarioUpdatePayload {
   nombre_completo?: string;
   ci?: string;
   usuario?: string;
+  mamore_id?: string | null;
+  puede_login_local?: boolean;
   /** Si se omite o va vacía, la contraseña no cambia */
   password?: string;
   password_confirmation?: string;
